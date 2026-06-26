@@ -1,0 +1,226 @@
+version: '3.9'
+
+services:
+  # ──────────────────────────────────────────────
+  # Frontend – React (Vite) application
+  # ──────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: neuraline-frontend
+    ports:
+      - '3000:80'
+    depends_on:
+      api-gateway:
+        condition: service_started
+    environment:
+      - REACT_APP_API_URL=http://api-gateway:4000
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # API Gateway – NestJS backend
+  # ──────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: neuraline-api-gateway
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=neuraline
+      # HIPAA: Credentials should come from Docker secrets or .env file
+      # in production. Shown inline here for development convenience only.
+      - DB_USERNAME=${DB_USERNAME:-neuraline}
+      - DB_PASSWORD=${DB_PASSWORD:-neuraline_dev}
+      - DB_SYNCHRONIZE=true
+      - DB_LOGGING=false
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-neuraline_redis_dev}
+      - OPENSEARCH_NODE=http://opensearch:9200
+      - WHISPER_SERVICE_URL=http://whisper-service:8001
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=mistral
+      - CHROMA_URL=http://chromadb:8000
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      # HIPAA: Encryption key for PHI at rest (generate with: openssl rand -hex 32)
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-change-in-production-min-32-chars}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev-jwt-refresh-secret-change-in-prod}
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # PostgreSQL 15
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: neuraline-postgres
+    # HIPAA: Do NOT expose DB port to host in production
+    ports:
+      - '5432:5432'
+    environment:
+      POSTGRES_DB: neuraline
+      POSTGRES_USER: ${DB_USERNAME:-neuraline}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-neuraline_dev}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - neuraline-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U neuraline -d neuraline']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Redis 7 – HIPAA: password-protected
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: neuraline-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - neuraline-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-neuraline_redis_dev}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # HIPAA: Require password authentication for Redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-neuraline_redis_dev}
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # OpenSearch 2.x
+  # ──────────────────────────────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.11.1
+    container_name: neuraline-opensearch
+    ports:
+      - '9200:9200'
+      - '9600:9600'
+    environment:
+      - discovery.type=single-node
+      # HIPAA NOTE: Security plugin is disabled for dev.
+      # In production, enable the security plugin and configure TLS.
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - cluster.name=neuraline-cluster
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # OpenSearch Dashboards
+  # ──────────────────────────────────────────────
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.11.1
+    container_name: neuraline-opensearch-dashboards
+    ports:
+      - '5601:5601'
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    depends_on:
+      - opensearch
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Whisper STT – Python FastAPI + faster-whisper
+  # ──────────────────────────────────────────────
+  whisper-service:
+    build:
+      context: ./whisper-service
+      dockerfile: Dockerfile
+    container_name: neuraline-whisper
+    ports:
+      - '8001:8001'
+    environment:
+      - WHISPER_MODEL=base
+      - WHISPER_DEVICE=cpu
+    # HIPAA: Whisper service uses tmpdir for audio; ensure it's not persisted
+    tmpfs:
+      - /tmp:size=512m
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # Ollama – Local LLM inference
+  # ──────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: neuraline-ollama
+    ports:
+      - '11434:11434'
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+  # ──────────────────────────────────────────────
+  # ChromaDB – Vector database for medical codes
+  # ──────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: neuraline-chromadb
+    ports:
+      - '8000:8000'
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
+# ──────────────────────────────────────────────
+# Networks
+# ──────────────────────────────────────────────
+networks:
+  neuraline-network:
+    driver: bridge
+
+# ──────────────────────────────────────────────
+# Volumes
+# ──────────────────────────────────────────────
+volumes:
+  postgres-data:
+    name: neuraline-postgres-data
+  redis-data:
+    name: neuraline-redis-data
+  opensearch-data:
+    name: neuraline-opensearch-data
+  ollama-data:
+    name: neuraline-ollama-data
+  chroma-data:
+    name: neuraline-chroma-data
