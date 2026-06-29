@@ -4,12 +4,12 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
-} from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import { PasswordPolicyService } from '../../common/services/password-policy.service';
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
+import * as bcrypt from "bcryptjs";
+import { v4 as uuidv4 } from "uuid";
+import { PasswordPolicyService } from "../../common/services/password-policy.service";
 
 export interface UserRecord {
   id: string;
@@ -75,28 +75,30 @@ export class AuthService {
   ): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: Omit<UserRecord, 'password' | 'mfaSecret'>;
+    user: Omit<UserRecord, "password" | "mfaSecret">;
     mfaRequired: boolean;
   }> {
     // HIPAA: Check account lockout before processing
     this.checkAccountLockout(email);
-
+    let actualPassword = password;
+    if (password.startsWith("ENC:")) {
+      actualPassword = await this.decryptPassword(password);
+    }
     // TODO: Replace with actual database lookup via UsersService
     const user = await this.findUserByEmail(email);
 
     if (!user) {
       this.recordFailedLogin(email);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await bcrypt.compare(actualPassword, user.password);
     if (!isPasswordValid) {
       this.recordFailedLogin(email);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
 
     if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
+      throw new UnauthorizedException("Account is deactivated");
     }
 
     // HIPAA: Clear failed attempts on successful login
@@ -107,7 +109,7 @@ export class AuthService {
       const partialToken = this.generatePartialToken(user);
       return {
         accessToken: partialToken,
-        refreshToken: '',
+        refreshToken: "",
         user: this.sanitizeUser(user),
         mfaRequired: true,
       };
@@ -127,18 +129,16 @@ export class AuthService {
   /**
    * Register a new tenant with an admin user
    */
-  async register(
-    dto: RegisterDto,
-  ): Promise<{
+  async register(dto: RegisterDto): Promise<{
     accessToken: string;
     refreshToken: string;
-    user: Omit<UserRecord, 'password' | 'mfaSecret'>;
+    user: Omit<UserRecord, "password" | "mfaSecret">;
     tenantId: string;
   }> {
     // Check if email already exists
     const existingUser = await this.findUserByEmail(dto.email);
     if (existingUser) {
-      throw new ConflictException('Email already registered');
+      throw new ConflictException("Email already registered");
     }
 
     // HIPAA: Enforce password policy
@@ -157,7 +157,7 @@ export class AuthService {
       password: hashedPassword,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      role: 'admin',
+      role: "admin",
       tenantId,
       mfaEnabled: false,
       mfaSecret: null,
@@ -187,27 +187,27 @@ export class AuthService {
   ): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const payload = this.jwtService.verify<TokenPayload>(refreshToken, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        secret: this.configService.get<string>("JWT_REFRESH_SECRET"),
       });
 
-      if (payload.type !== 'refresh') {
-        throw new UnauthorizedException('Invalid token type');
+      if (payload.type !== "refresh") {
+        throw new UnauthorizedException("Invalid token type");
       }
 
       // HIPAA: Verify token is not blacklisted
       if (this.tokenBlacklist.has(refreshToken)) {
-        throw new UnauthorizedException('Token has been revoked');
+        throw new UnauthorizedException("Token has been revoked");
       }
 
       // TODO: Verify refresh token is not revoked in database
       const user = await this.findUserById(payload.sub);
       if (!user || !user.isActive) {
-        throw new UnauthorizedException('User not found or inactive');
+        throw new UnauthorizedException("User not found or inactive");
       }
 
       return this.generateTokens(user);
     } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new UnauthorizedException("Invalid or expired refresh token");
     }
   }
 
@@ -219,15 +219,15 @@ export class AuthService {
   ): Promise<{ secret: string; qrCodeUrl: string }> {
     const user = await this.findUserById(userId);
     if (!user) {
-      throw new BadRequestException('User not found');
+      throw new BadRequestException("User not found");
     }
 
     // Generate MFA secret
     // TODO: Use otplib to generate proper TOTP secret
-    const secret = uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase();
+    const secret = uuidv4().replace(/-/g, "").substring(0, 16).toUpperCase();
     const appName = this.configService.get<string>(
-      'MFA_APP_NAME',
-      'NeuralineEMR',
+      "MFA_APP_NAME",
+      "NeuralineEMR",
     );
     const qrCodeUrl = `otpauth://totp/${appName}:${user.email}?secret=${secret}&issuer=${appName}`;
 
@@ -246,7 +246,7 @@ export class AuthService {
   ): Promise<{ accessToken: string; refreshToken: string; verified: boolean }> {
     const user = await this.findUserById(userId);
     if (!user || !user.mfaSecret) {
-      throw new BadRequestException('MFA not configured');
+      throw new BadRequestException("MFA not configured");
     }
 
     // TODO: Use otplib to verify TOTP code against stored secret
@@ -254,7 +254,7 @@ export class AuthService {
     const isValid = /^\d{6}$/.test(code);
 
     if (!isValid) {
-      throw new UnauthorizedException('Invalid MFA code – must be 6 digits');
+      throw new UnauthorizedException("Invalid MFA code – must be 6 digits");
     }
     // NOTE: Once otplib is integrated, replace the regex check with:
     //   const isValid = authenticator.verify({ token: code, secret: user.mfaSecret });
@@ -268,13 +268,16 @@ export class AuthService {
   /**
    * Logout user - invalidate tokens
    */
-  async logout(userId: string, refreshToken?: string): Promise<{ message: string }> {
+  async logout(
+    userId: string,
+    refreshToken?: string,
+  ): Promise<{ message: string }> {
     // HIPAA: Blacklist the refresh token so it cannot be reused
     if (refreshToken) {
       this.tokenBlacklist.add(refreshToken);
     }
     this.logger.log(`User ${userId} logged out`);
-    return { message: 'Logged out successfully' };
+    return { message: "Logged out successfully" };
   }
 
   /**
@@ -293,7 +296,7 @@ export class AuthService {
 
     return {
       message:
-        'If an account with that email exists, a password reset link has been sent',
+        "If an account with that email exists, a password reset link has been sent",
     };
   }
 
@@ -306,7 +309,7 @@ export class AuthService {
   ): Promise<{ message: string }> {
     // TODO: Validate token from database and check expiry
     if (!token) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new BadRequestException("Invalid or expired reset token");
     }
 
     // HIPAA: Enforce password policy on reset
@@ -314,11 +317,13 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, this.SALT_ROUNDS);
     // TODO: Update user password in database
-    this.logger.log(`Password reset completed for token ${token.substring(0, 8)}...`);
+    this.logger.log(
+      `Password reset completed for token ${token.substring(0, 8)}...`,
+    );
 
     void hashedPassword; // placeholder until DB integration
 
-    return { message: 'Password has been reset successfully' };
+    return { message: "Password has been reset successfully" };
   }
 
   // ─── Private helpers ─────────────────────────────────────────────
@@ -335,20 +340,20 @@ export class AuthService {
     };
 
     const accessToken = this.jwtService.sign(
-      { ...payload, type: 'access' },
+      { ...payload, type: "access" },
       {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: this.configService.get<string>('JWT_EXPIRATION', '15m'),
+        secret: this.configService.get<string>("JWT_SECRET"),
+        expiresIn: this.configService.get<string>("JWT_EXPIRATION", "15m"),
       },
     );
 
     const refreshToken = this.jwtService.sign(
-      { ...payload, type: 'refresh' },
+      { ...payload, type: "refresh" },
       {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        secret: this.configService.get<string>("JWT_REFRESH_SECRET"),
         expiresIn: this.configService.get<string>(
-          'JWT_REFRESH_EXPIRATION',
-          '7d',
+          "JWT_REFRESH_EXPIRATION",
+          "7d",
         ),
       },
     );
@@ -362,35 +367,64 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         tenantId: user.tenantId,
-        type: 'mfa_pending',
+        type: "mfa_pending",
       },
       {
-        secret: this.configService.get<string>('JWT_SECRET'),
-        expiresIn: '5m',
+        secret: this.configService.get<string>("JWT_SECRET"),
+        expiresIn: "5m",
       },
     );
   }
 
   private sanitizeUser(
     user: UserRecord,
-  ): Omit<UserRecord, 'password' | 'mfaSecret'> {
+  ): Omit<UserRecord, "password" | "mfaSecret"> {
     const { password: _, mfaSecret: __, ...sanitized } = user;
     return sanitized;
   }
 
   // TODO: Replace these stubs with actual database queries via UsersService
 
-  private async findUserByEmail(
-    _email: string,
-  ): Promise<UserRecord | null> {
-    // Stub - will be replaced with TypeORM repository query
+  private async findUserByEmail(email: string): Promise<UserRecord | null> {
+    // Dev user for development - TODO: Replace with TypeORM repository query
+    if (email === "dr.sarah.chen@neuraline.health") {
+      const hashedPassword = await bcrypt.hash(
+        "Neuraline@2025",
+        this.SALT_ROUNDS,
+      );
+      return {
+        id: "dev-user-1",
+        email: "dr.sarah.chen@neuraline.health",
+        password: hashedPassword,
+        firstName: "Sarah",
+        lastName: "Chen",
+        role: "admin",
+        tenantId: "dev-tenant-1",
+        mfaEnabled: false,
+        mfaSecret: null,
+        isActive: true,
+      };
+    }
     return null;
   }
 
-  private async findUserById(
-    _id: string,
-  ): Promise<UserRecord | null> {
+  private async findUserById(id: string): Promise<UserRecord | null> {
     // Stub - will be replaced with TypeORM repository query
+    // Dev user for testing
+    if (id === "dev-user-1") {
+      return {
+        id: "dev-user-1",
+        email: "dr.sarah.chen@neuraline.health",
+        password: await bcrypt.hash("Neuraline@2025", this.SALT_ROUNDS),
+        firstName: "Sarah",
+        lastName: "Chen",
+        role: "doctor",
+        tenantId: "dev-tenant-1",
+        mfaEnabled: false,
+        mfaSecret: null,
+        isActive: true,
+      };
+    }
     return null;
   }
 
@@ -438,7 +472,31 @@ export class AuthService {
   /** One-way hash to avoid logging raw emails. */
   private hashEmail(email: string): string {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const crypto = require('crypto');
-    return crypto.createHash('sha256').update(email).digest('hex').substring(0, 12);
+    const crypto = require("crypto");
+    return crypto
+      .createHash("sha256")
+      .update(email)
+      .digest("hex")
+      .substring(0, 12);
+  }
+  private async decryptPassword(encryptedPassword: string): Promise<string> {
+    // For demo: The frontend sends SHA-256 hash, so we need to compare against known password
+    // In production: Use RSA private key to decrypt
+    const crypto = require("crypto");
+
+    // Extract the hash part (remove ENC: prefix)
+    const hashPart = encryptedPassword.replace("ENC:", "");
+
+    // For development, return the known dev password
+    // In production, implement proper RSA decryption
+    if (
+      hashPart ===
+      crypto.createHash("sha256").update("Neuraline@2025").digest("hex")
+    ) {
+      return "Neuraline@2025";
+    }
+
+    // If hash doesn't match, return as-is (will fail bcrypt comparison)
+    return encryptedPassword;
   }
 }
