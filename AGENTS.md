@@ -33,9 +33,38 @@ curl -X POST http://localhost:11434/api/pull -d '{"name":"mistral"}'
 - Boolean env vars must be compared as strings (ConfigService returns strings)
 
 ## Backend Modules
-- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI
+- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow
 - **Stubs (empty)**: Appointments, Billing, Clinical, Laboratory, Notifications, Prescriptions, Reports, Telemedicine, Users
 - AuthService uses in-memory dev user (no UsersService/DB persistence yet)
+
+## Workflow System
+The dynamic workflow module (`backend/src/modules/workflow/`) provides configurable state-machine workflows:
+
+### Entities
+- **WorkflowTemplate**: Stores step definitions, transitions, colors, icons for a workflow type (e.g., appointment)
+- **WorkflowInstance**: Tracks a specific entity's current step, history, and status
+
+### Auto-Seed
+On first boot, `WorkflowSeedService` creates a default appointment workflow with steps: scheduled → confirmed → checked_in → in_progress → completed (plus cancelled/no_show)
+
+### API Endpoints
+- `POST /api/v1/workflow/templates` — Create template (admin)
+- `GET /api/v1/workflow/templates` — List templates
+- `GET /api/v1/workflow/templates/entity/:entityType` — Get active template for entity
+- `PATCH /api/v1/workflow/templates/:id` — Update template (admin)
+- `DELETE /api/v1/workflow/templates/:id` — Soft delete template (admin)
+- `POST /api/v1/workflow/instances` — Create workflow instance
+- `GET /api/v1/workflow/instances/entity/:entityType/:entityId` — Get instance
+- `GET /api/v1/workflow/instances/entity/:entityType/:entityId/transitions` — Available next steps
+- `POST /api/v1/workflow/instances/entity/:entityType/:entityId/transition` — Perform transition
+- `POST /api/v1/workflow/instances/entity/:entityType/:entityId/complete` — Mark completed
+- `POST /api/v1/workflow/instances/entity/:entityType/:entityId/cancel` — Cancel workflow
+
+### Frontend Integration
+- **WorkflowBuilderPage** (`/workflow/new`, `/workflow/:id`): Visual step builder (add/remove/reorder steps, configure transitions)
+- **WorkflowListPage** (`/workflow`): List/manage all templates
+- **WorkflowStatusBadge** component: Renders a clickable status tag with step popover; used in AppointmentPage when a workflow template is active
+- **AppointmentPage** auto-loads the active appointment workflow and creates/transitions instances on status changes
 
 ## Authentication
 - Dev user: `dr.sarah.chen@neuraline.health` / `Neuraline@2025`

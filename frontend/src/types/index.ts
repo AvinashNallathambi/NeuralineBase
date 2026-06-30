@@ -327,3 +327,197 @@ export interface Report {
   data: Record<string, unknown>;
   generatedAt: string;
 }
+
+export interface Superbill {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientDOB: string;
+  patientAddress: Address;
+  patientPhone: string;
+  providerId: string;
+  providerName: string;
+  providerNPI: string;
+  providerAddress: Address;
+  encounterId?: string;
+  serviceDate: string;
+  submissionDate?: string;
+  status: 'draft' | 'submitted' | 'processed' | 'paid' | 'rejected';
+  insurance: SuperbillInsurance;
+  diagnoses: SuperbillDiagnosis[];
+  procedures: SuperbillProcedure[];
+  charges: SuperbillCharge[];
+  totalAmount: number;
+  patientResponsibility: number;
+  insurancePayment?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SuperbillInsurance {
+  provider: string;
+  policyNumber: string;
+  groupNumber: string;
+  subscriberName: string;
+  subscriberRelation: string;
+  payerId: string;
+  authorizationNumber?: string;
+}
+
+export interface SuperbillDiagnosis {
+  id: string;
+  icdCode: string;
+  description: string;
+  type: 'primary' | 'secondary' | 'admitting' | 'working';
+}
+
+export interface SuperbillProcedure {
+  id: string;
+  cptCode: string;
+  description: string;
+  modifiers?: string[];
+  units: number;
+  charge: number;
+  serviceDate: string;
+  diagnosisPointer: string[]; // ICD codes this procedure links to
+}
+
+export interface SuperbillCharge {
+  id: string;
+  description: string;
+  amount: number;
+  type: 'service' | 'supply' | 'equipment' | 'other';
+  taxable: boolean;
+}
+
+// ── AI Superbill Types ───────────────────────────────────────────────────────
+
+export interface SuperbillScrubFinding {
+  severity: 'critical' | 'warning' | 'info';
+  category: 'documentation' | 'coding' | 'compliance' | 'billing';
+  message: string;
+  suggestion: string;
+  field?: string;
+}
+
+export interface SuperbillScrubResult {
+  qualityScore: number;
+  findings: SuperbillScrubFinding[];
+  isClean: boolean;
+  summary: string;
+}
+
+export interface SuperbillDenialRisk {
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  topReasons: string[];
+  recommendedActions: string[];
+  estimatedReimbursement: number;
+}
+
+export interface GfeItem {
+  service: string;
+  cptCode: string;
+  charge: number;
+  insuranceEstimate: number;
+  patientEstimate: number;
+}
+
+export interface GoodFaithEstimate {
+  totalCharge: number;
+  insuranceEstimate: number;
+  patientEstimate: number;
+  items: GfeItem[];
+  disclaimers: string[];
+  complianceNotes: string[];
+}
+
+export interface SmartCodeSuggestion {
+  code: string;
+  description: string;
+  confidence: number;
+  rationale: string;
+  suggestedModifiers?: string[];
+}
+
+export interface SmartCodeResult {
+  suggestedDiagnoses: SmartCodeSuggestion[];
+  suggestedProcedures: SmartCodeSuggestion[];
+  missingDocumentation: string[];
+  codingTips: string[];
+}
+
+// ── Workflow Types ────────────────────────────────────────────────────────────
+
+export interface WorkflowStepConfig {
+  name: string;
+  label: string;
+  order: number;
+  color: string;
+  icon: string;
+  allowedTransitions: string[];
+  requiredFields?: string[];
+  assignableRoles?: string[];
+}
+
+export interface WorkflowTransition {
+  fromStep: string;
+  toStep: string;
+  label: string;
+  requireConfirmation?: boolean;
+  requireNote?: boolean;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  entityType: string;
+  steps: WorkflowStepConfig[];
+  transitions?: WorkflowTransition[];
+  version: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowTransitionLog {
+  fromStep: string;
+  toStep: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  note?: string;
+}
+
+export interface WorkflowInstance {
+  id: string;
+  tenantId: string;
+  entityType: string;
+  entityId: string;
+  currentStep: string;
+  history: WorkflowTransitionLog[];
+  metadata: Record<string, unknown>;
+  status: string;
+  templateId: string;
+  template?: WorkflowTemplate;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateWorkflowTemplateDto {
+  name: string;
+  description?: string;
+  entityType: string;
+  steps: Omit<WorkflowStepConfig, 'order'> & { order: number }[];
+  transitions?: WorkflowTransition[];
+  isActive?: boolean;
+}
+
+export interface TransitionWorkflowDto {
+  toStep: string;
+  note?: string;
+  metadata?: Record<string, unknown>;
+}

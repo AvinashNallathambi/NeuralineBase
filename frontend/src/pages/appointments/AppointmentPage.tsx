@@ -40,9 +40,11 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
-import type { Appointment, AppointmentType, AppointmentStatus } from '../../types';
+import type { Appointment, AppointmentType, AppointmentStatus, WorkflowInstance, WorkflowTemplate } from '../../types';
 import { mockPatients, mockProviders } from '../../data/mockData';
 import { useAppointmentStore } from '../../store/dataStore';
+import { workflowService } from '../../services/workflowService';
+import WorkflowStatusBadge from '../../components/workflow/WorkflowStatusBadge';
 import type { ColumnsType } from 'antd/es/table';
 
 dayjs.extend(isoWeek);
@@ -107,7 +109,7 @@ const HOURS = Array.from({ length: 13 }, (_, i) => i + 7); // 7 AM to 7 PM
 
 const AppointmentPage: React.FC = () => {
   const [view, setView] = useState<ViewMode>('month');
-  const { appointments, addAppointment, changeStatus: storeChangeStatus } = useAppointmentStore();
+  const { appointments, addAppointment, changeStatus: storeChangeStatus, loading, error, fetchAppointments } = useAppointmentStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [providerFilter, setProviderFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
@@ -116,6 +118,58 @@ const AppointmentPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [form] = Form.useForm();
   const [isTelehealth, setIsTelehealth] = useState(false);
+
+  // ── Workflow Integration ──
+  const [workflowTemplate, setWorkflowTemplate] = useState<WorkflowTemplate | null>(null);
+  const [workflowInstances, setWorkflowInstances] = useState<Record<string, WorkflowInstance>>({});
+
+  // Load active workflow template for appointments
+  React.useEffect(() => {
+    workflowService.findActiveTemplateForEntity('appointment').then((res) => {
+      if (res.data) setWorkflowTemplate(res.data);
+    }).catch(() => {});
+  }, []);
+
+  // Load workflow instances for appointments
+  React.useEffect(() => {
+    if (!workflowTemplate || appointments.length === 0) return;
+    const loadInstances = async () => {
+      const instanceMap: Record<string, WorkflowInstance> = {};
+      for (const appt of appointments) {
+        try {
+          const instance = await workflowService.findInstanceByEntity('appointment', appt.id);
+          instanceMap[appt.id] = instance;
+        } catch {
+          // No workflow instance yet - will be created on first status change
+        }
+      }
+      setWorkflowInstances(instanceMap);
+    };
+    loadInstances();
+  }, [workflowTemplate, appointments]);
+
+  // Create workflow instance on first status change if template exists
+  const ensureWorkflowInstance = async (appointmentId: string, initialStep: string): Promise<WorkflowInstance | null> => {
+    if (!workflowTemplate) return null;
+    if (workflowInstances[appointmentId]) return workflowInstances[appointmentId];
+    try {
+      const instance = await workflowService.createInstance({
+        entityType: 'appointment',
+        entityId: appointmentId,
+        currentStep: initialStep,
+        templateId: workflowTemplate.id,
+      });
+      setWorkflowInstances((prev) => ({ ...prev, [appointmentId]: instance }));
+      return instance;
+    } catch {
+      return null;
+    }
+  };
+
+  // Load appointments on mount
+  React.useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // ── Filtered appointments ──
   const filtered = useMemo(() => {
@@ -133,9 +187,22 @@ const AppointmentPage: React.FC = () => {
     });
   }, [appointments, providerFilter, statusFilter, typeFilter, dateRange]);
 
-  // ── Status quick-change ──
-  const changeStatus = (id: string, newStatus: AppointmentStatus) => {
+  // ── Status quick-change (with workflow support) ──
+  const changeStatus = async (id: string, newStatus: AppointmentStatus) => {
     storeChangeStatus(id, newStatus);
+
+    // Try to transition through workflow system if template is configured
+    if (workflowTemplate) {
+      const instance = await ensureWorkflowInstance(id, newStatus);
+      if (instance) {
+        try {
+          await workflowService.transition('appointment', id, { toStep: newStatus });
+        } catch {
+          // Workflow transition failed - appointment status already updated
+        }
+      }
+    }
+
     message.success(`Appointment status changed to ${newStatus.replace(/_/g, ' ')}`);
   };
 
@@ -353,11 +420,18 @@ const AppointmentPage: React.FC = () => {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Text strong style={{ fontSize: 14 }}>{appt.patientName}</Text>
-                          <Space size={4}>
+                        <Space size={4}>
+                          {workflowTemplate && workflowInstances[appt.id] ? (
+                            <WorkflowStatusBadge
+                              template={workflowTemplate}
+                              instance={workflowInstances[appt.id]}
+                            />
+                          ) : (
                             <Tag color={statusColors[appt.status]} style={{ margin: 0, fontSize: 11, textTransform: 'capitalize' }}>
                               {appt.status.replace(/_/g, ' ')}
                             </Tag>
-                          </Space>
+                          )}
+                        </Space>
                         </div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
                           <Text type="secondary" style={{ fontSize: 12 }}>
@@ -799,12 +873,19 @@ const AppointmentPage: React.FC = () => {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
-      width: 120,
-      render: (status: AppointmentStatus) => (
-        <Badge
-          status={statusBadge[status]}
-          text={<Tag color={statusColors[status]} style={{ textTransform: 'capitalize' }}>{status.replace(/_/g, ' ')}</Tag>}
-        />
+      width: 160,
+      render: (status: AppointmentStatus, record: Appointment) => (
+        workflowTemplate && workflowInstances[record.id] ? (
+          <WorkflowStatusBadge
+            template={workflowTemplate}
+            instance={workflowInstances[record.id]}
+          />
+        ) : (
+          <Badge
+            status={statusBadge[status]}
+            text={<Tag color={statusColors[status]} style={{ textTransform: 'capitalize' }}>{status.replace(/_/g, ' ')}</Tag>}
+          />
+        )
       ),
     },
     {
@@ -870,7 +951,14 @@ const AppointmentPage: React.FC = () => {
                 <br />
                 <Space size={4}>
                   <Tag color={typeColors[a.type]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{a.type.replace(/_/g, ' ')}</Tag>
-                  <Tag color={statusColors[a.status]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{a.status.replace(/_/g, ' ')}</Tag>
+                  {workflowTemplate && workflowInstances[a.id] ? (
+                    <WorkflowStatusBadge
+                      template={workflowTemplate}
+                      instance={workflowInstances[a.id]}
+                    />
+                  ) : (
+                    <Tag color={statusColors[a.status]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{a.status.replace(/_/g, ' ')}</Tag>
+                  )}
                 </Space>
                 {a.isTelehealth && (
                   <div style={{ marginTop: 4 }}>

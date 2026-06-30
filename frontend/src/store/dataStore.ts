@@ -15,6 +15,10 @@ import type {
   Superbill,
   ProviderSchedule,
   ProviderAvailabilityOverride,
+  WorkflowTemplate,
+  WorkflowInstance,
+  CreateWorkflowTemplateDto,
+  TransitionWorkflowDto,
 } from '../types';
 import type { Payment, RefillRequest, ImagingOrder } from '../data/mockData';
 import {
@@ -40,37 +44,148 @@ import {
   mockAvailabilityOverrides,
 } from '../data/mockData';
 import type { User, Activity, DashboardStats } from '../types';
+import { appointmentService } from '../services/appointmentService';
+import { workflowService } from '../services/workflowService';
 
 // ── Appointments Store ────────────────────────────────────────────────────────
 interface AppointmentStore {
   appointments: Appointment[];
-  addAppointment: (appointment: Appointment) => void;
-  updateAppointment: (id: string, updates: Partial<Appointment>) => void;
-  changeStatus: (id: string, status: AppointmentStatus) => void;
-  deleteAppointment: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  fetchAppointments: (options?: { page?: number; limit?: number; startDate?: Date; endDate?: Date }) => Promise<void>;
+  addAppointment: (appointment: Appointment) => Promise<void>;
+  updateAppointment: (id: string, updates: Partial<Appointment>) => Promise<void>;
+  changeStatus: (id: string, status: AppointmentStatus) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
 }
 
 export const useAppointmentStore = create<AppointmentStore>(
   (set) => ({
     appointments: [...mockAppointments],
-    addAppointment: (appointment) =>
-      set((s) => ({ appointments: [appointment, ...s.appointments] })),
-    updateAppointment: (id, updates) =>
-      set((s) => ({
-        appointments: s.appointments.map((a) =>
-          a.id === id ? { ...a, ...updates } : a
-        ),
-      })),
-    changeStatus: (id, status) =>
-      set((s) => ({
-        appointments: s.appointments.map((a) =>
-          a.id === id ? { ...a, status } : a
-        ),
-      })),
-    deleteAppointment: (id) =>
-      set((s) => ({
-        appointments: s.appointments.filter((a) => a.id !== id),
-      })),
+    loading: false,
+    error: null,
+    
+    fetchAppointments: async (options = {}) => {
+      set({ loading: true, error: null });
+      try {
+        const result = await appointmentService.findAll({
+          page: options.page || 1,
+          limit: options.limit || 100,
+          startDate: options.startDate,
+          endDate: options.endDate,
+        });
+        set({ appointments: result.data, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch appointments:', error);
+        set({ 
+          error: 'Failed to fetch appointments', 
+          loading: false,
+        });
+        // Keep existing appointments (don't overwrite with mock data)
+      }
+    },
+    
+    addAppointment: async (appointment) => {
+      set({ loading: true, error: null });
+      try {
+        const created = await appointmentService.create({
+          patientId: appointment.patientId,
+          providerId: appointment.providerId,
+          type: appointment.type,
+          startTime: new Date(appointment.startTime),
+          endTime: new Date(appointment.endTime),
+          reason: appointment.reason,
+          notes: appointment.notes,
+          isTelehealth: appointment.isTelehealth,
+          location: appointment.location,
+          durationMinutes: appointment.durationMinutes,
+          remindersEnabled: appointment.remindersEnabled,
+        });
+        set((s) => ({ 
+          appointments: [created, ...s.appointments], 
+          loading: false 
+        }));
+      } catch (error) {
+        console.error('Failed to create appointment:', error);
+        set({ 
+          error: 'Failed to create appointment', 
+          loading: false 
+        });
+        // Fallback to local state update
+        set((s) => ({ appointments: [appointment, ...s.appointments] }));
+      }
+    },
+    
+    updateAppointment: async (id, updates) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await appointmentService.update(id, updates);
+        set((s) => ({
+          appointments: s.appointments.map((a) =>
+            a.id === id ? updated : a
+          ),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to update appointment:', error);
+        set({ 
+          error: 'Failed to update appointment', 
+          loading: false 
+        });
+        // Fallback to local state update
+        set((s) => ({
+          appointments: s.appointments.map((a) =>
+            a.id === id ? { ...a, ...updates } : a
+          ),
+        }));
+      }
+    },
+    
+    changeStatus: async (id, status) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await appointmentService.update(id, { status });
+        set((s) => ({
+          appointments: s.appointments.map((a) =>
+            a.id === id ? updated : a
+          ),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to change appointment status:', error);
+        set({ 
+          error: 'Failed to change appointment status', 
+          loading: false 
+        });
+        // Fallback to local state update
+        set((s) => ({
+          appointments: s.appointments.map((a) =>
+            a.id === id ? { ...a, status } : a
+          ),
+        }));
+      }
+    },
+    
+    deleteAppointment: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        await appointmentService.delete(id);
+        set((s) => ({
+          appointments: s.appointments.filter((a) => a.id !== id),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to delete appointment:', error);
+        set({ 
+          error: 'Failed to delete appointment', 
+          loading: false 
+        });
+        // Fallback to local state update
+        set((s) => ({
+          appointments: s.appointments.filter((a) => a.id !== id),
+        }));
+      }
+    },
   }),
 );
 
@@ -285,24 +400,100 @@ export const useEligibilityStore = create<EligibilityStore>(
 // ── Superbill Store ───────────────────────────────────────────────────────────
 interface SuperbillStore {
   superbills: Superbill[];
-  addSuperbill: (superbill: Superbill) => void;
-  updateSuperbill: (id: string, updates: Partial<Superbill>) => void;
-  deleteSuperbill: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  fetchSuperbills: (options?: { patientId?: string; providerId?: string; status?: string }) => Promise<void>;
+  addSuperbill: (superbill: Partial<Superbill>) => Promise<void>;
+  updateSuperbill: (id: string, updates: Partial<Superbill>) => Promise<void>;
+  deleteSuperbill: (id: string) => Promise<void>;
+  submitSuperbill: (id: string) => Promise<void>;
 }
+
+import { superbillService } from '../services/superbillService';
 
 export const useSuperbillStore = create<SuperbillStore>(
   (set) => ({
     superbills: [...mockSuperbills],
-    addSuperbill: (superbill) =>
-      set((s) => ({ superbills: [superbill, ...s.superbills] })),
-    updateSuperbill: (id, updates) =>
-      set((s) => ({
-        superbills: s.superbills.map((sb) =>
-          sb.id === id ? { ...sb, ...updates } : sb
-        ),
-      })),
-    deleteSuperbill: (id) =>
-      set((s) => ({ superbills: s.superbills.filter((sb) => sb.id !== id) })),
+    loading: false,
+    error: null,
+    
+    fetchSuperbills: async (options) => {
+      set({ loading: true, error: null });
+      try {
+        const data = await superbillService.findAll(options);
+        set({ superbills: data, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch superbills:', error);
+        set({ error: 'Failed to fetch superbills', loading: false });
+      }
+    },
+
+    addSuperbill: async (superbill) => {
+      set({ loading: true, error: null });
+      try {
+        const created = await superbillService.create(superbill);
+        set((s) => ({ superbills: [created, ...s.superbills], loading: false }));
+      } catch (error) {
+        console.error('Failed to create superbill:', error);
+        set({ error: 'Failed to create superbill', loading: false });
+        // Fallback for UI if backend is not available
+        const fallback = { ...superbill, id: Math.random().toString() } as Superbill;
+        set((s) => ({ superbills: [fallback, ...s.superbills] }));
+      }
+    },
+
+    updateSuperbill: async (id, updates) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await superbillService.update(id, updates);
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? updated : sb)),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to update superbill:', error);
+        set({ error: 'Failed to update superbill', loading: false });
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? { ...sb, ...updates } : sb)),
+        }));
+      }
+    },
+
+    deleteSuperbill: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        await superbillService.delete(id);
+        set((s) => ({
+          superbills: s.superbills.filter((sb) => sb.id !== id),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to delete superbill:', error);
+        set({ error: 'Failed to delete superbill', loading: false });
+        set((s) => ({ superbills: s.superbills.filter((sb) => sb.id !== id) }));
+      }
+    },
+
+    submitSuperbill: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        const submitted = await superbillService.submitForProcessing(id);
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? submitted : sb)),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to submit superbill:', error);
+        set({ error: 'Failed to submit superbill', loading: false });
+        set((s) => ({
+          superbills: s.superbills.map((sb) =>
+            sb.id === id
+              ? { ...sb, status: 'submitted', submissionDate: new Date().toISOString() }
+              : sb
+          ),
+        }));
+      }
+    },
   }),
 );
 
@@ -342,5 +533,126 @@ export const useProviderAvailabilityStore = create<ProviderAvailabilityStore>(
       })),
     deleteOverride: (id) =>
       set((s) => ({ overrides: s.overrides.filter((o) => o.id !== id) })),
+  }),
+);
+
+// ── User Store ────────────────────────────────────────────────────────────────
+interface UserStore {
+  users: User[];
+}
+
+export const useUserStore = create<UserStore>(
+  () => ({
+    users: [...mockProviders],
+  }),
+);
+
+// ── Workflow Store ────────────────────────────────────────────────────────────
+interface WorkflowStore {
+  templates: WorkflowTemplate[];
+  instances: WorkflowInstance[];
+  loading: boolean;
+  error: string | null;
+  fetchTemplates: (options?: { entityType?: string; search?: string }) => Promise<void>;
+  fetchInstances: (options?: { entityType?: string; status?: string }) => Promise<void>;
+  createTemplate: (dto: CreateWorkflowTemplateDto) => Promise<void>;
+  updateTemplate: (id: string, dto: Partial<CreateWorkflowTemplateDto>) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
+  transitionInstance: (entityType: string, entityId: string, dto: TransitionWorkflowDto) => Promise<WorkflowInstance | null>;
+}
+
+export const useWorkflowStore = create<WorkflowStore>(
+  (set) => ({
+    templates: [],
+    instances: [],
+    loading: false,
+    error: null,
+
+    fetchTemplates: async (options) => {
+      set({ loading: true, error: null });
+      try {
+        const result = await workflowService.findAllTemplates({
+          page: 1,
+          limit: 50,
+          ...options,
+        });
+        set({ templates: result.data, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch workflow templates:', error);
+        set({ error: 'Failed to fetch workflow templates', loading: false });
+      }
+    },
+
+    fetchInstances: async (options) => {
+      set({ loading: true, error: null });
+      try {
+        const result = await workflowService.findAllInstances({
+          page: 1,
+          limit: 50,
+          ...options,
+        });
+        set({ instances: result.data, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch workflow instances:', error);
+        set({ error: 'Failed to fetch workflow instances', loading: false });
+      }
+    },
+
+    createTemplate: async (dto) => {
+      set({ loading: true, error: null });
+      try {
+        const created = await workflowService.createTemplate(dto);
+        set((s) => ({ templates: [created, ...s.templates], loading: false }));
+      } catch (error) {
+        console.error('Failed to create workflow template:', error);
+        set({ error: 'Failed to create workflow template', loading: false });
+      }
+    },
+
+    updateTemplate: async (id, dto) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await workflowService.updateTemplate(id, dto);
+        set((s) => ({
+          templates: s.templates.map((t) => (t.id === id ? updated : t)),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to update workflow template:', error);
+        set({ error: 'Failed to update workflow template', loading: false });
+      }
+    },
+
+    deleteTemplate: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        await workflowService.deleteTemplate(id);
+        set((s) => ({
+          templates: s.templates.filter((t) => t.id !== id),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to delete workflow template:', error);
+        set({ error: 'Failed to delete workflow template', loading: false });
+      }
+    },
+
+    transitionInstance: async (entityType, entityId, dto) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await workflowService.transition(entityType, entityId, dto);
+        set((s) => ({
+          instances: s.instances.map((inst) =>
+            inst.entityId === entityId && inst.entityType === entityType ? updated : inst
+          ),
+          loading: false,
+        }));
+        return updated;
+      } catch (error) {
+        console.error('Failed to transition workflow:', error);
+        set({ error: 'Failed to transition workflow', loading: false });
+        return null;
+      }
+    },
   }),
 );

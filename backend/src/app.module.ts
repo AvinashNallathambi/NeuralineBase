@@ -15,6 +15,8 @@ import { TelemedicineModule } from './modules/telemedicine/telemedicine.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { FhirModule } from './modules/fhir/fhir.module';
 import { AiModule } from './modules/ai/ai.module';
+import { SuperbillsModule } from './modules/superbills/superbills.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
@@ -89,6 +91,8 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     ReportsModule,
     FhirModule,
     AiModule,
+    SuperbillsModule,
+    WorkflowModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules

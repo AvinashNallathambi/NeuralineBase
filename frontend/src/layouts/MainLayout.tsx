@@ -17,9 +17,11 @@ import {
   MedicineBoxOutlined,
   ExperimentOutlined,
   DollarOutlined,
+  FileDoneOutlined,
   VideoCameraOutlined,
   BarChartOutlined,
   SettingOutlined,
+  ApartmentOutlined,
   BellOutlined,
   SearchOutlined,
   UserOutlined,
@@ -48,8 +50,10 @@ const menuItems = [
   { key: 'prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
   { key: 'laboratory', icon: <ExperimentOutlined />, label: 'Laboratory' },
   { key: 'billing', icon: <DollarOutlined />, label: 'Billing' },
+  { key: 'superbills', icon: <FileDoneOutlined />, label: 'Superbills' },
   { key: 'telemedicine', icon: <VideoCameraOutlined />, label: 'Telemedicine' },
   { key: 'reports', icon: <BarChartOutlined />, label: 'Reports' },
+  { key: 'workflow', icon: <ApartmentOutlined />, label: 'Workflows' },
   { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
 ];
 
