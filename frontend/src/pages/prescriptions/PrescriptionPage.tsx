@@ -24,12 +24,11 @@ import {
   MedicineBoxOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
-  WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Prescription, PrescriptionItem } from '../../types';
-import { mockPrescriptions, mockRefillRequests } from '../../data/mockData';
 import type { RefillRequest } from '../../data/mockData';
+import { usePrescriptionStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -43,14 +42,14 @@ const statusColors: Record<string, string> = {
 };
 
 const PrescriptionPage: React.FC = () => {
-  const { prescriptions: mockPrescriptions, refillRequests: mockRefillRequests } = usePrescriptionStore();
+  const { prescriptions, refillRequests: storeRefillRequests } = usePrescriptionStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [searchText, setSearchText] = useState('');
-  const [refillRequests, setRefillRequests] = useState<RefillRequest[]>(mockRefillRequests);
+  const [refillRequests, setRefillRequests] = useState<RefillRequest[]>(storeRefillRequests);
 
   const filteredPrescriptions = useMemo(() => {
-    let data = [...mockPrescriptions];
+    let data = [...prescriptions];
 
     if (activeTab !== 'all') {
       data = data.filter((rx) => rx.status === activeTab);
@@ -66,12 +65,13 @@ const PrescriptionPage: React.FC = () => {
     }
 
     return data;
-  }, [activeTab, searchText]);
+  }, [activeTab, searchText, prescriptions]);
 
-  const activePrescriptions = mockPrescriptions.filter((rx) => rx.status === 'active').length;
+  const activePrescriptions = prescriptions.filter((rx) => rx.status === 'active').length;
   const pendingRefills = refillRequests.filter((r) => r.status === 'pending').length;
-  const prescribedToday = mockPrescriptions.filter(
-    (rx) => rx.prescribedDate === new Date().toISOString().split('T')[0]
+  const todayStr = new Date().toISOString().split('T')[0];
+  const prescribedToday = prescriptions.filter(
+    (rx) => rx.prescribedDate.split('T')[0] === todayStr
   ).length;
 
   const handleApproveRefill = (id: string) => {
@@ -130,6 +130,7 @@ const PrescriptionPage: React.FC = () => {
       dataIndex: 'prescribedDate',
       key: 'prescribedDate',
       width: 120,
+      render: (date: string) => date.split('T')[0],
       sorter: (a, b) => a.prescribedDate.localeCompare(b.prescribedDate),
       defaultSortOrder: 'descend',
     },
@@ -368,7 +369,7 @@ const PrescriptionPage: React.FC = () => {
                 description={
                   <Space direction="vertical" size={0}>
                     <Text type="secondary">
-                      Rx: {item.prescriptionId} | Requested: {item.requestDate}
+                      Rx: {item.prescriptionId} | Requested: {item.requestedDate?.split('T')[0]}
                     </Text>
                     {item.notes && <Text type="secondary" italic>{item.notes}</Text>}
                   </Space>

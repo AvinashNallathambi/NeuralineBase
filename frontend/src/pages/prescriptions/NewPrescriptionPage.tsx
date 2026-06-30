@@ -32,8 +32,8 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Patient, PrescriptionItem } from '../../types';
-import { pharmacyList, medicationList } from '../../data/mockData';
-import { usePatientStore, useProviderStore } from '../../store/dataStore';
+import { pharmacyList, medicationList, mockPatients } from '../../data/mockData';
+import { usePrescriptionStore } from '../../store/dataStore';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -87,6 +87,7 @@ const NewPrescriptionPage: React.FC = () => {
   const [selectedPharmacy, setSelectedPharmacy] = useState<string | undefined>();
   const [confirmed, setConfirmed] = useState(false);
   const [form] = Form.useForm();
+  const { addPrescription } = usePrescriptionStore();
 
   const selectedPatient = mockPatients.find((p) => p.id === selectedPatientId);
 
@@ -95,7 +96,6 @@ const NewPrescriptionPage: React.FC = () => {
     const warnings: { severity: 'warning' | 'error'; message: string }[] = [];
     const medNames = medications.map((m) => m.medication?.toLowerCase() || '');
     if (medNames.includes('lisinopril') || medNames.includes('losartan')) {
-      // Check if patient has potassium allergy or if potassium is also prescribed
       if (
         medNames.includes('potassium chloride') ||
         selectedPatient?.allergies.some((a) =>
@@ -105,22 +105,18 @@ const NewPrescriptionPage: React.FC = () => {
         warnings.push({
           severity: 'warning',
           message:
-            'Moderate interaction between Lisinopril and Potassium supplements. ACE inhibitors can increase potassium levels. Monitor serum potassium closely.',
+            'Moderate interaction between ACE inhibitor/ARB and Potassium supplements. Monitor serum potassium closely.',
         });
       }
     }
-    // Always show a mock warning for demo
-    if (medications.length > 0 && medications[0].medication) {
-      const hasLisinopril = medNames.includes('lisinopril');
-      if (hasLisinopril && medications.length >= 1) {
-        warnings.push({
-          severity: 'warning',
-          message:
-            'Moderate interaction between Lisinopril and Potassium supplements. Monitor serum potassium levels and renal function.',
-        });
-      }
+    const hasLisinopril = medNames.includes('lisinopril');
+    if (hasLisinopril && medications.length >= 1) {
+      warnings.push({
+        severity: 'warning',
+        message:
+          'Moderate interaction: Lisinopril and Potassium supplements. Monitor serum potassium levels and renal function.',
+      });
     }
-    // Deduplicate
     const unique = warnings.filter(
       (w, i, self) => self.findIndex((s) => s.message === w.message) === i
     );
@@ -137,7 +133,6 @@ const NewPrescriptionPage: React.FC = () => {
       .filter((a) => a.status === 'active')
       .forEach((allergy) => {
         const allergenLower = allergy.allergen.toLowerCase();
-        // Check if any medication name contains the allergen or vice versa
         if (
           medNames.some(
             (med) => med.includes(allergenLower) || allergenLower.includes(med)
@@ -147,10 +142,9 @@ const NewPrescriptionPage: React.FC = () => {
             `ALLERGY ALERT: Patient is allergic to ${allergy.allergen} (${allergy.reaction}, Severity: ${allergy.severity})`
           );
         }
-        // Penicillin cross-reactivity with amoxicillin
         if (
           allergenLower === 'penicillin' &&
-          medNames.includes('amoxicillin')
+          medNames.some((m) => m.includes('amoxicillin'))
         ) {
           alerts.push(
             `ALLERGY ALERT: Patient has Penicillin allergy - Amoxicillin is a penicillin-type antibiotic. Consider alternative.`
@@ -203,6 +197,36 @@ const NewPrescriptionPage: React.FC = () => {
       message.warning('Please confirm the prescription before sending');
       return;
     }
+    if (!selectedPatient || !selectedPharmacy) {
+      message.warning('Please select a patient and pharmacy');
+      return;
+    }
+
+    const validMeds = medications.filter((m) => m.medication);
+    const newPrescription = {
+      id: `rx-${Date.now()}`,
+      patientId: selectedPatient.id,
+      patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
+      providerId: 'usr-001',
+      providerName: 'Dr. Sarah Chen',
+      medications: validMeds.map((m, i) => ({
+        id: `rxitem-${Date.now()}-${i}`,
+        medication: m.medication!,
+        dosage: m.dosage || '',
+        frequency: m.frequency || '',
+        route: m.route || 'Oral',
+        duration: m.duration || '',
+        quantity: m.quantity || 0,
+        refills: m.refills || 0,
+        instructions: m.instructions,
+      })) as PrescriptionItem[],
+      status: 'active' as const,
+      prescribedDate: new Date().toISOString(),
+      pharmacy: selectedPharmacy,
+      notes: undefined,
+    };
+
+    addPrescription(newPrescription);
     message.success('Prescription sent to pharmacy successfully!');
     navigate('/prescriptions');
   };
@@ -580,7 +604,7 @@ const NewPrescriptionPage: React.FC = () => {
             onChange={setSelectedPharmacy}
             style={{ width: '100%' }}
             size="large"
-            options={pharmacyList.map((p) => ({ value: p, label: p }))}
+            options={pharmacyList.map((p) => ({ value: p.name, label: p.name }))}
           />
         </Card>
 

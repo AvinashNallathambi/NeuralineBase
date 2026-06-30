@@ -1,14 +1,14 @@
-import React, { Suspense, ComponentType } from 'react';
+import React, { Suspense, ComponentType } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
-} from 'react-router-dom';
-import { Spin } from 'antd';
-import MainLayout from '../layouts/MainLayout';
-import AuthLayout from '../layouts/AuthLayout';
-import ProtectedRoute from '../components/security/ProtectedRoute';
-import SessionTimeoutProvider from '../components/security/SessionTimeoutProvider';
+} from "react-router-dom";
+import { Spin } from "antd";
+import MainLayout from "../layouts/MainLayout";
+import AuthLayout from "../layouts/AuthLayout";
+import ProtectedRoute from "../components/security/ProtectedRoute";
+import SessionTimeoutProvider from "../components/security/SessionTimeoutProvider";
 
 // Retry wrapper for dynamic imports – handles stale chunk errors after redeployment
 function lazyWithRetry<T extends ComponentType<unknown>>(
@@ -17,10 +17,10 @@ function lazyWithRetry<T extends ComponentType<unknown>>(
   return React.lazy(() =>
     factory().catch((err) => {
       // Only auto-reload once per session to avoid infinite loops
-      const key = 'chunk_reload';
+      const key = "chunk_reload";
       const hasReloaded = sessionStorage.getItem(key);
       if (!hasReloaded) {
-        sessionStorage.setItem(key, '1');
+        sessionStorage.setItem(key, "1");
         window.location.reload();
         // Return a never-resolving promise while reload happens
         return new Promise<{ default: T }>(() => {});
@@ -31,42 +31,78 @@ function lazyWithRetry<T extends ComponentType<unknown>>(
 }
 
 // Lazy-loaded page components with auto-retry on chunk load failure
-const LandingPage = lazyWithRetry(() => import('../pages/landing/LandingPage'));
-const DashboardPage = lazyWithRetry(() => import('../pages/dashboard/DashboardPage'));
-const PatientListPage = lazyWithRetry(() => import('../pages/patients/PatientListPage'));
-const PatientDetailPage = lazyWithRetry(() => import('../pages/patients/PatientDetailPage'));
-const AppointmentPage = lazyWithRetry(() => import('../pages/appointments/AppointmentPage'));
-const ClinicalPage = lazyWithRetry(() => import('../pages/clinical/ClinicalPage'));
-const EncounterDetailPage = lazyWithRetry(() => import('../pages/clinical/EncounterDetailPage'));
-const PrescriptionPage = lazyWithRetry(() => import('../pages/prescriptions/PrescriptionPage'));
-const NewPrescriptionPage = lazyWithRetry(() => import('../pages/prescriptions/NewPrescriptionPage'));
-const LaboratoryPage = lazyWithRetry(() => import('../pages/laboratory/LaboratoryPage'));
-const BillingPage = lazyWithRetry(() => import('../pages/billing/BillingPage'));
-const ClaimDetailPage = lazyWithRetry(() => import('../pages/billing/ClaimDetailPage'));
+const LandingPage = lazyWithRetry(() => import("../pages/landing/LandingPage"));
+const DashboardPage = lazyWithRetry(
+  () => import("../pages/dashboard/DashboardPage"),
+);
+const PatientListPage = lazyWithRetry(
+  () => import("../pages/patients/PatientListPage"),
+);
+const PatientDetailPage = lazyWithRetry(
+  () => import("../pages/patients/PatientDetailPage"),
+);
+const AppointmentPage = lazyWithRetry(
+  () => import("../pages/appointments/AppointmentPage"),
+);
+const ClinicalPage = lazyWithRetry(
+  () => import("../pages/clinical/ClinicalPage"),
+);
+const EncounterDetailPage = lazyWithRetry(
+  () => import("../pages/clinical/EncounterDetailPage"),
+);
+const PrescriptionPage = lazyWithRetry(
+  () => import("../pages/prescriptions/PrescriptionPage"),
+);
+const PrescriptionDetailPage = lazyWithRetry(
+  () => import("../pages/prescriptions/PrescriptionDetailPage"),
+);
+const NewPrescriptionPage = lazyWithRetry(
+  () => import("../pages/prescriptions/NewPrescriptionPage"),
+);
+const LaboratoryPage = lazyWithRetry(
+  () => import("../pages/laboratory/LaboratoryPage"),
+);
+const BillingPage = lazyWithRetry(() => import("../pages/billing/BillingPage"));
+const ClaimDetailPage = lazyWithRetry(
+  () => import("../pages/billing/ClaimDetailPage"),
+);
 // const InsuranceEligibilityPage = lazyWithRetry(() => import('../pages/insurance/InsuranceEligibilityPage'));
-// const SuperbillListPage = lazyWithRetry(() => import('../pages/superbill/SuperbillListPage'));
-// const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbill/SuperbillDetailPage'));
-// const CreateSuperbillPage = lazyWithRetry(() => import('../pages/superbill/CreateSuperbillPage'));
+const SuperbillListPage = lazyWithRetry(() => import('../pages/superbills/SuperbillListPage'));
+const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbills/SuperbillDetailPage'));
+const CreateSuperbillPage = lazyWithRetry(() => import('../pages/superbills/CreateSuperbillPage'));
+const EditSuperbillPage = lazyWithRetry(() => import('../pages/superbills/EditSuperbillPage'));
+const WorkflowListPage = lazyWithRetry(() => import('../pages/workflow/WorkflowListPage'));
+const WorkflowBuilderPage = lazyWithRetry(() => import('../pages/workflow/WorkflowBuilderPage'));
 // const ProviderAvailabilityPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderAvailabilityPage'));
 // const ProviderScheduleDetailPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderScheduleDetailPage'));
-const AiEncounterPage = lazyWithRetry(() => import('../pages/ai-encounter/AiEncounterPage'));
-const TelemedicinePage = lazyWithRetry(() => import('../pages/telemedicine/TelemedicinePage'));
-const ReportsPage = lazyWithRetry(() => import('../pages/reports/ReportsPage'));
-const SettingsPage = lazyWithRetry(() => import('../pages/settings/SettingsPage'));
-const PatientPortalPage = lazyWithRetry(() => import('../pages/portal/PatientPortalPage'));
-const LoginPage = lazyWithRetry(() => import('../pages/auth/LoginPage'));
-const RegisterPage = lazyWithRetry(() => import('../pages/auth/RegisterPage'));
-const ForgotPasswordPage = lazyWithRetry(() => import('../pages/auth/ForgotPasswordPage'));
+const AiEncounterPage = lazyWithRetry(
+  () => import("../pages/ai-encounter/AiEncounterPage"),
+);
+const TelemedicinePage = lazyWithRetry(
+  () => import("../pages/telemedicine/TelemedicinePage"),
+);
+const ReportsPage = lazyWithRetry(() => import("../pages/reports/ReportsPage"));
+const SettingsPage = lazyWithRetry(
+  () => import("../pages/settings/SettingsPage"),
+);
+const PatientPortalPage = lazyWithRetry(
+  () => import("../pages/portal/PatientPortalPage"),
+);
+const LoginPage = lazyWithRetry(() => import("../pages/auth/LoginPage"));
+const RegisterPage = lazyWithRetry(() => import("../pages/auth/RegisterPage"));
+const ForgotPasswordPage = lazyWithRetry(
+  () => import("../pages/auth/ForgotPasswordPage"),
+);
 
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
   <div
     style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '60vh',
-      width: '100%',
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "60vh",
+      width: "100%",
     }}
   >
     <Spin size="large" tip="Loading..." />
@@ -81,7 +117,7 @@ const LazyPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 const router = createBrowserRouter([
   // Landing page
   {
-    path: '/',
+    path: "/",
     element: (
       <LazyPage>
         <LandingPage />
@@ -94,7 +130,7 @@ const router = createBrowserRouter([
     element: <AuthLayout />,
     children: [
       {
-        path: '/login',
+        path: "/login",
         element: (
           <LazyPage>
             <LoginPage />
@@ -102,7 +138,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/register',
+        path: "/register",
         element: (
           <LazyPage>
             <RegisterPage />
@@ -110,7 +146,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/forgot-password',
+        path: "/forgot-password",
         element: (
           <LazyPage>
             <ForgotPasswordPage />
@@ -129,7 +165,7 @@ const router = createBrowserRouter([
     ),
     children: [
       {
-        path: '/dashboard',
+        path: "/dashboard",
         element: (
           <LazyPage>
             <DashboardPage />
@@ -137,7 +173,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/patients',
+        path: "/patients",
         element: (
           <LazyPage>
             <PatientListPage />
@@ -145,7 +181,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/patients/:id',
+        path: "/patients/:id",
         element: (
           <LazyPage>
             <PatientDetailPage />
@@ -153,7 +189,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/appointments',
+        path: "/appointments",
         element: (
           <LazyPage>
             <AppointmentPage />
@@ -161,7 +197,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/clinical',
+        path: "/clinical",
         element: (
           <LazyPage>
             <ClinicalPage />
@@ -169,7 +205,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/clinical/:id',
+        path: "/clinical/:id",
         element: (
           <LazyPage>
             <EncounterDetailPage />
@@ -177,7 +213,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/prescriptions',
+        path: "/prescriptions",
         element: (
           <LazyPage>
             <PrescriptionPage />
@@ -185,7 +221,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/prescriptions/new',
+        path: "/prescriptions/new",
         element: (
           <LazyPage>
             <NewPrescriptionPage />
@@ -193,7 +229,15 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/laboratory',
+        path: "/prescriptions/:id",
+        element: (
+          <LazyPage>
+            <PrescriptionDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/laboratory",
         element: (
           <LazyPage>
             <LaboratoryPage />
@@ -201,7 +245,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/billing',
+        path: "/billing",
         element: (
           <LazyPage>
             <BillingPage />
@@ -209,7 +253,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/billing/:id',
+        path: "/billing/:id",
         element: (
           <LazyPage>
             <ClaimDetailPage />
@@ -224,30 +268,38 @@ const router = createBrowserRouter([
       //     </LazyPage>
       //   ),
       // },
-      // {
-      //   path: '/superbills',
-      //   element: (
-      //     <LazyPage>
-      //       <SuperbillListPage />
-      //     </LazyPage>
-      //   ),
-      // },
-      // {
-      //   path: '/superbills/new',
-      //   element: (
-      //     <LazyPage>
-      //       <CreateSuperbillPage />
-      //     </LazyPage>
-      //   ),
-      // },
-      // {
-      //   path: '/superbills/:id',
-      //   element: (
-      //     <LazyPage>
-      //       <SuperbillDetailPage />
-      //     </LazyPage>
-      //   ),
-      // },
+      {
+        path: '/superbills',
+        element: (
+          <LazyPage>
+            <SuperbillListPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/superbills/new',
+        element: (
+          <LazyPage>
+            <CreateSuperbillPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/superbills/:id',
+        element: (
+          <LazyPage>
+            <SuperbillDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/superbills/:id/edit',
+        element: (
+          <LazyPage>
+            <EditSuperbillPage />
+          </LazyPage>
+        ),
+      },
       // {
       //   path: '/provider-availability',
       //   element: (
@@ -265,7 +317,7 @@ const router = createBrowserRouter([
       //   ),
       // },
       {
-        path: '/ai-encounter',
+        path: "/ai-encounter",
         element: (
           <LazyPage>
             <AiEncounterPage />
@@ -273,7 +325,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/telemedicine',
+        path: "/telemedicine",
         element: (
           <LazyPage>
             <TelemedicinePage />
@@ -281,7 +333,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/reports',
+        path: "/reports",
         element: (
           <LazyPage>
             <ReportsPage />
@@ -289,7 +341,31 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/settings',
+        path: "/workflow",
+        element: (
+          <LazyPage>
+            <WorkflowListPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/workflow/new",
+        element: (
+          <LazyPage>
+            <WorkflowBuilderPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/workflow/:id",
+        element: (
+          <LazyPage>
+            <WorkflowBuilderPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/settings",
         element: (
           <LazyPage>
             <SettingsPage />
@@ -297,7 +373,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/portal',
+        path: "/portal",
         element: (
           <LazyPage>
             <PatientPortalPage />
@@ -309,7 +385,7 @@ const router = createBrowserRouter([
 
   // Default redirect
   {
-    path: '*',
+    path: "*",
     element: <Navigate to="/dashboard" replace />,
   },
 ]);
