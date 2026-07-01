@@ -1,16 +1,8 @@
-import axios from 'axios';
+import { api } from './api';
 import { Superbill } from '../types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
-
-// Get token from sessionStorage
-const getAuthHeader = () => {
-  const token = sessionStorage.getItem('neuraline_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 class SuperbillService {
-  private baseUrl = `${API_BASE_URL}/superbills`;
+  private baseUrl = '/superbills';
 
   async findAll(params?: { patientId?: string; providerId?: string; status?: string }): Promise<Superbill[]> {
     const query = new URLSearchParams();
@@ -18,43 +10,31 @@ class SuperbillService {
     if (params?.providerId) query.append('providerId', params.providerId);
     if (params?.status) query.append('status', params.status);
 
-    const response = await axios.get(`${this.baseUrl}?${query.toString()}`, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.get(`${this.baseUrl}?${query.toString()}`);
     return response.data;
   }
 
   async findOne(id: string): Promise<Superbill> {
-    const response = await axios.get(`${this.baseUrl}/${id}`, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.get(`${this.baseUrl}/${id}`);
     return response.data;
   }
 
   async create(data: Partial<Superbill>): Promise<Superbill> {
-    const response = await axios.post(this.baseUrl, data, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.post(this.baseUrl, data);
     return response.data;
   }
 
   async update(id: string, data: Partial<Superbill>): Promise<Superbill> {
-    const response = await axios.patch(`${this.baseUrl}/${id}`, data, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.patch(`${this.baseUrl}/${id}`, data);
     return response.data;
   }
 
   async delete(id: string): Promise<void> {
-    await axios.delete(`${this.baseUrl}/${id}`, {
-      headers: getAuthHeader(),
-    });
+    await api.delete(`${this.baseUrl}/${id}`);
   }
 
   async submitForProcessing(id: string): Promise<Superbill> {
-    const response = await axios.post(`${this.baseUrl}/${id}/submit`, {}, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.post(`${this.baseUrl}/${id}/submit`, {});
     return response.data;
   }
 
@@ -63,9 +43,7 @@ class SuperbillService {
     patientResponsibility: number;
     insurancePayment: number;
   }> {
-    const response = await axios.post(`${this.baseUrl}/${id}/calculate`, {}, {
-      headers: getAuthHeader(),
-    });
+    const response = await api.post(`${this.baseUrl}/${id}/calculate`, {});
     return response.data;
   }
 }

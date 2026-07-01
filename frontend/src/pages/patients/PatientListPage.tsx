@@ -32,8 +32,9 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import type { Patient } from '../../types';
-import { mockPatients } from '../../data/mockData';
+import type { Patient, WorkflowInstance, WorkflowTemplate } from '../../types';
+import { usePatientStore } from '../../store/dataStore';
+import { workflowService } from '../../services/workflowService';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -52,15 +53,56 @@ const genderIcons: Record<string, React.ReactNode> = {
 };
 
 const PatientListPage: React.FC = () => {
-  const { patients: mockPatients } = usePatientStore();
+  const { patients, loading, error, fetchPatients, addPatient: storeAddPatient, updatePatient, deletePatient } = usePatientStore();
   const navigate = useNavigate();
-  const [patients, setPatients] = useState<Patient[]>(mockPatients);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [genderFilter, setGenderFilter] = useState<string | undefined>(undefined);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [form] = Form.useForm();
+
+  // Workflow state
+  const [workflowTemplate, setWorkflowTemplate] = useState<WorkflowTemplate | null>(null);
+  const [workflowInstances, setWorkflowInstances] = useState<Record<string, WorkflowInstance>>({});
+
+  // Load patients on mount
+  React.useEffect(() => {
+    fetchPatients();
+  }, [fetchPatients]);
+
+  // Load active workflow template for patients
+  React.useEffect(() => {
+    workflowService.findActiveTemplateForEntity('patient').then((res) => {
+      if (res.data) setWorkflowTemplate(res.data);
+    }).catch(() => {});
+  }, []);
+
+  // Load workflow instances for all patients
+  React.useEffect(() => {
+    if (workflowTemplate && patients.length > 0) {
+      const loadWorkflowInstances = async () => {
+        const instances: Record<string, WorkflowInstance> = {};
+        for (const patient of patients) {
+          try {
+            const instance = await workflowService.findInstanceByEntity('patient', patient.id);
+            if (instance.data) {
+              const transitions = await workflowService.getAvailableTransitions('patient', patient.id);
+              instances[patient.id] = {
+                ...instance.data,
+                availableTransitions: transitions.data || [],
+              };
+            }
+          } catch (error) {
+            // No workflow instance for this patient
+          }
+        }
+        setWorkflowInstances(instances);
+      };
+      loadWorkflowInstances();
+    }
+  }, [workflowTemplate, patients]);
 
   const calculateAge = (dob: string): number => {
     const birthDate = new Date(dob);
@@ -96,7 +138,7 @@ const PatientListPage: React.FC = () => {
     });
   }, [patients, searchText, statusFilter, genderFilter, dateRange]);
 
-  const handleAddPatient = (values: Record<string, unknown>) => {
+  const handleAddPatient = async (values: Record<string, unknown>) => {
     const newPatient: Patient = {
       id: `pat-${Date.now()}`,
       mrn: `MRN-2024-${String(patients.length + 1).padStart(4, '0')}`,
@@ -139,14 +181,183 @@ const PatientListPage: React.FC = () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    setPatients([newPatient, ...patients]);
+    await storeAddPatient(newPatient);
     setDrawerOpen(false);
     form.resetFields();
     message.success(`Patient ${newPatient.firstName} ${newPatient.lastName} added successfully`);
   };
 
-  const handleDelete = (id: string) => {
-    setPatients(patients.filter((p) => p.id !== id));
+  // Ensure workflow instance exists for a patient
+  const ensureWorkflowInstance = async (patientId: string, initialStep: string): Promise<WorkflowInstance | null> => {
+    if (!workflowTemplate) return null;
+    if (workflowInstances[patientId]) return workflowInstances[patientId];
+    try {
+      const instance = await workflowService.createInstance({
+        entityType: 'patient',
+        entityId: patientId,
+        currentStep: initialStep,
+        templateId: workflowTemplate.id,
+      });
+      setWorkflowInstances((prev) => ({
+        ...prev,
+        [patientId]: instance,
+      }));
+      return instance;
+    } catch (error) {
+      console.error('Failed to create workflow instance:', error);
+      return null;
+    }
+  };
+
+  const handleEdit = async (patient: Patient) => {
+    // Check if edit is allowed by workflow
+    if (workflowTemplate) {
+      const workflowInstance = workflowInstances[patient.id];
+      const availableTransitions = workflowInstance?.availableTransitions || [];
+      const canEdit = availableTransitions.some((t: any) => 
+        t.toStep === 'edit' || t.toStep === 'update' || t.action === 'edit'
+      );
+
+      if (!canEdit && workflowInstance) {
+        message.warning('Edit is not allowed in the current workflow state');
+        return;
+      }
+
+      // If workflow allows edit, transition to edit state
+      if (canEdit) {
+        try {
+          await workflowService.transition('patient', patient.id, { toStep: 'edit' });
+          // Refresh transitions
+          const transitions = await workflowService.getAvailableTransitions('patient', patient.id);
+          setWorkflowInstances((prev) => ({
+            ...prev,
+            [patient.id]: {
+              ...prev[patient.id],
+              availableTransitions: transitions.data || [],
+            },
+          }));
+        } catch (error) {
+          console.error('Workflow transition failed:', error);
+        }
+      }
+    }
+
+    setEditingPatient(patient);
+    form.setFieldsValue({
+      firstName: patient.firstName,
+      lastName: patient.lastName,
+      dateOfBirth: dayjs(patient.dateOfBirth),
+      gender: patient.gender,
+      email: patient.email,
+      phone: patient.phone,
+      street: patient.address?.street,
+      city: patient.address?.city,
+      state: patient.address?.state,
+      zipCode: patient.address?.zipCode,
+      emergencyContactName: patient.emergencyContact?.name,
+      emergencyContactRelationship: patient.emergencyContact?.relationship,
+      emergencyContactPhone: patient.emergencyContact?.phone,
+      bloodType: patient.bloodType,
+      status: patient.status,
+    });
+    setDrawerOpen(true);
+  };
+
+  const handleUpdatePatient = async (values: Record<string, unknown>) => {
+    if (!editingPatient) return;
+
+    const updates: Partial<Patient> = {
+      firstName: values.firstName as string,
+      lastName: values.lastName as string,
+      dateOfBirth: (values.dateOfBirth as dayjs.Dayjs).format('YYYY-MM-DD'),
+      gender: values.gender as 'male' | 'female' | 'other',
+      email: values.email as string,
+      phone: values.phone as string,
+      address: {
+        street: (values.street as string) || '',
+        city: (values.city as string) || '',
+        state: (values.state as string) || '',
+        zipCode: (values.zipCode as string) || '',
+        country: 'US',
+      },
+      emergencyContact: {
+        name: (values.emergencyContactName as string) || '',
+        relationship: (values.emergencyContactRelationship as string) || '',
+        phone: (values.emergencyContactPhone as string) || '',
+      },
+      bloodType: values.bloodType as string,
+      status: values.status as string,
+    };
+
+    await updatePatient(editingPatient.id, updates);
+
+    // Transition workflow after successful update
+    if (workflowTemplate) {
+      try {
+        const transitions = await workflowService.getAvailableTransitions('patient', editingPatient.id);
+        const canCompleteEdit = transitions.data?.some((t: any) => 
+          t.toStep === 'active' || t.toStep === 'reviewed' || t.action === 'complete_edit'
+        );
+
+        if (canCompleteEdit) {
+          await workflowService.transition('patient', editingPatient.id, { 
+            toStep: transitions.data?.find((t: any) => t.toStep === 'active' || t.toStep === 'reviewed')?.toStep || 'active' 
+          });
+          // Refresh transitions
+          const newTransitions = await workflowService.getAvailableTransitions('patient', editingPatient.id);
+          setWorkflowInstances((prev) => ({
+            ...prev,
+            [editingPatient.id]: {
+              ...prev[editingPatient.id],
+              availableTransitions: newTransitions.data || [],
+            },
+          }));
+        }
+      } catch (error) {
+        console.error('Workflow transition failed:', error);
+      }
+    }
+
+    setDrawerOpen(false);
+    setEditingPatient(null);
+    form.resetFields();
+    message.success(`Patient updated successfully`);
+  };
+
+  const handleDelete = async (id: string) => {
+    // Check if delete is allowed by workflow
+    if (workflowTemplate) {
+      const workflowInstance = workflowInstances[id];
+      const availableTransitions = workflowInstance?.availableTransitions || [];
+      const canDelete = availableTransitions.some((t: any) => 
+        t.toStep === 'deleted' || t.toStep === 'archive' || t.action === 'delete'
+      );
+
+      if (!canDelete && workflowInstance) {
+        message.warning('Delete is not allowed in the current workflow state');
+        return;
+      }
+
+      // If workflow allows delete, transition to deleted state
+      if (canDelete) {
+        try {
+          await workflowService.transition('patient', id, { toStep: 'deleted' });
+          // Refresh transitions
+          const transitions = await workflowService.getAvailableTransitions('patient', id);
+          setWorkflowInstances((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              availableTransitions: transitions.data || [],
+            },
+          }));
+        } catch (error) {
+          console.error('Workflow transition failed:', error);
+        }
+      }
+    }
+
+    await deletePatient(id);
     message.success('Patient deleted successfully');
   };
 
@@ -266,50 +477,73 @@ const PatientListPage: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       fixed: 'right',
-      render: (_: unknown, record: Patient) => (
-        <Space size={4}>
-          <Tooltip title="View">
-            <Button
-              type="text"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={(e) => {
-                e.stopPropagation();
-                navigate(`/patients/${record.id}`);
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="Edit">
-            <Button
-              type="text"
-              size="small"
-              icon={<EditOutlined />}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </Tooltip>
-          <Popconfirm
-            title="Delete Patient"
-            description="Are you sure you want to delete this patient?"
-            onConfirm={(e) => {
-              e?.stopPropagation();
-              handleDelete(record.id);
-            }}
-            onCancel={(e) => e?.stopPropagation()}
-          >
-            <Tooltip title="Delete">
+      render: (_: unknown, record: Patient) => {
+        const workflowInstance = workflowInstances[record.id];
+        const availableTransitions = workflowInstance?.availableTransitions || [];
+        const useWorkflowActions = workflowTemplate && workflowInstance && availableTransitions.length > 0;
+
+        // Check if edit is allowed
+        const canEdit = useWorkflowActions
+          ? availableTransitions.some((t: any) => t.toStep === 'edit' || t.toStep === 'update' || t.action === 'edit')
+          : true;
+
+        // Check if delete is allowed
+        const canDelete = useWorkflowActions
+          ? availableTransitions.some((t: any) => t.toStep === 'deleted' || t.toStep === 'archive' || t.action === 'delete')
+          : true;
+
+        return (
+          <Space size={4}>
+            <Tooltip title="View">
               <Button
                 type="text"
                 size="small"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={(e) => e.stopPropagation()}
+                icon={<EyeOutlined />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/patients/${record.id}`);
+                }}
               />
             </Tooltip>
-          </Popconfirm>
-        </Space>
-      ),
+            {canEdit && (
+              <Tooltip title="Edit">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(record);
+                  }}
+                />
+              </Tooltip>
+            )}
+            {canDelete && (
+              <Popconfirm
+                title="Delete Patient"
+                description="Are you sure you want to delete this patient?"
+                onConfirm={(e) => {
+                  e?.stopPropagation();
+                  handleDelete(record.id);
+                }}
+                onCancel={(e) => e?.stopPropagation()}
+              >
+                <Tooltip title="Delete">
+                  <Button
+                    type="text"
+                    size="small"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </Tooltip>
+              </Popconfirm>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -337,7 +571,11 @@ const PatientListPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => {
+              setEditingPatient(null);
+              form.resetFields();
+              setDrawerOpen(true);
+            }}
           >
             Add Patient
           </Button>
@@ -430,13 +668,14 @@ const PatientListPage: React.FC = () => {
         />
       </Card>
 
-      {/* Add Patient Drawer */}
+      {/* Add/Edit Patient Drawer */}
       <Drawer
-        title="Add New Patient"
+        title={editingPatient ? 'Edit Patient' : 'Add New Patient'}
         placement="right"
         width={640}
         onClose={() => {
           setDrawerOpen(false);
+          setEditingPatient(null);
           form.resetFields();
         }}
         open={drawerOpen}
@@ -445,13 +684,14 @@ const PatientListPage: React.FC = () => {
             <Button
               onClick={() => {
                 setDrawerOpen(false);
+                setEditingPatient(null);
                 form.resetFields();
               }}
             >
               Cancel
             </Button>
             <Button type="primary" onClick={() => form.submit()}>
-              Save Patient
+              {editingPatient ? 'Update Patient' : 'Save Patient'}
             </Button>
           </Space>
         }
@@ -459,7 +699,7 @@ const PatientListPage: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          onFinish={handleAddPatient}
+          onFinish={editingPatient ? handleUpdatePatient : handleAddPatient}
           initialValues={{ gender: 'male' }}
         >
           <Divider orientation="left" plain>

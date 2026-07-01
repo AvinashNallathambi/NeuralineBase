@@ -13,6 +13,7 @@ import {
 @Index(['tenantId', 'providerId'])
 @Index(['tenantId', 'startTime'])
 @Index(['tenantId', 'status'])
+@Index(['tenantId', 'groupId'])
 export class Appointment {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -21,10 +22,10 @@ export class Appointment {
   @Index()
   tenantId!: string;
 
-  @Column({ name: 'patient_id', type: 'uuid' })
-  patientId!: string;
+  @Column({ name: 'patient_id', type: 'varchar', length: 100, nullable: true })
+  patientId!: string | null;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'appointment_type', length: 50 })
@@ -54,8 +55,36 @@ export class Appointment {
   @Column({ name: 'status', length: 50, default: 'scheduled' })
   status!: string;
 
+  @Column({ name: 'is_telehealth', type: 'boolean', default: false })
+  isTelehealth!: boolean;
+
+  @Column({ name: 'duration_minutes', type: 'int', nullable: true })
+  durationMinutes!: number | null;
+
+  @Column({ name: 'reminders_enabled', type: 'boolean', default: true })
+  remindersEnabled!: boolean;
+
   @Column({ name: 'metadata', type: 'jsonb', default: {} })
   metadata!: Record<string, unknown>;
+
+  // Group Appointment Fields
+  @Column({ name: 'is_group', type: 'boolean', default: false })
+  isGroup!: boolean;
+
+  @Column({ name: 'group_id', type: 'uuid', nullable: true })
+  @Index()
+  groupId!: string | null;
+
+  @Column({ name: 'max_participants', type: 'int', nullable: true })
+  maxParticipants!: number | null;
+
+  @Column({ name: 'group_participants', type: 'jsonb', nullable: true })
+  groupParticipants!: {
+    patientId: string;
+    patientName: string;
+    attended: boolean;
+    notes?: string;
+  }[] | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

@@ -10,10 +10,10 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PrescriptionItemDto {
-  @ApiProperty({ example: 'rxitem-001' })
+  @ApiPropertyOptional({ example: 'rxitem-001' })
   @IsString()
-  @IsNotEmpty()
-  id!: string;
+  @IsOptional()
+  id?: string;
 
   @ApiProperty({ example: 'Metformin HCl' })
   @IsString()

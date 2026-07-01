@@ -41,6 +41,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import type { Patient, Allergy, MedicalHistory, Appointment, Claim } from '../../types';
 import { mockPatients, mockAppointments, mockClaims } from '../../data/mockData';
+import { usePatientStore, useAppointmentStore, useBillingStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text, Paragraph } = Typography;
@@ -80,23 +81,29 @@ const claimStatusColors: Record<string, string> = {
 };
 
 const PatientDetailPage: React.FC = () => {
-  const { patients: mockPatients } = usePatientStore();
-  const { appointments: mockAppointments } = useAppointmentStore();
-  const { claims: mockClaims } = useBillingStore();
+  const { patients, fetchPatients } = usePatientStore();
+  const { appointments, fetchAppointments } = useAppointmentStore();
+  const { claims } = useBillingStore();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
 
-  const patient = useMemo(() => mockPatients.find((p) => p.id === id), [id]);
+  // Fetch patients and appointments on mount
+  React.useEffect(() => {
+    fetchPatients();
+    fetchAppointments();
+  }, [fetchPatients, fetchAppointments]);
+
+  const patient = useMemo(() => patients.find((p) => p.id === id), [id, patients]);
 
   const patientAppointments = useMemo(
-    () => mockAppointments.filter((a) => a.patientId === id),
-    [id],
+    () => appointments.filter((a) => a.patientId === id),
+    [id, appointments],
   );
 
   const patientClaims = useMemo(
-    () => mockClaims.filter((c) => c.patientId === id),
-    [id],
+    () => claims.filter((c) => c.patientId === id),
+    [id, claims],
   );
 
   if (!patient) {
@@ -185,15 +192,19 @@ const PatientDetailPage: React.FC = () => {
               </Space>
             </Descriptions.Item>
             <Descriptions.Item label="Address">
-              <Space size={4} direction="vertical" style={{ gap: 0 }}>
-                <span>
-                  <HomeOutlined style={{ marginRight: 4 }} />
-                  {patient.address.street}
-                </span>
-                <span style={{ marginLeft: 18 }}>
-                  {patient.address.city}, {patient.address.state} {patient.address.zipCode}
-                </span>
-              </Space>
+              {patient.address ? (
+                <Space size={4} direction="vertical" style={{ gap: 0 }}>
+                  <span>
+                    <HomeOutlined style={{ marginRight: 4 }} />
+                    {patient.address.street1 || patient.address.street}
+                  </span>
+                  <span style={{ marginLeft: 18 }}>
+                    {patient.address.city}, {patient.address.state} {patient.address.zipCode}
+                  </span>
+                </Space>
+              ) : (
+                <Text type="secondary">No address on file</Text>
+              )}
             </Descriptions.Item>
           </Descriptions>
         </Card>
@@ -211,18 +222,22 @@ const PatientDetailPage: React.FC = () => {
           size="small"
           style={{ marginBottom: 24 }}
         >
-          <Descriptions column={1} size="small" labelStyle={{ fontWeight: 500, width: 140 }}>
-            <Descriptions.Item label="Name">{patient.emergencyContact.name}</Descriptions.Item>
-            <Descriptions.Item label="Relationship">
-              {patient.emergencyContact.relationship}
-            </Descriptions.Item>
-            <Descriptions.Item label="Phone">
-              <Space size={4}>
-                <PhoneOutlined />
-                {patient.emergencyContact.phone}
-              </Space>
-            </Descriptions.Item>
-          </Descriptions>
+          {patient.emergencyContact ? (
+            <Descriptions column={1} size="small" labelStyle={{ fontWeight: 500, width: 140 }}>
+              <Descriptions.Item label="Name">{patient.emergencyContact.name}</Descriptions.Item>
+              <Descriptions.Item label="Relationship">
+                {patient.emergencyContact.relationship}
+              </Descriptions.Item>
+              <Descriptions.Item label="Phone">
+                <Space size={4}>
+                  <PhoneOutlined />
+                  {patient.emergencyContact.phone}
+                </Space>
+              </Descriptions.Item>
+            </Descriptions>
+          ) : (
+            <Text type="secondary">No emergency contact on file</Text>
+          )}
         </Card>
 
         {/* Insurance */}
@@ -230,12 +245,12 @@ const PatientDetailPage: React.FC = () => {
           title={
             <Space>
               <HeartOutlined />
-              <span>Insurance ({patient.insurance.length})</span>
+              <span>Insurance ({patient.insurance?.length || 0})</span>
             </Space>
           }
           size="small"
         >
-          {patient.insurance.length === 0 ? (
+          {!patient.insurance || patient.insurance.length === 0 ? (
             <Text type="secondary">No insurance on file</Text>
           ) : (
             patient.insurance.map((ins) => (
@@ -280,7 +295,7 @@ const PatientDetailPage: React.FC = () => {
             <Card size="small">
               <Statistic
                 title="Conditions"
-                value={patient.medicalHistory.length}
+                value={patient.medicalHistory?.length || 0}
                 prefix={<HeartOutlined />}
                 valueStyle={{ color: '#0D7C8A' }}
               />
@@ -290,10 +305,10 @@ const PatientDetailPage: React.FC = () => {
             <Card size="small">
               <Statistic
                 title="Allergies"
-                value={patient.allergies.length}
+                value={patient.allergies?.length || 0}
                 prefix={<AlertOutlined />}
                 valueStyle={{
-                  color: patient.allergies.length > 0 ? '#ff4d4f' : '#52c41a',
+                  color: (patient.allergies?.length || 0) > 0 ? '#ff4d4f' : '#52c41a',
                 }}
               />
             </Card>
@@ -367,7 +382,7 @@ const PatientDetailPage: React.FC = () => {
 
   const MedicalHistoryTab = () => (
     <Card>
-      {patient.medicalHistory.length === 0 ? (
+      {!patient.medicalHistory || patient.medicalHistory.length === 0 ? (
         <Empty description="No medical history recorded" />
       ) : (
         <Table<MedicalHistory>
@@ -384,7 +399,7 @@ const PatientDetailPage: React.FC = () => {
   // ── Tab: Allergies ──
   const AllergiesTab = () => (
     <Card>
-      {patient.allergies.length === 0 ? (
+      {!patient.allergies || patient.allergies.length === 0 ? (
         <Empty description="No known allergies (NKA)" />
       ) : (
         <List<Allergy>

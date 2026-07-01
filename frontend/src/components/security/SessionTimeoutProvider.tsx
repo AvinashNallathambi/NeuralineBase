@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import { Modal } from 'antd';
+import { Modal, message } from 'antd';
 import { useAuthStore } from '../../store';
 
 /**
@@ -35,6 +35,7 @@ const SessionTimeoutProvider: React.FC<Props> = ({
 
   const handleLogout = useCallback(() => {
     setShowWarning(false);
+    message.info('Logged out due to security concern');
     logout();
     // Navigation to /login is handled by the ProtectedRoute redirect
   }, [logout]);

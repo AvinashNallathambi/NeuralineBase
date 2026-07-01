@@ -3,7 +3,7 @@ import { create } from 'zustand';
 // localStorage / IndexedDB.  All clinical data is kept in-memory only
 // and seeded from mock data (or fetched from the API) on each session.
 import type {
-  Appointment, AppointmentStatus,
+  Appointment, AppointmentStatus, AppointmentType,
   Patient,
   Encounter,
   Prescription,
@@ -22,7 +22,6 @@ import type {
 } from '../types';
 import type { Payment, RefillRequest, ImagingOrder } from '../data/mockData';
 import {
-  mockAppointments,
   mockPatients,
   mockProviders,
   mockEncounters,
@@ -46,6 +45,66 @@ import {
 import type { User, Activity, DashboardStats } from '../types';
 import { appointmentService } from '../services/appointmentService';
 import { workflowService } from '../services/workflowService';
+import { patientService } from '../services/patientService';
+
+// Helper to map a backend-format appointment to the frontend Appointment type
+// (backend uses appointmentType, reasonForVisit, remindersEnabled, etc.)
+const mapBackendAppointment = (raw: any): Appointment => {
+  const patient = mockPatients.find((p) => p.id === raw.patientId);
+  const provider = mockProviders.find((p) => p.id === raw.providerId);
+
+  return {
+    id: raw.id,
+    patientId: raw.patientId,
+    patientName: patient ? `${patient.firstName} ${patient.lastName}` : raw.patientName || 'Unknown',
+    providerId: raw.providerId,
+    providerName: provider ? `Dr. ${provider.firstName} ${provider.lastName}` : raw.providerName || 'Unknown',
+    type: (raw.type || raw.appointmentType || 'follow_up') as AppointmentType,
+    status: (raw.status || 'scheduled') as AppointmentStatus,
+    startTime: typeof raw.startTime === 'string' ? raw.startTime : raw.startTime?.toISOString?.() || new Date().toISOString(),
+    endTime: typeof raw.endTime === 'string' ? raw.endTime : raw.endTime?.toISOString?.() || new Date().toISOString(),
+    reason: raw.reason || raw.reasonForVisit || '',
+    notes: raw.notes,
+    isTelehealth: raw.isTelehealth ?? false,
+    meetingLink: raw.meetingLink || raw.location?.meetingLink || raw.meetingRoomId,
+    reminders: raw.reminders ?? raw.remindersEnabled ?? true,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : raw.createdAt?.toISOString?.() || new Date().toISOString(),
+  };
+};
+
+// Helper to map a backend-format patient to the frontend Patient type
+const mapBackendPatient = (raw: any): Patient => {
+  return {
+    id: raw.id,
+    mrn: raw.mrn || '',
+    firstName: raw.firstName,
+    lastName: raw.lastName,
+    dateOfBirth: typeof raw.dateOfBirth === 'string' ? raw.dateOfBirth : raw.dateOfBirth?.toISOString?.() || new Date().toISOString(),
+    gender: raw.gender,
+    email: raw.email || '',
+    phone: raw.phone || '',
+    address: raw.address || {
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: '',
+    },
+    emergencyContact: raw.emergencyContact || {
+      name: '',
+      relationship: '',
+      phone: '',
+    },
+    insurance: raw.insurances || [],
+    allergies: raw.allergies || [],
+    medicalHistory: raw.medicalHistory || [],
+    status: raw.status || 'active',
+    avatar: raw.avatar,
+    bloodType: raw.bloodType,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : raw.createdAt?.toISOString?.() || new Date().toISOString(),
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : raw.updatedAt?.toISOString?.() || new Date().toISOString(),
+  };
+};
 
 // ── Appointments Store ────────────────────────────────────────────────────────
 interface AppointmentStore {
@@ -61,7 +120,7 @@ interface AppointmentStore {
 
 export const useAppointmentStore = create<AppointmentStore>(
   (set) => ({
-    appointments: [...mockAppointments],
+    appointments: [],
     loading: false,
     error: null,
     
@@ -74,7 +133,8 @@ export const useAppointmentStore = create<AppointmentStore>(
           startDate: options.startDate,
           endDate: options.endDate,
         });
-        set({ appointments: result.data, loading: false });
+        const mappedAppointments = result.data.map(mapBackendAppointment);
+        set({ appointments: mappedAppointments, loading: false });
       } catch (error) {
         console.error('Failed to fetch appointments:', error);
         set({ 
@@ -101,9 +161,10 @@ export const useAppointmentStore = create<AppointmentStore>(
           durationMinutes: appointment.durationMinutes,
           remindersEnabled: appointment.remindersEnabled,
         });
-        set((s) => ({ 
-          appointments: [created, ...s.appointments], 
-          loading: false 
+        const mappedCreated = mapBackendAppointment(created);
+        set((s) => ({
+          appointments: [mappedCreated, ...s.appointments],
+          loading: false
         }));
       } catch (error) {
         console.error('Failed to create appointment:', error);
@@ -120,9 +181,10 @@ export const useAppointmentStore = create<AppointmentStore>(
       set({ loading: true, error: null });
       try {
         const updated = await appointmentService.update(id, updates);
+        const mappedUpdated = mapBackendAppointment(updated);
         set((s) => ({
           appointments: s.appointments.map((a) =>
-            a.id === id ? updated : a
+            a.id === id ? mappedUpdated : a
           ),
           loading: false,
         }));
@@ -145,9 +207,10 @@ export const useAppointmentStore = create<AppointmentStore>(
       set({ loading: true, error: null });
       try {
         const updated = await appointmentService.update(id, { status });
+        const mappedUpdated = mapBackendAppointment(updated);
         set((s) => ({
           appointments: s.appointments.map((a) =>
-            a.id === id ? updated : a
+            a.id === id ? mappedUpdated : a
           ),
           loading: false,
         }));
@@ -192,24 +255,155 @@ export const useAppointmentStore = create<AppointmentStore>(
 // ── Patients Store ────────────────────────────────────────────────────────────
 interface PatientStore {
   patients: Patient[];
-  addPatient: (patient: Patient) => void;
-  updatePatient: (id: string, updates: Partial<Patient>) => void;
-  deletePatient: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  fetchPatients: (options?: { page?: number; limit?: number; search?: string; status?: string; gender?: string }) => Promise<void>;
+  addPatient: (patient: Patient) => Promise<void>;
+  updatePatient: (id: string, updates: Partial<Patient>) => Promise<void>;
+  deletePatient: (id: string) => Promise<void>;
 }
 
 export const usePatientStore = create<PatientStore>(
   (set) => ({
-    patients: [...mockPatients],
-    addPatient: (patient) =>
-      set((s) => ({ patients: [patient, ...s.patients] })),
-    updatePatient: (id, updates) =>
-      set((s) => ({
-        patients: s.patients.map((p) =>
-          p.id === id ? { ...p, ...updates } : p
-        ),
-      })),
-    deletePatient: (id) =>
-      set((s) => ({ patients: s.patients.filter((p) => p.id !== id) })),
+    patients: [],
+    loading: false,
+    error: null,
+    fetchPatients: async (options = {}) => {
+      set({ loading: true, error: null });
+      try {
+        const result = await patientService.findAll({
+          page: options.page || 1,
+          limit: options.limit || 100,
+          search: options.search,
+          status: options.status,
+          gender: options.gender,
+        });
+        const mappedPatients = result.data.map(mapBackendPatient);
+        set({ patients: mappedPatients, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch patients:', error);
+        set({
+          error: 'Failed to fetch patients',
+          loading: false,
+        });
+        // Keep existing patients on error
+      }
+    },
+    addPatient: async (patient) => {
+      set({ loading: true, error: null });
+      try {
+        const backendDto = {
+          mrn: patient.mrn,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          dateOfBirth: patient.dateOfBirth,
+          gender: patient.gender,
+          email: patient.email,
+          phone: patient.phone,
+          address: patient.address && patient.address.street ? {
+            street1: patient.address.street,
+            street2: patient.address.street2,
+            city: patient.address.city,
+            state: patient.address.state,
+            zipCode: patient.address.zipCode,
+            country: patient.address.country,
+          } : undefined,
+          emergencyContact: patient.emergencyContact?.name ? {
+            name: patient.emergencyContact.name,
+            relationship: patient.emergencyContact.relationship,
+            phone: patient.emergencyContact.phone,
+            email: patient.emergencyContact.email,
+          } : undefined,
+          bloodType: patient.bloodType,
+          status: patient.status,
+        };
+        const created = await patientService.create(backendDto);
+        const mappedCreated = mapBackendPatient(created);
+        set((s) => ({
+          patients: [mappedCreated, ...s.patients],
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to create patient:', error);
+        set({
+          error: 'Failed to create patient',
+          loading: false,
+        });
+        // Fallback to local state update
+        set((s) => ({ patients: [patient, ...s.patients] }));
+      }
+    },
+    updatePatient: async (id, updates) => {
+      set({ loading: true, error: null });
+      try {
+        const backendDto: any = {};
+        if (updates.firstName) backendDto.firstName = updates.firstName;
+        if (updates.lastName) backendDto.lastName = updates.lastName;
+        if (updates.dateOfBirth) backendDto.dateOfBirth = updates.dateOfBirth;
+        if (updates.gender) backendDto.gender = updates.gender;
+        if (updates.email !== undefined) backendDto.email = updates.email;
+        if (updates.phone !== undefined) backendDto.phone = updates.phone;
+        if (updates.address) {
+          backendDto.address = {
+            street1: updates.address.street,
+            street2: updates.address.street2,
+            city: updates.address.city,
+            state: updates.address.state,
+            zipCode: updates.address.zipCode,
+            country: updates.address.country,
+          };
+        }
+        if (updates.emergencyContact) {
+          backendDto.emergencyContact = {
+            name: updates.emergencyContact.name,
+            relationship: updates.emergencyContact.relationship,
+            phone: updates.emergencyContact.phone,
+            email: updates.emergencyContact.email,
+          };
+        }
+        if (updates.bloodType !== undefined) backendDto.bloodType = updates.bloodType;
+        if (updates.status) backendDto.status = updates.status;
+
+        const updated = await patientService.update(id, backendDto);
+        const mappedUpdated = mapBackendPatient(updated);
+        set((s) => ({
+          patients: s.patients.map((p) =>
+            p.id === id ? mappedUpdated : p
+          ),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to update patient:', error);
+        set({
+          error: 'Failed to update patient',
+          loading: false,
+        });
+        // Fallback to local state update
+        set((s) => ({
+          patients: s.patients.map((p) =>
+            p.id === id ? { ...p, ...updates } : p
+          ),
+        }));
+      }
+    },
+    deletePatient: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        await patientService.delete(id);
+        set((s) => ({
+          patients: s.patients.filter((p) => p.id !== id),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to delete patient:', error);
+        set({
+          error: 'Failed to delete patient',
+          loading: false,
+        });
+        // Fallback to local state update
+        set((s) => ({ patients: s.patients.filter((p) => p.id !== id) }));
+      }
+    },
   }),
 );
 

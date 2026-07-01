@@ -8,10 +8,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere, Between } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
+import { ProviderAvailability } from './entities/provider-availability.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentDto } from './dto/query-appointment.dto';
 import { CreateAppointmentWithWorkflowDto, TransitionAppointmentDto } from './dto/appointment-workflow.dto';
+import { CreateProviderAvailabilityDto, UpdateProviderAvailabilityDto, CreateGroupAppointmentDto, UpdateGroupAppointmentDto } from './dto/provider-availability.dto';
 import { WorkflowService } from '../workflow/workflow.service';
 import { CreateWorkflowInstanceDto } from '../workflow/dto/workflow-instance.dto';
 
@@ -41,6 +43,8 @@ export class AppointmentsService {
   constructor(
     @InjectRepository(Appointment)
     private readonly appointmentRepository: Repository<Appointment>,
+    @InjectRepository(ProviderAvailability)
+    private readonly availabilityRepository: Repository<ProviderAvailability>,
     private readonly workflowService: WorkflowService,
   ) {}
 
@@ -51,7 +55,7 @@ export class AppointmentsService {
     tenantId: string,
     options: QueryAppointmentDto,
   ): Promise<PaginatedResult<Appointment>> {
-    const { page = 1, limit = 20, patientId, providerId, appointmentType, status, startDate, endDate, search } = options;
+    const { page = 1, limit = 20, patientId, providerId, appointmentType, type, status, startDate, endDate, search } = options;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.appointmentRepository
@@ -66,8 +70,9 @@ export class AppointmentsService {
       queryBuilder.andWhere('appointment.providerId = :providerId', { providerId });
     }
 
-    if (appointmentType) {
-      queryBuilder.andWhere('appointment.appointmentType = :appointmentType', { appointmentType });
+    const apptType = type || appointmentType;
+    if (apptType) {
+      queryBuilder.andWhere('appointment.appointmentType = :appointmentType', { appointmentType: apptType });
     }
 
     if (status) {
@@ -191,7 +196,17 @@ export class AppointmentsService {
     }
 
     const appointment = this.appointmentRepository.create({
-      ...dto,
+      patientId: dto.patientId,
+      providerId: dto.providerId,
+      appointmentType: dto.type || dto.appointmentType,
+      startTime: new Date(dto.startTime),
+      endTime: new Date(dto.endTime),
+      location: dto.location,
+      notes: dto.notes,
+      reasonForVisit: dto.reason || dto.reasonForVisit,
+      isTelehealth: dto.isTelehealth ?? false,
+      durationMinutes: dto.durationMinutes ?? null,
+      remindersEnabled: dto.remindersEnabled ?? true,
       tenantId,
       status: 'scheduled',
     });
@@ -271,7 +286,26 @@ export class AppointmentsService {
       }
     }
 
-    Object.assign(appointment, dto);
+    // Map frontend field aliases to entity properties
+    const newType = dto.type || dto.appointmentType;
+    if (newType) {
+      appointment.appointmentType = newType;
+    }
+    const newReason = dto.reason || dto.reasonForVisit;
+    if (newReason) {
+      appointment.reasonForVisit = newReason || null;
+    }
+    if (dto.patientId) appointment.patientId = dto.patientId;
+    if (dto.providerId) appointment.providerId = dto.providerId;
+    if (dto.startTime) appointment.startTime = new Date(dto.startTime);
+    if (dto.endTime) appointment.endTime = new Date(dto.endTime);
+    if (dto.location !== undefined) appointment.location = dto.location;
+    if (dto.notes !== undefined) appointment.notes = dto.notes;
+    if (dto.isTelehealth !== undefined) appointment.isTelehealth = dto.isTelehealth;
+    if (dto.durationMinutes !== undefined) appointment.durationMinutes = dto.durationMinutes;
+    if (dto.remindersEnabled !== undefined) appointment.remindersEnabled = dto.remindersEnabled;
+    if (dto.metadata !== undefined) appointment.metadata = dto.metadata;
+
     const updated = await this.appointmentRepository.save(appointment);
     this.logger.log(`Appointment updated: ${id} in tenant ${tenantId}`);
     return updated;
@@ -408,5 +442,326 @@ export class AppointmentsService {
     } catch (error: any) {
       this.logger.warn(`Failed to auto-create workflow instance: ${error?.message || error}`);
     }
+  }
+
+  // ── Provider Availability Methods ─────────────────────────────────────────────
+
+  /**
+   * Create provider availability
+   */
+  async createAvailability(
+    tenantId: string,
+    dto: CreateProviderAvailabilityDto,
+  ): Promise<ProviderAvailability> {
+    const availability = this.availabilityRepository.create({
+      ...dto,
+      tenantId,
+    });
+
+    const saved = await this.availabilityRepository.save(availability);
+    this.logger.log(`Provider availability created: ${saved.id} for provider ${dto.providerId}`);
+    return saved;
+  }
+
+  /**
+   * Find all availability for a provider
+   */
+  async findAvailabilityByProvider(
+    tenantId: string,
+    providerId: string,
+  ): Promise<ProviderAvailability[]> {
+    return this.availabilityRepository.find({
+      where: { tenantId, providerId },
+      order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * Find availability for a provider on a specific day
+   */
+  async findAvailabilityByProviderAndDay(
+    tenantId: string,
+    providerId: string,
+    dayOfWeek: number,
+  ): Promise<ProviderAvailability[]> {
+    return this.availabilityRepository.find({
+      where: { tenantId, providerId, dayOfWeek },
+      order: { startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * Update provider availability
+   */
+  async updateAvailability(
+    tenantId: string,
+    id: string,
+    dto: UpdateProviderAvailabilityDto,
+  ): Promise<ProviderAvailability> {
+    const availability = await this.availabilityRepository.findOne({
+      where: { id, tenantId },
+    });
+
+    if (!availability) {
+      throw new NotFoundException(`Availability with ID "${id}" not found`);
+    }
+
+    Object.assign(availability, dto);
+    const updated = await this.availabilityRepository.save(availability);
+    this.logger.log(`Provider availability updated: ${id}`);
+    return updated;
+  }
+
+  /**
+   * Delete provider availability
+   */
+  async deleteAvailability(tenantId: string, id: string): Promise<void> {
+    const availability = await this.availabilityRepository.findOne({
+      where: { id, tenantId },
+    });
+
+    if (!availability) {
+      throw new NotFoundException(`Availability with ID "${id}" not found`);
+    }
+
+    await this.availabilityRepository.remove(availability);
+    this.logger.log(`Provider availability deleted: ${id}`);
+  }
+
+  /**
+   * Get available time slots for a provider on a specific date
+   */
+  async getAvailableSlots(
+    tenantId: string,
+    providerId: string,
+    date: Date,
+    appointmentType?: string,
+  ): Promise<{ start: string; end: string }[]> {
+    const dayOfWeek = date.getDay();
+    const availabilities = await this.findAvailabilityByProviderAndDay(
+      tenantId,
+      providerId,
+      dayOfWeek,
+    );
+
+    const slots: { start: string; end: string }[] = [];
+
+    for (const availability of availabilities) {
+      if (!availability.isAvailable) continue;
+
+      // Filter by appointment type if specified
+      if (appointmentType && availability.appointmentTypes?.length > 0) {
+        if (!availability.appointmentTypes.includes(appointmentType)) continue;
+      }
+
+      // Check effective and expiry dates
+      if (availability.effectiveDate && date < availability.effectiveDate) continue;
+      if (availability.expiryDate && date > availability.expiryDate) continue;
+
+      // Get existing appointments for this slot
+      const startTime = new Date(date);
+      const [hours, minutes] = availability.startTime.split(':').map(Number);
+      startTime.setHours(hours, minutes, 0, 0);
+
+      const endTime = new Date(date);
+      const [endHours, endMinutes] = availability.endTime.split(':').map(Number);
+      endTime.setHours(endHours, endMinutes, 0, 0);
+
+      const existingAppointments = await this.appointmentRepository
+        .createQueryBuilder('appointment')
+        .where('appointment.tenantId = :tenantId', { tenantId })
+        .andWhere('appointment.providerId = :providerId', { providerId })
+        .andWhere('appointment.status NOT IN (:...statuses)', { statuses: ['cancelled', 'no_show'] })
+        .andWhere(
+          '(appointment.startTime < :endTime AND appointment.endTime > :startTime)',
+          { startTime, endTime },
+        )
+        .getCount();
+
+      // Check max appointments limit
+      if (availability.maxAppointments && existingAppointments >= availability.maxAppointments) {
+        continue;
+      }
+
+      slots.push({
+        start: availability.startTime,
+        end: availability.endTime,
+      });
+    }
+
+    return slots;
+  }
+
+  // ── Group Appointment Methods ────────────────────────────────────────────────
+
+  /**
+   * Create a group appointment
+   */
+  async createGroupAppointment(
+    tenantId: string,
+    dto: CreateGroupAppointmentDto,
+    userId?: string,
+    userName?: string,
+  ): Promise<Appointment> {
+    const groupId = crypto.randomUUID();
+
+    // Create individual appointments for each patient
+    const appointments: Appointment[] = [];
+    const groupParticipants: { patientId: string; patientName: string; attended: boolean; notes?: string }[] = [];
+
+    for (const patientId of dto.patientIds) {
+      const appointment = this.appointmentRepository.create({
+        patientId,
+        providerId: dto.providerId,
+        appointmentType: dto.appointmentType,
+        startTime: new Date(dto.startTime),
+        endTime: new Date(dto.endTime),
+        location: dto.location ? { type: dto.location as any } : null,
+        notes: dto.notes,
+        isTelehealth: dto.isTelehealth ?? false,
+        tenantId,
+        status: 'scheduled',
+        isGroup: true,
+        groupId,
+        maxParticipants: dto.maxParticipants,
+        groupParticipants: null, // Will be set on the main appointment
+      });
+
+      const saved = await this.appointmentRepository.save(appointment);
+      appointments.push(saved);
+
+      // Note: In a real implementation, you'd fetch patient names from the patients service
+      groupParticipants.push({
+        patientId,
+        patientName: `Patient ${patientId}`,
+        attended: false,
+      });
+    }
+
+    // Update the first appointment with full group participant list
+    const mainAppointment = appointments[0];
+    mainAppointment.groupParticipants = groupParticipants;
+    await this.appointmentRepository.save(mainAppointment);
+
+    // Auto-create workflow instance for each appointment
+    for (const appointment of appointments) {
+      await this.createWorkflowInstanceIfAvailable(tenantId, appointment.id, userId, userName);
+    }
+
+    this.logger.log(`Group appointment created: ${groupId} with ${appointments.length} participants`);
+    return mainAppointment;
+  }
+
+  /**
+   * Update a group appointment
+   */
+  async updateGroupAppointment(
+    tenantId: string,
+    id: string,
+    dto: UpdateGroupAppointmentDto,
+  ): Promise<Appointment> {
+    const appointment = await this.findOne(tenantId, id);
+
+    if (!appointment.isGroup || !appointment.groupId) {
+      throw new BadRequestException('This is not a group appointment');
+    }
+
+    // Get all appointments in the group
+    const groupAppointments = await this.appointmentRepository.find({
+      where: { tenantId, groupId: appointment.groupId },
+    });
+
+    // Add new patients
+    if (dto.addPatientIds && dto.addPatientIds.length > 0) {
+      for (const patientId of dto.addPatientIds) {
+        const newAppointment = this.appointmentRepository.create({
+          patientId,
+          providerId: appointment.providerId,
+          appointmentType: appointment.appointmentType,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+          location: appointment.location,
+          notes: appointment.notes,
+          isTelehealth: appointment.isTelehealth,
+          tenantId,
+          status: 'scheduled',
+          isGroup: true,
+          groupId: appointment.groupId,
+          maxParticipants: appointment.maxParticipants,
+          groupParticipants: null,
+        });
+
+        await this.appointmentRepository.save(newAppointment);
+      }
+    }
+
+    // Remove patients
+    if (dto.removePatientIds && dto.removePatientIds.length > 0) {
+      for (const patientId of dto.removePatientIds) {
+        const toRemove = groupAppointments.find((a) => a.patientId === patientId);
+        if (toRemove) {
+          await this.appointmentRepository.softRemove(toRemove);
+        }
+      }
+    }
+
+    // Update status for all group appointments
+    if (dto.status) {
+      for (const groupAppt of groupAppointments) {
+        groupAppt.status = dto.status;
+        await this.appointmentRepository.save(groupAppt);
+      }
+    }
+
+    // Update notes for all group appointments
+    if (dto.notes !== undefined) {
+      for (const groupAppt of groupAppointments) {
+        groupAppt.notes = dto.notes;
+        await this.appointmentRepository.save(groupAppt);
+      }
+    }
+
+    // Refresh and return the main appointment
+    return this.findOne(tenantId, id);
+  }
+
+  /**
+   * Find all appointments in a group
+   */
+  async findGroupAppointments(
+    tenantId: string,
+    groupId: string,
+  ): Promise<Appointment[]> {
+    return this.appointmentRepository.find({
+      where: { tenantId, groupId },
+      order: { startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * Mark patient attendance in a group appointment
+   */
+  async markGroupAttendance(
+    tenantId: string,
+    appointmentId: string,
+    patientId: string,
+    attended: boolean,
+    notes?: string,
+  ): Promise<Appointment> {
+    const appointment = await this.findOne(tenantId, appointmentId);
+
+    if (!appointment.isGroup || !appointment.groupParticipants) {
+      throw new BadRequestException('This is not a group appointment');
+    }
+
+    const participant = appointment.groupParticipants.find((p) => p.patientId === patientId);
+    if (!participant) {
+      throw new NotFoundException('Patient not found in group appointment');
+    }
+
+    participant.attended = attended;
+    if (notes) participant.notes = notes;
+
+    return this.appointmentRepository.save(appointment);
   }
 }

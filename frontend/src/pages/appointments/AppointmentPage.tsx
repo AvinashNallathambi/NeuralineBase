@@ -12,6 +12,8 @@ import {
   Drawer,
   Form,
   Input,
+  InputNumber,
+  Radio,
   Switch,
   Row,
   Col,
@@ -37,13 +39,15 @@ import {
   RightOutlined,
   ScheduleOutlined,
   AppstoreOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import type { Appointment, AppointmentType, AppointmentStatus, WorkflowInstance, WorkflowTemplate } from '../../types';
-import { mockPatients, mockProviders } from '../../data/mockData';
 import { useAppointmentStore } from '../../store/dataStore';
 import { workflowService } from '../../services/workflowService';
+import { patientService, type Patient } from '../../services/patientService';
+import { providerAvailabilityService } from '../../services/providerAvailabilityService';
 import WorkflowStatusBadge from '../../components/workflow/WorkflowStatusBadge';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -61,6 +65,8 @@ const typeColors: Record<AppointmentType, string> = {
   telehealth: 'cyan',
   procedure: 'orange',
   consultation: 'geekblue',
+  group_therapy: 'magenta',
+  group_session: 'volcano',
 };
 
 const typeBg: Record<AppointmentType, string> = {
@@ -71,6 +77,8 @@ const typeBg: Record<AppointmentType, string> = {
   telehealth: '#e6fffb',
   procedure: '#fff7e6',
   consultation: '#f0f5ff',
+  group_therapy: '#fff0f6',
+  group_session: '#fff2e8',
 };
 
 const typeBorder: Record<AppointmentType, string> = {
@@ -81,6 +89,8 @@ const typeBorder: Record<AppointmentType, string> = {
   telehealth: '#5cdbd3',
   procedure: '#ffc069',
   consultation: '#85a5ff',
+  group_therapy: '#eb2f96',
+  group_session: '#fa541c',
 };
 
 const statusColors: Record<AppointmentStatus, string> = {
@@ -105,12 +115,14 @@ const statusBadge: Record<AppointmentStatus, 'default' | 'processing' | 'success
 
 type ViewMode = 'day' | 'week' | 'month' | 'year' | 'list';
 
-const HOURS = Array.from({ length: 13 }, (_, i) => i + 7); // 7 AM to 7 PM
+const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM to 9 PM
 
 const AppointmentPage: React.FC = () => {
   const [view, setView] = useState<ViewMode>('month');
   const { appointments, addAppointment, changeStatus: storeChangeStatus, loading, error, fetchAppointments } = useAppointmentStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [providerFilter, setProviderFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
@@ -118,6 +130,26 @@ const AppointmentPage: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [form] = Form.useForm();
   const [isTelehealth, setIsTelehealth] = useState(false);
+  
+  // Real patients from API
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [patientsLoading, setPatientsLoading] = useState(false);
+
+  // Group appointment state
+  const [isGroupAppointment, setIsGroupAppointment] = useState(false);
+  const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
+  const [maxParticipants, setMaxParticipants] = useState(15);
+
+  // Extract unique providers from appointments
+  const uniqueProviders = useMemo(() => {
+    const providerMap = new Map<string, { id: string; name: string }>();
+    appointments.forEach((appt) => {
+      if (appt.providerId && appt.providerName && !providerMap.has(appt.providerId)) {
+        providerMap.set(appt.providerId, { id: appt.providerId, name: appt.providerName });
+      }
+    });
+    return Array.from(providerMap.values());
+  }, [appointments]);
 
   // ── Workflow Integration ──
   const [workflowTemplate, setWorkflowTemplate] = useState<WorkflowTemplate | null>(null);
@@ -130,22 +162,29 @@ const AppointmentPage: React.FC = () => {
     }).catch(() => {});
   }, []);
 
-  // Load workflow instances for appointments
+  // Load workflow instances for all appointments
   React.useEffect(() => {
-    if (!workflowTemplate || appointments.length === 0) return;
-    const loadInstances = async () => {
-      const instanceMap: Record<string, WorkflowInstance> = {};
-      for (const appt of appointments) {
-        try {
-          const instance = await workflowService.findInstanceByEntity('appointment', appt.id);
-          instanceMap[appt.id] = instance;
-        } catch {
-          // No workflow instance yet - will be created on first status change
+    if (workflowTemplate && appointments.length > 0) {
+      const loadWorkflowInstances = async () => {
+        const instances: Record<string, WorkflowInstance> = {};
+        for (const appointment of appointments) {
+          try {
+            const instance = await workflowService.findInstanceByEntity('appointment', appointment.id);
+            if (instance.data) {
+              const transitions = await workflowService.getAvailableTransitions('appointment', appointment.id);
+              instances[appointment.id] = {
+                ...instance.data,
+                availableTransitions: transitions.data || [],
+              };
+            }
+          } catch (error) {
+            // No workflow instance for this appointment
+          }
         }
-      }
-      setWorkflowInstances(instanceMap);
-    };
-    loadInstances();
+        setWorkflowInstances(instances);
+      };
+      loadWorkflowInstances();
+    }
   }, [workflowTemplate, appointments]);
 
   // Create workflow instance on first status change if template exists
@@ -171,6 +210,23 @@ const AppointmentPage: React.FC = () => {
     fetchAppointments();
   }, [fetchAppointments]);
 
+  // Load patients from API on mount
+  React.useEffect(() => {
+    const fetchPatients = async () => {
+      setPatientsLoading(true);
+      try {
+        const response = await patientService.findAll({ page: 1, limit: 100 });
+        setPatients(response.data);
+      } catch (error) {
+        console.error('Failed to fetch patients:', error);
+        message.error('Failed to load patients');
+      } finally {
+        setPatientsLoading(false);
+      }
+    };
+    fetchPatients();
+  }, []);
+
   // ── Filtered appointments ──
   const filtered = useMemo(() => {
     return appointments.filter((a) => {
@@ -189,59 +245,116 @@ const AppointmentPage: React.FC = () => {
 
   // ── Status quick-change (with workflow support) ──
   const changeStatus = async (id: string, newStatus: AppointmentStatus) => {
-    storeChangeStatus(id, newStatus);
-
-    // Try to transition through workflow system if template is configured
+    // Try to transition through workflow system first if template is configured
     if (workflowTemplate) {
-      const instance = await ensureWorkflowInstance(id, newStatus);
-      if (instance) {
-        try {
+      try {
+        const instance = await ensureWorkflowInstance(id, newStatus);
+        if (instance) {
           await workflowService.transition('appointment', id, { toStep: newStatus });
-        } catch {
-          // Workflow transition failed - appointment status already updated
+          // Refresh workflow instances to update available transitions
+          const transitions = await workflowService.getAvailableTransitions('appointment', id);
+          setWorkflowInstances((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              availableTransitions: transitions.data || [],
+            },
+          }));
         }
+        // Update local state after successful workflow transition
+        storeChangeStatus(id, newStatus);
+        message.success(`Appointment status changed to ${newStatus.replace(/_/g, ' ')}`);
+        return;
+      } catch (error) {
+        // Workflow transition failed - fall back to direct status change
+        console.error('Workflow transition failed:', error);
       }
     }
 
+    // Fallback: direct status change without workflow
+    storeChangeStatus(id, newStatus);
     message.success(`Appointment status changed to ${newStatus.replace(/_/g, ' ')}`);
   };
 
   // ── New appointment handler ──
-  const handleNewAppointment = (values: Record<string, unknown>) => {
-    const patient = mockPatients.find((p) => p.id === values.patientId);
-    const provider = mockProviders.find((p) => p.id === values.providerId);
-    const apptDate = values.date as dayjs.Dayjs;
-    const timeRange = values.timeRange as [dayjs.Dayjs, dayjs.Dayjs];
+  const handleNewAppointment = async (values: Record<string, unknown>) => {
+    try {
+      if (isGroupAppointment) {
+        // Create group appointment
+        const groupDto = {
+          providerId: values.providerId as string,
+          appointmentType: values.type as string,
+          startTime: (values.date as dayjs.Dayjs).startOf('day').add((values.timeRange as [dayjs.Dayjs, dayjs.Dayjs])[0].hour(), 'hour').add((values.timeRange as [dayjs.Dayjs, dayjs.Dayjs])[0].minute(), 'minute').toISOString(),
+          endTime: (values.date as dayjs.Dayjs).startOf('day').add((values.timeRange as [dayjs.Dayjs, dayjs.Dayjs])[1].hour(), 'hour').add((values.timeRange as [dayjs.Dayjs, dayjs.Dayjs])[1].minute(), 'minute').toISOString(),
+          patientIds: selectedPatients,
+          maxParticipants,
+          location: isTelehealth ? 'telehealth' : 'in_person',
+          notes: values.reason as string,
+          isTelehealth,
+        };
 
-    const newAppt: Appointment = {
-      id: `apt-${Date.now()}`,
-      patientId: values.patientId as string,
-      patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown',
-      providerId: values.providerId as string,
-      providerName: provider ? `Dr. ${provider.firstName} ${provider.lastName}` : 'Unknown',
-      type: values.type as AppointmentType,
-      status: 'scheduled',
-      startTime: apptDate
-        .hour(timeRange[0].hour())
-        .minute(timeRange[0].minute())
-        .toISOString(),
-      endTime: apptDate
-        .hour(timeRange[1].hour())
-        .minute(timeRange[1].minute())
-        .toISOString(),
-      reason: (values.reason as string) || '',
-      isTelehealth: !!values.isTelehealth,
-      meetingLink: values.isTelehealth
-        ? `https://telehealth.neuraline.health/room/apt-${Date.now()}`
-        : undefined,
-      reminders: true,
-      createdAt: new Date().toISOString(),
-    };
-    addAppointment(newAppt);
-    setDrawerOpen(false);
-    form.resetFields();
-    setIsTelehealth(false);
-    message.success('Appointment created successfully');
+        await providerAvailabilityService.createGroupAppointment(groupDto);
+        message.success('Group appointment scheduled successfully');
+      } else {
+        // Create individual appointment
+        const patient = patients.find((p) => p.id === values.patientId);
+        const provider = uniqueProviders.find((p) => p.id === values.providerId);
+        const apptDate = values.date as dayjs.Dayjs;
+        const timeRange = values.timeRange as [dayjs.Dayjs, dayjs.Dayjs];
+
+        const newAppt: Appointment = {
+          id: `apt-${Date.now()}`,
+          patientId: values.patientId as string,
+          patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown',
+          providerId: values.providerId as string,
+          providerName: provider ? provider.name : 'Unknown',
+          type: values.type as AppointmentType,
+          status: 'scheduled',
+          startTime: apptDate
+            .hour(timeRange[0].hour())
+            .minute(timeRange[0].minute())
+            .toISOString(),
+          endTime: apptDate
+            .hour(timeRange[1].hour())
+            .minute(timeRange[1].minute())
+            .toISOString(),
+          reason: (values.reason as string) || '',
+          isTelehealth: !!values.isTelehealth,
+          meetingLink: values.isTelehealth
+            ? `https://telehealth.neuraline.health/room/apt-${Date.now()}`
+            : undefined,
+          reminders: true,
+          createdAt: new Date().toISOString(),
+        };
+        addAppointment(newAppt);
+        message.success('Appointment created successfully');
+      }
+
+      // Refresh appointments
+      fetchAppointments();
+      setDrawerOpen(false);
+      form.resetFields();
+      setIsTelehealth(false);
+      setIsGroupAppointment(false);
+      setSelectedPatients([]);
+      setMaxParticipants(15);
+    } catch (error) {
+      console.error('Failed to create appointment:', error);
+      message.error('Failed to create appointment');
+    }
+  };
+
+  // ── Click on time slot to create appointment ──
+  const handleTimeSlotClick = (hour: number) => {
+    const startTime = selectedDate.hour(hour).minute(0);
+    const endTime = startTime.add(1, 'hour');
+
+    form.setFieldsValue({
+      date: selectedDate,
+      timeRange: [startTime, endTime],
+    });
+
+    setDrawerOpen(true);
   };
 
   // ── Navigation helpers ──
@@ -282,7 +395,7 @@ const AppointmentPage: React.FC = () => {
           <div><strong>{appt.patientName}</strong></div>
           <div>{dayjs(appt.startTime).format('h:mm A')} - {dayjs(appt.endTime).format('h:mm A')}</div>
           <div>{appt.providerName}</div>
-          <div style={{ textTransform: 'capitalize' }}>{appt.type.replace(/_/g, ' ')} | {appt.status.replace(/_/g, ' ')}</div>
+          <div style={{ textTransform: 'capitalize' }}>{(appt.type ?? '').replace(/_/g, ' ')} | {(appt.status ?? '').replace(/_/g, ' ')}</div>
           {appt.reason && <div style={{ marginTop: 4 }}>{appt.reason}</div>}
         </div>
       }
@@ -299,6 +412,7 @@ const AppointmentPage: React.FC = () => {
           overflow: 'hidden',
           transition: 'box-shadow 0.2s',
         }}
+        onClick={() => { setSelectedAppointment(appt); setDetailDrawerOpen(true); }}
         onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'; }}
         onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
       >
@@ -309,7 +423,7 @@ const AppointmentPage: React.FC = () => {
         {!compact && (
           <div style={{ display: 'flex', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
             <Tag color={typeColors[appt.type]} style={{ fontSize: 10, margin: 0, lineHeight: '18px', padding: '0 4px' }}>
-              {appt.type.replace(/_/g, ' ')}
+              {(appt.type ?? '').replace(/_/g, ' ')}
             </Tag>
             {appt.isTelehealth && (
               <Tag icon={<VideoCameraOutlined />} color="processing" style={{ fontSize: 10, margin: 0, lineHeight: '18px', padding: '0 4px' }}>
@@ -332,8 +446,8 @@ const AppointmentPage: React.FC = () => {
 
     const isToday = selectedDate.isSame(dayjs(), 'day');
     const nowMinutes = dayjs().hour() * 60 + dayjs().minute();
-    const startMinutes = 7 * 60;
-    const endMinutes = 20 * 60;
+    const startMinutes = 6 * 60;
+    const endMinutes = 21 * 60;
 
     return (
       <Card bodyStyle={{ padding: 0 }}>
@@ -398,7 +512,10 @@ const AppointmentPage: React.FC = () => {
                 </div>
 
                 {/* Appointments in this hour */}
-                <div style={{ flex: 1, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div
+                  style={{ flex: 1, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer' }}
+                  onClick={() => handleTimeSlotClick(hour)}
+                >
                   {hourAppts.map((appt) => (
                     <div
                       key={appt.id}
@@ -413,6 +530,7 @@ const AppointmentPage: React.FC = () => {
                         cursor: 'pointer',
                         transition: 'box-shadow 0.2s',
                       }}
+                      onClick={(e) => { e.stopPropagation(); setSelectedAppointment(appt); setDetailDrawerOpen(true); }}
                       onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.12)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
                     >
@@ -428,7 +546,7 @@ const AppointmentPage: React.FC = () => {
                             />
                           ) : (
                             <Tag color={statusColors[appt.status]} style={{ margin: 0, fontSize: 11, textTransform: 'capitalize' }}>
-                              {appt.status.replace(/_/g, ' ')}
+                              {(appt.status ?? '').replace(/_/g, ' ')}
                             </Tag>
                           )}
                         </Space>
@@ -440,7 +558,7 @@ const AppointmentPage: React.FC = () => {
                           </Text>
                           <Text type="secondary" style={{ fontSize: 12 }}>{appt.providerName}</Text>
                           <Tag color={typeColors[appt.type]} style={{ fontSize: 10, margin: 0, textTransform: 'capitalize' }}>
-                            {appt.type.replace(/_/g, ' ')}
+                            {(appt.type ?? '').replace(/_/g, ' ')}
                           </Tag>
                           {appt.isTelehealth && (
                             <Tag icon={<VideoCameraOutlined />} color="processing" style={{ fontSize: 10, margin: 0 }}>Video</Tag>
@@ -455,17 +573,17 @@ const AppointmentPage: React.FC = () => {
                       {/* Quick actions */}
                       <Space size={4} style={{ flexShrink: 0 }}>
                         {appt.status === 'scheduled' && (
-                          <Button size="small" type="primary" ghost icon={<LoginOutlined />} onClick={() => changeStatus(appt.id, 'checked_in')}>
+                          <Button size="small" type="primary" ghost icon={<LoginOutlined />} onClick={(e) => { e.stopPropagation(); changeStatus(appt.id, 'checked_in'); }}>
                             Check In
                           </Button>
                         )}
                         {(appt.status === 'confirmed' || appt.status === 'checked_in') && (
-                          <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => changeStatus(appt.id, 'in_progress')}>
+                          <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={(e) => { e.stopPropagation(); changeStatus(appt.id, 'in_progress'); }}>
                             Start
                           </Button>
                         )}
                         {appt.status === 'in_progress' && (
-                          <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => changeStatus(appt.id, 'completed')}>
+                          <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={(e) => { e.stopPropagation(); changeStatus(appt.id, 'completed'); }}>
                             Complete
                           </Button>
                         )}
@@ -864,9 +982,14 @@ const AppointmentPage: React.FC = () => {
       title: 'Type',
       dataIndex: 'type',
       key: 'type',
-      width: 140,
-      render: (type: AppointmentType) => (
-        <Tag color={typeColors[type]} style={{ textTransform: 'capitalize' }}>{type.replace(/_/g, ' ')}</Tag>
+      width: 160,
+      render: (type: AppointmentType, record: Appointment) => (
+        <Space>
+          <Tag color={typeColors[type]} style={{ textTransform: 'capitalize' }}>{(type ?? '').replace(/_/g, ' ')}</Tag>
+          {record.isGroup && (
+            <Tag color="magenta" icon={<TeamOutlined />} style={{ fontSize: 11 }}>Group</Tag>
+          )}
+        </Space>
       ),
     },
     {
@@ -883,7 +1006,7 @@ const AppointmentPage: React.FC = () => {
         ) : (
           <Badge
             status={statusBadge[status]}
-            text={<Tag color={statusColors[status]} style={{ textTransform: 'capitalize' }}>{status.replace(/_/g, ' ')}</Tag>}
+            text={<Tag color={statusColors[status]} style={{ textTransform: 'capitalize' }}>{(status ?? '').replace(/_/g, ' ')}</Tag>}
           />
         )
       ),
@@ -891,25 +1014,72 @@ const AppointmentPage: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 200,
+      width: 280,
       render: (_: unknown, record: Appointment) => {
         const s = record.status;
+        const workflowInstance = workflowInstances[record.id];
+        const availableTransitions = workflowInstance?.availableTransitions || [];
+
+        // Use workflow transitions if available, otherwise use hardcoded status-based actions
+        const useWorkflowActions = workflowTemplate && workflowInstance && availableTransitions.length > 0;
+
         return (
           <Space size={4} wrap>
-            {s === 'scheduled' && (
-              <Button size="small" type="primary" ghost icon={<LoginOutlined />} onClick={() => changeStatus(record.id, 'checked_in')}>Check In</Button>
+            {useWorkflowActions ? (
+              // Fully dynamic workflow-based actions
+              <>
+                {availableTransitions.map((transition: any) => {
+                  const isDestructive = transition.toStep === 'cancelled' || transition.toStep === 'no_show';
+                  const button = (
+                    <Button
+                      key={transition.toStep}
+                      size="small"
+                      type={transition.toStep === 'completed' ? 'primary' : 
+                             transition.toStep === 'cancelled' ? 'default' : 
+                             transition.toStep === 'no_show' ? 'default' : 'default'}
+                      ghost={transition.toStep !== 'completed' && transition.toStep !== 'cancelled' && transition.toStep !== 'no_show'}
+                      danger={isDestructive}
+                      icon={transition.toStep === 'checked_in' ? <LoginOutlined /> : 
+                             transition.toStep === 'in_progress' ? <PlayCircleOutlined /> :
+                             transition.toStep === 'completed' ? <CheckCircleOutlined /> :
+                             transition.toStep === 'cancelled' ? <CloseCircleOutlined /> : undefined}
+                      onClick={() => changeStatus(record.id, transition.toStep)}
+                    >
+                      {transition.label || transition.toStep.replace(/_/g, ' ')}
+                    </Button>
+                  );
+
+                  return isDestructive ? (
+                    <Popconfirm
+                      key={`confirm-${transition.toStep}`}
+                      title={`Are you sure you want to ${transition.toStep.replace(/_/g, ' ')} this appointment?`}
+                      onConfirm={() => changeStatus(record.id, transition.toStep)}
+                    >
+                      {button}
+                    </Popconfirm>
+                  ) : button;
+                })}
+              </>
+            ) : (
+              // Fallback to hardcoded status-based actions when no workflow
+              <>
+                {s === 'scheduled' && (
+                  <Button size="small" type="primary" ghost icon={<LoginOutlined />} onClick={() => changeStatus(record.id, 'checked_in')}>Check In</Button>
+                )}
+                {(s === 'confirmed' || s === 'checked_in') && (
+                  <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => changeStatus(record.id, 'in_progress')}>Start</Button>
+                )}
+                {s === 'in_progress' && (
+                  <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => changeStatus(record.id, 'completed')}>Complete</Button>
+                )}
+                {s !== 'completed' && s !== 'cancelled' && s !== 'no_show' && (
+                  <Popconfirm title="Cancel this appointment?" onConfirm={() => changeStatus(record.id, 'cancelled')}>
+                    <Button size="small" danger icon={<CloseCircleOutlined />}>Cancel</Button>
+                  </Popconfirm>
+                )}
+              </>
             )}
-            {(s === 'confirmed' || s === 'checked_in') && (
-              <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => changeStatus(record.id, 'in_progress')}>Start</Button>
-            )}
-            {s === 'in_progress' && (
-              <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => changeStatus(record.id, 'completed')}>Complete</Button>
-            )}
-            {s !== 'completed' && s !== 'cancelled' && s !== 'no_show' && (
-              <Popconfirm title="Cancel this appointment?" onConfirm={() => changeStatus(record.id, 'cancelled')}>
-                <Button size="small" danger icon={<CloseCircleOutlined />}>Cancel</Button>
-              </Popconfirm>
-            )}
+            
             {record.isTelehealth && s !== 'completed' && s !== 'cancelled' && (
               <Tooltip title="Join Telehealth">
                 <Button size="small" icon={<VideoCameraOutlined />} type="link" />
@@ -950,14 +1120,14 @@ const AppointmentPage: React.FC = () => {
                 <Text style={{ fontSize: 13 }}>{a.patientName}</Text>
                 <br />
                 <Space size={4}>
-                  <Tag color={typeColors[a.type]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{a.type.replace(/_/g, ' ')}</Tag>
+                  <Tag color={typeColors[a.type]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{(a.type ?? '').replace(/_/g, ' ')}</Tag>
                   {workflowTemplate && workflowInstances[a.id] ? (
                     <WorkflowStatusBadge
                       template={workflowTemplate}
                       instance={workflowInstances[a.id]}
                     />
                   ) : (
-                    <Tag color={statusColors[a.status]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{a.status.replace(/_/g, ' ')}</Tag>
+                    <Tag color={statusColors[a.status]} style={{ fontSize: 10, textTransform: 'capitalize' }}>{(a.status ?? '').replace(/_/g, ' ')}</Tag>
                   )}
                 </Space>
                 {a.isTelehealth && (
@@ -1011,7 +1181,7 @@ const AppointmentPage: React.FC = () => {
             </Space>
             <Space wrap>
               <Select placeholder="Provider" allowClear style={{ minWidth: 180 }} value={providerFilter} onChange={setProviderFilter}
-                options={mockProviders.map((p) => ({ label: `Dr. ${p.firstName} ${p.lastName}`, value: p.id }))}
+                options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
               />
               <Select placeholder="Status" allowClear style={{ minWidth: 130 }} value={statusFilter} onChange={setStatusFilter}
                 options={[
@@ -1031,7 +1201,7 @@ const AppointmentPage: React.FC = () => {
           <Row gutter={[16, 16]} align="middle">
             <Col xs={24} sm={12} md={6}>
               <Select placeholder="Provider" allowClear style={{ width: '100%' }} value={providerFilter} onChange={setProviderFilter}
-                options={mockProviders.map((p) => ({ label: `Dr. ${p.firstName} ${p.lastName}`, value: p.id }))}
+                options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
               />
             </Col>
             <Col xs={12} sm={6} md={4}>
@@ -1103,14 +1273,45 @@ const AppointmentPage: React.FC = () => {
         }
       >
         <Form form={form} layout="vertical" onFinish={handleNewAppointment}>
-          <Form.Item name="patientId" label="Patient" rules={[{ required: true, message: 'Select a patient' }]}>
-            <Select showSearch placeholder="Search patient..." optionFilterProp="label"
-              options={mockPatients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn})`, value: p.id }))}
-            />
+          <Form.Item label="Appointment Mode">
+            <Radio.Group value={isGroupAppointment} onChange={(e) => setIsGroupAppointment(e.target.value)}>
+              <Radio value={false}>Individual</Radio>
+              <Radio value={true}>Group Session</Radio>
+            </Radio.Group>
           </Form.Item>
+
+          {!isGroupAppointment ? (
+            <Form.Item name="patientId" label="Patient" rules={[{ required: true, message: 'Select a patient' }]}>
+              <Select
+                showSearch
+                placeholder="Search patient..."
+                optionFilterProp="label"
+                loading={patientsLoading}
+                options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+              />
+            </Form.Item>
+          ) : (
+            <Form.Item label="Patients" rules={[{ required: true, message: 'Select at least 2 patients' }]}>
+              <Select
+                mode="multiple"
+                showSearch
+                placeholder="Search and select patients..."
+                optionFilterProp="label"
+                loading={patientsLoading}
+                value={selectedPatients}
+                onChange={setSelectedPatients}
+                options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+                maxTagCount={3}
+              />
+              <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
+                {selectedPatients.length} patient(s) selected (min: 2, max: {maxParticipants})
+              </div>
+            </Form.Item>
+          )}
+
           <Form.Item name="providerId" label="Provider" rules={[{ required: true, message: 'Select a provider' }]}>
             <Select placeholder="Select provider"
-              options={mockProviders.map((p) => ({ label: `Dr. ${p.firstName} ${p.lastName} - ${p.specialization}`, value: p.id }))}
+              options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
             />
           </Form.Item>
           <Form.Item name="type" label="Appointment Type" rules={[{ required: true, message: 'Select type' }]}>
@@ -1120,9 +1321,25 @@ const AppointmentPage: React.FC = () => {
                 { label: 'Annual Physical', value: 'annual_physical' }, { label: 'Urgent Care', value: 'urgent_care' },
                 { label: 'Telehealth', value: 'telehealth' }, { label: 'Procedure', value: 'procedure' },
                 { label: 'Consultation', value: 'consultation' },
+                ...(isGroupAppointment ? [
+                  { label: 'Group Therapy', value: 'group_therapy' },
+                  { label: 'Group Session', value: 'group_session' },
+                ] : []),
               ]}
             />
           </Form.Item>
+
+          {isGroupAppointment && (
+            <Form.Item label="Max Participants">
+              <InputNumber
+                min={2}
+                max={50}
+                value={maxParticipants}
+                onChange={setMaxParticipants}
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+          )}
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Select date' }]}>
@@ -1150,6 +1367,123 @@ const AppointmentPage: React.FC = () => {
             <TextArea rows={3} placeholder="Brief description of the visit reason..." />
           </Form.Item>
         </Form>
+      </Drawer>
+
+      {/* Appointment Detail Drawer */}
+      <Drawer
+        title="Appointment Details"
+        placement="right"
+        width={520}
+        onClose={() => { setDetailDrawerOpen(false); setSelectedAppointment(null); }}
+        open={detailDrawerOpen}
+        extra={
+          <Space>
+            <Button onClick={() => { setDetailDrawerOpen(false); setSelectedAppointment(null); }}>Close</Button>
+          </Space>
+        }
+      >
+        {selectedAppointment && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <Space direction="vertical" size="small">
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedAppointment.patientName}</div>
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Provider</Text>
+                  <div style={{ fontSize: 16 }}>{selectedAppointment.providerName}</div>
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Date & Time</Text>
+                  <div style={{ fontSize: 16 }}>
+                    {dayjs(selectedAppointment.startTime).format('MMMM D, YYYY')}
+                  </div>
+                  <div style={{ fontSize: 14 }}>
+                    {dayjs(selectedAppointment.startTime).format('h:mm A')} - {dayjs(selectedAppointment.endTime).format('h:mm A')}
+                  </div>
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Type</Text>
+                  <div>
+                    <Tag color={typeColors[selectedAppointment.type]} style={{ textTransform: 'capitalize' }}>
+                      {(selectedAppointment.type ?? '').replace(/_/g, ' ')}
+                    </Tag>
+                  </div>
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Status</Text>
+                  <div>
+                    {workflowTemplate && workflowInstances[selectedAppointment.id] ? (
+                      <WorkflowStatusBadge
+                        template={workflowTemplate}
+                        instance={workflowInstances[selectedAppointment.id]}
+                      />
+                    ) : (
+                      <Tag color={statusColors[selectedAppointment.status]} style={{ textTransform: 'capitalize' }}>
+                        {(selectedAppointment.status ?? '').replace(/_/g, ' ')}
+                      </Tag>
+                    )}
+                  </div>
+                </div>
+                {selectedAppointment.isTelehealth && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Telehealth</Text>
+                    <div>
+                      <Tag icon={<VideoCameraOutlined />} color="processing">Video Call</Tag>
+                    </div>
+                    {selectedAppointment.meetingLink && (
+                      <div style={{ marginTop: 4 }}>
+                        <a href={selectedAppointment.meetingLink} target="_blank" rel="noopener noreferrer">
+                          {selectedAppointment.meetingLink}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {selectedAppointment.reason && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Reason for Visit</Text>
+                    <div style={{ fontSize: 14 }}>{selectedAppointment.reason}</div>
+                  </div>
+                )}
+                {selectedAppointment.notes && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>Notes</Text>
+                    <div style={{ fontSize: 14 }}>{selectedAppointment.notes}</div>
+                  </div>
+                )}
+              </Space>
+            </div>
+            <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
+              <Text strong>Quick Actions</Text>
+              <div style={{ marginTop: 12 }}>
+                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                  {selectedAppointment.status === 'scheduled' && (
+                    <Button type="primary" ghost icon={<LoginOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'checked_in'); setDetailDrawerOpen(false); }} block>
+                      Check In
+                    </Button>
+                  )}
+                  {(selectedAppointment.status === 'confirmed' || selectedAppointment.status === 'checked_in') && (
+                    <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'in_progress'); setDetailDrawerOpen(false); }} block>
+                      Start Appointment
+                    </Button>
+                  )}
+                  {selectedAppointment.status === 'in_progress' && (
+                    <Button style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'completed'); setDetailDrawerOpen(false); }} block>
+                      Complete Appointment
+                    </Button>
+                  )}
+                  {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'no_show' && (
+                    <Popconfirm title="Cancel this appointment?" onConfirm={() => { changeStatus(selectedAppointment.id, 'cancelled'); setDetailDrawerOpen(false); }}>
+                      <Button danger icon={<CloseCircleOutlined />} block>Cancel Appointment</Button>
+                    </Popconfirm>
+                  )}
+                </Space>
+              </div>
+            </div>
+          </div>
+        )}
       </Drawer>
     </div>
   );

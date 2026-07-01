@@ -33,19 +33,19 @@ export class Prescription {
   @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
 
-  @Column({ name: 'patient_id', type: 'uuid' })
+  @Column({ name: 'patient_id', type: 'varchar', length: 100 })
   patientId!: string;
 
   @Column({ name: 'patient_name', type: 'varchar', length: 200 })
   patientName!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'provider_name', type: 'varchar', length: 200 })
   providerName!: string;
 
-  @Column({ name: 'encounter_id', type: 'uuid', nullable: true })
+  @Column({ name: 'encounter_id', type: 'varchar', length: 100, nullable: true })
   encounterId!: string | null;
 
   @Column({ name: 'medications', type: 'jsonb' })

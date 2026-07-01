@@ -14,8 +14,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PrescriptionItemDto } from './prescription-item.dto';
 
 export class CreatePrescriptionDto {
-  @ApiProperty({ example: 'pat-001', description: 'Patient UUID' })
-  @IsUUID()
+  @ApiProperty({ example: 'pat-001', description: 'Patient ID' })
+  @IsString()
   @IsNotEmpty()
   patientId!: string;
 
@@ -25,8 +25,8 @@ export class CreatePrescriptionDto {
   @MaxLength(200)
   patientName!: string;
 
-  @ApiProperty({ example: 'usr-001', description: 'Provider UUID' })
-  @IsUUID()
+  @ApiProperty({ example: 'usr-001', description: 'Provider ID' })
+  @IsString()
   @IsNotEmpty()
   providerId!: string;
 
@@ -36,8 +36,8 @@ export class CreatePrescriptionDto {
   @MaxLength(200)
   providerName!: string;
 
-  @ApiPropertyOptional({ example: 'enc-001', description: 'Encounter UUID' })
-  @IsUUID()
+  @ApiPropertyOptional({ example: 'enc-001', description: 'Encounter ID' })
+  @IsString()
   @IsOptional()
   encounterId?: string;
 
