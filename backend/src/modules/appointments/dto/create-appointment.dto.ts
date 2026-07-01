@@ -1,4 +1,4 @@
-import { IsString, IsUUID, IsDateString, IsEnum, IsOptional, IsObject, IsNotEmpty, ValidateNested } from 'class-validator';
+import { IsString, IsUUID, IsDateString, IsEnum, IsOptional, IsObject, IsNotEmpty, ValidateNested, IsNumber, IsBoolean, Min, Max, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AppointmentLocationDto {
@@ -23,17 +23,21 @@ export class AppointmentLocationDto {
 }
 
 export class CreateAppointmentDto {
-  @IsUUID()
-  @IsNotEmpty()
-  patientId!: string;
+  @IsString()
+  @IsOptional()
+  patientId?: string;
 
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
   providerId!: string;
 
-  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other'])
-  @IsNotEmpty()
-  appointmentType!: 'consultation' | 'follow_up' | 'procedure' | 'emergency' | 'wellness' | 'mental_health' | 'other';
+  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other', 'group_therapy', 'group_session'])
+  @IsOptional()
+  appointmentType?: 'consultation' | 'follow_up' | 'procedure' | 'emergency' | 'wellness' | 'mental_health' | 'other' | 'group_therapy' | 'group_session';
+
+  @IsString()
+  @IsOptional()
+  type?: string;
 
   @IsDateString()
   @IsNotEmpty()
@@ -56,7 +60,43 @@ export class CreateAppointmentDto {
   @IsString()
   reasonForVisit?: string;
 
+  @IsString()
+  @IsOptional()
+  reason?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isTelehealth?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  durationMinutes?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  remindersEnabled?: boolean;
+
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;
+
+  // Group Appointment Fields
+  @IsBoolean()
+  @IsOptional()
+  isGroup?: boolean;
+
+  @IsString()
+  @IsOptional()
+  groupId?: string;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(2)
+  @Max(50)
+  maxParticipants?: number;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  groupPatientIds?: string[];
 }

@@ -1,4 +1,4 @@
-import { IsOptional, IsDateString, IsEnum, IsString, IsUUID } from 'class-validator';
+import { IsOptional, IsDateString, IsEnum, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryAppointmentDto {
@@ -11,16 +11,20 @@ export class QueryAppointmentDto {
   limit?: number = 20;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   patientId?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   providerId?: string;
 
   @IsOptional()
   @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other'])
   appointmentType?: string;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
 
   @IsOptional()
   @IsEnum(['scheduled', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'])

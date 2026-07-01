@@ -111,6 +111,28 @@ export class CreateSuperbillChargeDto {
   taxable?: boolean;
 }
 
+export class SuperbillAddressDto {
+  @IsString()
+  @IsNotEmpty()
+  street: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+
+  @IsString()
+  @IsNotEmpty()
+  state: string;
+
+  @IsString()
+  @IsNotEmpty()
+  zipCode: string;
+
+  @IsString()
+  @IsNotEmpty()
+  country: string;
+}
+
 export class CreateSuperbillDto {
   @IsString()
   @IsNotEmpty()
@@ -124,15 +146,9 @@ export class CreateSuperbillDto {
   @IsNotEmpty()
   patientDOB: string;
 
-  @IsObject()
   @ValidateNested()
-  patientAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
+  @Type(() => SuperbillAddressDto)
+  patientAddress: SuperbillAddressDto;
 
   @IsString()
   @IsNotEmpty()
@@ -150,15 +166,9 @@ export class CreateSuperbillDto {
   @IsNotEmpty()
   providerNPI: string;
 
-  @IsObject()
   @ValidateNested()
-  providerAddress: {
-    street: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    country: string;
-  };
+  @Type(() => SuperbillAddressDto)
+  providerAddress: SuperbillAddressDto;
 
   @IsString()
   @IsOptional()

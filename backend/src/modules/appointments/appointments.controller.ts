@@ -26,6 +26,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentDto } from './dto/query-appointment.dto';
 import { CreateAppointmentWithWorkflowDto, TransitionAppointmentDto } from './dto/appointment-workflow.dto';
+import { CreateProviderAvailabilityDto, UpdateProviderAvailabilityDto, CreateGroupAppointmentDto, UpdateGroupAppointmentDto } from './dto/provider-availability.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -213,5 +214,137 @@ export class AppointmentsController {
     @Body('reason') reason?: string,
   ): Promise<AppointmentWithWorkflow> {
     return this.appointmentsService.cancelWorkflow(req.tenantId, id, reason);
+  }
+
+  // ── Provider Availability Endpoints ─────────────────────────────────────────
+
+  @Post('availability')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create provider availability' })
+  @ApiResponse({ status: 201, description: 'Provider availability created' })
+  async createAvailability(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateProviderAvailabilityDto,
+  ) {
+    return this.appointmentsService.createAvailability(req.tenantId, dto);
+  }
+
+  @Get('availability/:providerId')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get all availability for a provider' })
+  @ApiParam({ name: 'providerId', type: String, description: 'Provider ID' })
+  @ApiResponse({ status: 200, description: 'List of provider availability' })
+  async findAvailabilityByProvider(
+    @Request() req: AuthenticatedRequest,
+    @Param('providerId') providerId: string,
+  ) {
+    return this.appointmentsService.findAvailabilityByProvider(req.tenantId, providerId);
+  }
+
+  @Get('availability/:providerId/slots')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get available time slots for a provider on a specific date' })
+  @ApiParam({ name: 'providerId', type: String, description: 'Provider ID' })
+  @ApiQuery({ name: 'date', required: true, type: String, description: 'Date (ISO string)' })
+  @ApiQuery({ name: 'appointmentType', required: false, type: String, description: 'Filter by appointment type' })
+  @ApiResponse({ status: 200, description: 'List of available time slots' })
+  async getAvailableSlots(
+    @Request() req: AuthenticatedRequest,
+    @Param('providerId') providerId: string,
+    @Query('date') date: string,
+    @Query('appointmentType') appointmentType?: string,
+  ) {
+    return this.appointmentsService.getAvailableSlots(
+      req.tenantId,
+      providerId,
+      new Date(date),
+      appointmentType,
+    );
+  }
+
+  @Patch('availability/:id')
+  @Roles('admin', 'doctor', 'receptionist')
+  @ApiOperation({ summary: 'Update provider availability' })
+  @ApiParam({ name: 'id', type: String, description: 'Availability UUID' })
+  @ApiResponse({ status: 200, description: 'Provider availability updated' })
+  async updateAvailability(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProviderAvailabilityDto,
+  ) {
+    return this.appointmentsService.updateAvailability(req.tenantId, id, dto);
+  }
+
+  @Delete('availability/:id')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete provider availability' })
+  @ApiParam({ name: 'id', type: String, description: 'Availability UUID' })
+  @ApiResponse({ status: 204, description: 'Provider availability deleted' })
+  async deleteAvailability(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.appointmentsService.deleteAvailability(req.tenantId, id);
+  }
+
+  // ── Group Appointment Endpoints ──────────────────────────────────────────────
+
+  @Post('group')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a group appointment' })
+  @ApiResponse({ status: 201, description: 'Group appointment created' })
+  async createGroupAppointment(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateGroupAppointmentDto,
+  ) {
+    return this.appointmentsService.createGroupAppointment(
+      req.tenantId,
+      dto,
+      req.user.id,
+      req.user.email,
+    );
+  }
+
+  @Patch('group/:id')
+  @Roles('admin', 'doctor', 'receptionist')
+  @ApiOperation({ summary: 'Update a group appointment' })
+  @ApiParam({ name: 'id', type: String, description: 'Appointment UUID' })
+  @ApiResponse({ status: 200, description: 'Group appointment updated' })
+  async updateGroupAppointment(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateGroupAppointmentDto,
+  ) {
+    return this.appointmentsService.updateGroupAppointment(req.tenantId, id, dto);
+  }
+
+  @Get('group/:groupId')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get all appointments in a group' })
+  @ApiParam({ name: 'groupId', type: String, description: 'Group UUID' })
+  @ApiResponse({ status: 200, description: 'List of group appointments' })
+  async findGroupAppointments(
+    @Request() req: AuthenticatedRequest,
+    @Param('groupId') groupId: string,
+  ) {
+    return this.appointmentsService.findGroupAppointments(req.tenantId, groupId);
+  }
+
+  @Patch('group/:id/attendance')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Mark patient attendance in a group appointment' })
+  @ApiParam({ name: 'id', type: String, description: 'Appointment UUID' })
+  @ApiResponse({ status: 200, description: 'Attendance marked' })
+  async markGroupAttendance(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('patientId') patientId: string,
+    @Body('attended') attended: boolean,
+    @Body('notes') notes?: string,
+  ) {
+    return this.appointmentsService.markGroupAttendance(req.tenantId, id, patientId, attended, notes);
   }
 }

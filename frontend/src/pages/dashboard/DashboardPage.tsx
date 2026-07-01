@@ -105,7 +105,7 @@ const DashboardPage: React.FC = () => {
       render: (name: string) => (
         <Space>
           <Avatar size="small" style={{ background: '#0D7C8A' }}>
-            {name.charAt(0)}
+            {(name ?? '').charAt(0)}
           </Avatar>
           <Text strong>{name}</Text>
         </Space>

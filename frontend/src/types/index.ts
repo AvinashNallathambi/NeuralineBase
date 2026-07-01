@@ -98,7 +98,7 @@ export interface MedicalHistory {
 
 export interface Appointment {
   id: string;
-  patientId: string;
+  patientId: string | null;
   patientName: string;
   providerId: string;
   providerName: string;
@@ -112,9 +112,19 @@ export interface Appointment {
   meetingLink?: string;
   reminders: boolean;
   createdAt: string;
+  // Group appointment fields
+  isGroup?: boolean;
+  groupId?: string | null;
+  maxParticipants?: number | null;
+  groupParticipants?: {
+    patientId: string;
+    patientName: string;
+    attended: boolean;
+    notes?: string;
+  }[] | null;
 }
 
-export type AppointmentType = 'new_patient' | 'follow_up' | 'annual_physical' | 'urgent_care' | 'telehealth' | 'procedure' | 'consultation';
+export type AppointmentType = 'new_patient' | 'follow_up' | 'annual_physical' | 'urgent_care' | 'telehealth' | 'procedure' | 'consultation' | 'group_therapy' | 'group_session';
 export type AppointmentStatus = 'scheduled' | 'confirmed' | 'checked_in' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
 
 export interface Encounter {
@@ -317,6 +327,26 @@ export interface ProviderSchedule {
   endTime: string;
   slotDuration: number;
   isAvailable: boolean;
+}
+
+export interface ProviderAvailability {
+  id: string;
+  tenantId: string;
+  providerId: string;
+  dayOfWeek: number; // 0 = Sunday, 6 = Saturday
+  startTime: string; // HH:MM format
+  endTime: string; // HH:MM format
+  isAvailable: boolean;
+  appointmentTypes?: string[];
+  locationId?: string | null;
+  maxAppointments?: number | null;
+  bufferMinutes: number;
+  notes?: string | null;
+  isRecurring: boolean;
+  effectiveDate?: string | null;
+  expiryDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Report {
