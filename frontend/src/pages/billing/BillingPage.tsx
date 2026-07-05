@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Typography,
   Button,
@@ -20,6 +20,7 @@ import {
   message,
   Tooltip,
   Divider,
+  Spin,
 } from 'antd';
 import {
   PlusOutlined,
@@ -34,57 +35,84 @@ import {
   CreditCardOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { Claim, ClaimItem } from '../../types';
+import { billingService, EncounterClaim, ClaimLineItem } from '../../services/billingService';
+import { patientService } from '../../services/patientService';
 import {
   commonDiagnosisCodes,
   commonCPTCodes,
 } from '../../data/mockData';
-import type { Payment } from '../../data/mockData';
-import { useBillingStore, usePatientStore, useProviderStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
 
 const claimStatusColors: Record<string, string> = {
   draft: 'default',
+  ready_to_bill: 'gold',
   submitted: 'processing',
-  pending: 'gold',
-  approved: 'green',
-  denied: 'red',
+  partially_paid: 'blue',
   paid: 'cyan',
+  denied: 'red',
   appealed: 'purple',
+  cancelled: 'default',
 };
 
 const BillingPage: React.FC = () => {
-  const { claims: mockClaims, payments: mockPayments } = useBillingStore();
-  const { patients: mockPatients } = usePatientStore();
-  const { providers: mockProviders } = useProviderStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [claims, setClaims] = useState<EncounterClaim[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
   const [form] = Form.useForm();
   const [serviceLines, setServiceLines] = useState<Array<{
-    cptCode?: string;
+    codeType?: string;
+    code?: string;
     description?: string;
     quantity?: number;
     unitPrice?: number;
   }>>([{}]);
 
+  useEffect(() => {
+    fetchClaims();
+    fetchPatients();
+  }, []);
+
+  const fetchClaims = async () => {
+    setLoading(true);
+    try {
+      const data = await billingService.findAllClaims();
+      setClaims(data);
+    } catch (error) {
+      message.error('Failed to load claims');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPatients = async () => {
+    try {
+      const data = await patientService.findAll();
+      setPatients(data);
+    } catch (error) {
+      message.error('Failed to load patients');
+    }
+  };
+
   // Stats
-  const totalClaims = mockClaims.reduce((sum, c) => sum + c.totalAmount, 0);
-  const pendingCount = mockClaims.filter(
-    (c) => c.status === 'pending' || c.status === 'submitted'
+  const totalClaims = claims.reduce((sum, c) => sum + c.totalBilled, 0);
+  const pendingCount = claims.filter(
+    (c) => c.status === 'ready_to_bill' || c.status === 'submitted'
   ).length;
-  const approvedCount = mockClaims.filter((c) => c.status === 'approved').length;
-  const deniedCount = mockClaims.filter((c) => c.status === 'denied').length;
-  const paidAmount = mockClaims
+  const paidCount = claims.filter((c) => c.status === 'paid').length;
+  const deniedCount = claims.filter((c) => c.status === 'denied').length;
+  const paidAmount = claims
     .filter((c) => c.status === 'paid')
-    .reduce((sum, c) => sum + (c.paidAmount || 0), 0);
+    .reduce((sum, c) => sum + c.totalPaid, 0);
 
   // Filtered claims
   const filteredClaims = useMemo(() => {
-    let data = [...mockClaims];
+    let data = [...claims];
 
     if (activeTab !== 'all') {
       data = data.filter((c) => c.status === activeTab);
@@ -97,7 +125,7 @@ const BillingPage: React.FC = () => {
           c.patientName.toLowerCase().includes(lower) ||
           c.claimNumber.toLowerCase().includes(lower) ||
           c.providerName.toLowerCase().includes(lower) ||
-          c.insuranceProvider.toLowerCase().includes(lower)
+          (c.insurancePayerName || '').toLowerCase().includes(lower)
       );
     }
 
@@ -110,12 +138,13 @@ const BillingPage: React.FC = () => {
     0
   );
 
-  const handleCPTSelect = (index: number, cptCode: string) => {
-    const cpt = commonCPTCodes.find((c) => c.code === cptCode);
+  const handleCPTSelect = (index: number, code: string) => {
+    const cpt = commonCPTCodes.find((c) => c.code === code);
     const updated = [...serviceLines];
     updated[index] = {
       ...updated[index],
-      cptCode,
+      codeType: 'CPT',
+      code,
       description: cpt?.description || '',
       unitPrice: cpt?.price || 0,
       quantity: updated[index].quantity || 1,
@@ -123,31 +152,60 @@ const BillingPage: React.FC = () => {
     setServiceLines(updated);
   };
 
-  const handleSubmitClaim = () => {
-    form.validateFields().then(() => {
-      message.success('Claim submitted successfully!');
+  const handleSubmitClaim = async () => {
+    try {
+      const values = await form.validateFields();
+      const claimData = {
+        tenantId: 'default-tenant-id',
+        patientId: values.patientId,
+        patientName: patients.find((p) => p.id === values.patientId)?.fullName || '',
+        providerId: values.providerId,
+        providerName: 'Dr. Sarah Chen',
+        providerNPI: '1234567890',
+        serviceDate: values.serviceDate.format('YYYY-MM-DD'),
+        lineItems: serviceLines.filter((line) => line.code).map((line) => ({
+          codeType: line.codeType || 'CPT',
+          code: line.code!,
+          description: line.description || '',
+          quantity: line.quantity || 1,
+          unitPrice: line.unitPrice || 0,
+        })),
+      };
+
+      await billingService.createClaim(claimData);
+      message.success('Claim created successfully!');
       setDrawerOpen(false);
       form.resetFields();
       setServiceLines([{}]);
-    });
-  };
-
-  const handlePatientSelect = (patientId: string) => {
-    const patient = mockPatients.find((p) => p.id === patientId);
-    if (patient && patient.insurance.length > 0) {
-      form.setFieldsValue({
-        insuranceProvider: patient.insurance[0].provider,
-      });
+      fetchClaims();
+    } catch (error) {
+      message.error('Failed to create claim');
     }
   };
 
-  const columns: ColumnsType<Claim> = [
+  const handlePatientSelect = async (patientId: string) => {
+    try {
+      const insurances = await billingService.findPatientInsurances(patientId);
+      if (insurances.length > 0) {
+        form.setFieldsValue({
+          insurancePayerId: insurances[0].insurancePayerId,
+          insurancePayerName: insurances[0].payer.name,
+          policyNumber: insurances[0].policyNumber,
+          groupNumber: insurances[0].groupNumber,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load patient insurance');
+    }
+  };
+
+  const columns: ColumnsType<EncounterClaim> = [
     {
       title: 'Claim #',
       dataIndex: 'claimNumber',
       key: 'claimNumber',
       width: 170,
-      render: (num: string, record: Claim) => (
+      render: (num: string, record: EncounterClaim) => (
         <Button
           type="link"
           style={{ padding: 0, color: '#0D7C8A', fontWeight: 600 }}
@@ -179,19 +237,20 @@ const BillingPage: React.FC = () => {
     },
     {
       title: 'Insurance',
-      dataIndex: 'insuranceProvider',
-      key: 'insuranceProvider',
+      dataIndex: 'insurancePayerName',
+      key: 'insurancePayerName',
       width: 170,
+      render: (name: string) => name || 'Self-Pay',
     },
     {
       title: 'Total Amount',
-      dataIndex: 'totalAmount',
-      key: 'totalAmount',
+      dataIndex: 'totalBilled',
+      key: 'totalBilled',
       width: 130,
       render: (amount: number) => (
         <Text strong>${amount.toFixed(2)}</Text>
       ),
-      sorter: (a, b) => a.totalAmount - b.totalAmount,
+      sorter: (a, b) => a.totalBilled - b.totalBilled,
     },
     {
       title: 'Status',
@@ -200,7 +259,7 @@ const BillingPage: React.FC = () => {
       width: 110,
       render: (status: string) => (
         <Tag color={claimStatusColors[status] || 'default'}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
+          {status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
         </Tag>
       ),
     },
@@ -208,7 +267,7 @@ const BillingPage: React.FC = () => {
       title: 'Actions',
       key: 'actions',
       width: 80,
-      render: (_: unknown, record: Claim) => (
+      render: (_: unknown, record: EncounterClaim) => (
         <Tooltip title="View Details">
           <Button
             type="text"
@@ -222,11 +281,11 @@ const BillingPage: React.FC = () => {
 
   const tabItems = [
     { key: 'all', label: 'All Claims' },
-    { key: 'pending', label: 'Pending' },
+    { key: 'draft', label: 'Draft' },
+    { key: 'ready_to_bill', label: 'Ready to Bill' },
     { key: 'submitted', label: 'Submitted' },
-    { key: 'approved', label: 'Approved' },
-    { key: 'denied', label: 'Denied' },
     { key: 'paid', label: 'Paid' },
+    { key: 'denied', label: 'Denied' },
   ];
 
   return (
@@ -276,8 +335,8 @@ const BillingPage: React.FC = () => {
         <Col xs={12} sm={12} md={5} lg={5}>
           <Card>
             <Statistic
-              title="Approved"
-              value={approvedCount}
+              title="Paid"
+              value={paidCount}
               prefix={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
               valueStyle={{ color: '#52c41a', fontSize: 20 }}
             />
@@ -306,7 +365,7 @@ const BillingPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Claims Table */}
+      {/* Split View: Claims Ledger */}
       <Card>
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
@@ -323,6 +382,7 @@ const BillingPage: React.FC = () => {
           columns={columns}
           dataSource={filteredClaims}
           rowKey="id"
+          loading={loading}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
@@ -333,60 +393,6 @@ const BillingPage: React.FC = () => {
             style: { cursor: 'pointer' },
             onClick: () => navigate(`/billing/${record.id}`),
           })}
-        />
-      </Card>
-
-      {/* Recent Payments */}
-      <Card
-        title={
-          <Space>
-            <CreditCardOutlined />
-            <span>Recent Payments</span>
-          </Space>
-        }
-        style={{ marginTop: 24 }}
-      >
-        <List
-          dataSource={mockPayments.slice(0, 5)}
-          renderItem={(payment: Payment) => (
-            <List.Item
-              extra={
-                <Text strong style={{ fontSize: 16, color: '#52c41a' }}>
-                  +${payment.amount.toFixed(2)}
-                </Text>
-              }
-            >
-              <List.Item.Meta
-                avatar={
-                  <DollarOutlined style={{ fontSize: 20, color: '#52c41a' }} />
-                }
-                title={
-                  <Space>
-                    <Text strong>{payment.patientName}</Text>
-                    <Text type="secondary">-</Text>
-                    <Text type="secondary">{payment.claimId}</Text>
-                  </Space>
-                }
-                description={
-                  <Space>
-                    <Tag
-                      color={
-                        payment.method === 'Insurance'
-                          ? 'blue'
-                          : payment.method === 'Cash'
-                          ? 'green'
-                          : 'orange'
-                      }
-                    >
-                      {payment.method}
-                    </Tag>
-                    <Text type="secondary">{payment.date}</Text>
-                    <Text type="secondary">Ref: {payment.reference}</Text>
-                  </Space>
-                }
-              />
-            </List.Item>
-          )}
         />
       </Card>
 
@@ -422,7 +428,7 @@ const BillingPage: React.FC = () => {
               filterOption={(input, option) =>
                 (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
               }
-              options={mockPatients.map((p) => ({
+              options={patients.map((p) => ({
                 value: p.id,
                 label: `${p.firstName} ${p.lastName} (${p.mrn})`,
               }))}
@@ -430,7 +436,7 @@ const BillingPage: React.FC = () => {
             />
           </Form.Item>
 
-          <Form.Item name="insuranceProvider" label="Insurance Provider">
+          <Form.Item name="insurancePayerName" label="Insurance Provider">
             <Input placeholder="Auto-filled from patient record" readOnly />
           </Form.Item>
 
@@ -446,32 +452,11 @@ const BillingPage: React.FC = () => {
             name="providerId"
             label="Provider"
             rules={[{ required: true, message: 'Select provider' }]}
+            initialValue="default-provider-id"
           >
             <Select
               placeholder="Select provider..."
-              options={mockProviders.map((p) => ({
-                value: p.id,
-                label: `${p.firstName} ${p.lastName}`,
-              }))}
-            />
-          </Form.Item>
-
-          <Form.Item
-            name="diagnosisCodes"
-            label="Diagnosis Codes (ICD-10)"
-            rules={[{ required: true, message: 'Select at least one diagnosis code' }]}
-          >
-            <Select
-              mode="multiple"
-              showSearch
-              placeholder="Search ICD-10 codes..."
-              filterOption={(input, option) =>
-                (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
-              }
-              options={commonDiagnosisCodes.map((d) => ({
-                value: d.code,
-                label: `${d.code} - ${d.description}`,
-              }))}
+              options={[{ value: 'default-provider-id', label: 'Dr. Sarah Chen' }]}
             />
           </Form.Item>
 
@@ -502,7 +487,7 @@ const BillingPage: React.FC = () => {
                     <Select
                       showSearch
                       placeholder="Select CPT..."
-                      value={line.cptCode}
+                      value={line.code}
                       onChange={(val) => handleCPTSelect(index, val)}
                       filterOption={(input, option) =>
                         (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
@@ -564,7 +549,7 @@ const BillingPage: React.FC = () => {
 
           <Button
             type="dashed"
-            onClick={() => setServiceLines([...serviceLines, {}])}
+            onClick={() => setServiceLines([...serviceLines, { codeType: 'CPT' }])}
             icon={<PlusOutlined />}
             block
             size="small"

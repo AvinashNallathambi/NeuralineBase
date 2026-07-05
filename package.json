@@ -8,6 +8,8 @@
     "backend"
   ],
   "scripts": {
+    "prestart:dev": "kill-port 4000",
+    "start:dev": "nest start --watch",
     "dev": "concurrently -n frontend,backend -c cyan,green \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run start:dev --workspace=backend",

@@ -47,6 +47,9 @@ const AppointmentPage = lazyWithRetry(
 const ClinicalPage = lazyWithRetry(
   () => import("../pages/clinical/ClinicalPage"),
 );
+const NewEncounterPage = lazyWithRetry(
+  () => import("../pages/clinical/NewEncounterPage"),
+);
 const EncounterDetailPage = lazyWithRetry(
   () => import("../pages/clinical/EncounterDetailPage"),
 );
@@ -201,6 +204,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <ClinicalPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/clinical/new",
+        element: (
+          <LazyPage>
+            <NewEncounterPage />
           </LazyPage>
         ),
       },

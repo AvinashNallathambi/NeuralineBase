@@ -7,6 +7,7 @@ import {
   Tag,
   Badge,
   Typography,
+  Descriptions,
   Select,
   DatePicker,
   Drawer,
@@ -34,6 +35,7 @@ import {
   LoginOutlined,
   PlayCircleOutlined,
   CloseCircleOutlined,
+  CloseOutlined,
   UserOutlined,
   LeftOutlined,
   RightOutlined,
@@ -149,6 +151,28 @@ const AppointmentPage: React.FC = () => {
       }
     });
     return Array.from(providerMap.values());
+  }, [appointments]);
+
+  // Extract unique statuses from appointments
+  const uniqueStatuses = useMemo(() => {
+    const statusSet = new Set<AppointmentStatus>();
+    appointments.forEach((appt) => {
+      if (appt.status) {
+        statusSet.add(appt.status);
+      }
+    });
+    return Array.from(statusSet);
+  }, [appointments]);
+
+  // Extract unique types from appointments
+  const uniqueTypes = useMemo(() => {
+    const typeSet = new Set<AppointmentType>();
+    appointments.forEach((appt) => {
+      if (appt.type) {
+        typeSet.add(appt.type);
+      }
+    });
+    return Array.from(typeSet);
   }, [appointments]);
 
   // ── Workflow Integration ──
@@ -1184,11 +1208,10 @@ const AppointmentPage: React.FC = () => {
                 options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
               />
               <Select placeholder="Status" allowClear style={{ minWidth: 130 }} value={statusFilter} onChange={setStatusFilter}
-                options={[
-                  { label: 'Scheduled', value: 'scheduled' }, { label: 'Confirmed', value: 'confirmed' },
-                  { label: 'Checked In', value: 'checked_in' }, { label: 'In Progress', value: 'in_progress' },
-                  { label: 'Completed', value: 'completed' }, { label: 'Cancelled', value: 'cancelled' },
-                ]}
+                options={uniqueStatuses.map((status) => ({
+                  label: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                  value: status,
+                }))}
               />
             </Space>
           </div>
@@ -1206,22 +1229,18 @@ const AppointmentPage: React.FC = () => {
             </Col>
             <Col xs={12} sm={6} md={4}>
               <Select placeholder="Status" allowClear style={{ width: '100%' }} value={statusFilter} onChange={setStatusFilter}
-                options={[
-                  { label: 'Scheduled', value: 'scheduled' }, { label: 'Confirmed', value: 'confirmed' },
-                  { label: 'Checked In', value: 'checked_in' }, { label: 'In Progress', value: 'in_progress' },
-                  { label: 'Completed', value: 'completed' }, { label: 'Cancelled', value: 'cancelled' },
-                  { label: 'No Show', value: 'no_show' },
-                ]}
+                options={uniqueStatuses.map((status) => ({
+                  label: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                  value: status,
+                }))}
               />
             </Col>
             <Col xs={12} sm={6} md={4}>
               <Select placeholder="Type" allowClear style={{ width: '100%' }} value={typeFilter} onChange={setTypeFilter}
-                options={[
-                  { label: 'New Patient', value: 'new_patient' }, { label: 'Follow Up', value: 'follow_up' },
-                  { label: 'Annual Physical', value: 'annual_physical' }, { label: 'Urgent Care', value: 'urgent_care' },
-                  { label: 'Telehealth', value: 'telehealth' }, { label: 'Procedure', value: 'procedure' },
-                  { label: 'Consultation', value: 'consultation' },
-                ]}
+                options={uniqueTypes.map((type) => ({
+                  label: type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+                  value: type,
+                }))}
               />
             </Col>
             <Col xs={24} sm={12} md={6}>
@@ -1371,112 +1390,203 @@ const AppointmentPage: React.FC = () => {
 
       {/* Appointment Detail Drawer */}
       <Drawer
-        title="Appointment Details"
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Button
+              type="text"
+              icon={<CloseOutlined />}
+              onClick={() => { setDetailDrawerOpen(false); setSelectedAppointment(null); }}
+              style={{ padding: 0, width: 28, height: 28 }}
+            />
+            <span style={{ fontSize: 18, fontWeight: 600 }}>Appointment Details</span>
+          </div>
+        }
         placement="right"
         width={520}
         onClose={() => { setDetailDrawerOpen(false); setSelectedAppointment(null); }}
         open={detailDrawerOpen}
+        closable={false}
         extra={
-          <Space>
-            <Button onClick={() => { setDetailDrawerOpen(false); setSelectedAppointment(null); }}>Close</Button>
-          </Space>
+          selectedAppointment?.status === 'scheduled' && (
+            <Button type="primary" ghost icon={<LoginOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'checked_in'); setDetailDrawerOpen(false); }}>
+              Check In
+            </Button>
+          )
         }
       >
         {selectedAppointment && (
           <div>
-            <div style={{ marginBottom: 24 }}>
-              <Space direction="vertical" size="small">
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedAppointment.patientName}</div>
-                </div>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Provider</Text>
-                  <div style={{ fontSize: 16 }}>{selectedAppointment.providerName}</div>
-                </div>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Date & Time</Text>
-                  <div style={{ fontSize: 16 }}>
-                    {dayjs(selectedAppointment.startTime).format('MMMM D, YYYY')}
-                  </div>
-                  <div style={{ fontSize: 14 }}>
-                    {dayjs(selectedAppointment.startTime).format('h:mm A')} - {dayjs(selectedAppointment.endTime).format('h:mm A')}
-                  </div>
-                </div>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Type</Text>
-                  <div>
-                    <Tag color={typeColors[selectedAppointment.type]} style={{ textTransform: 'capitalize' }}>
-                      {(selectedAppointment.type ?? '').replace(/_/g, ' ')}
-                    </Tag>
-                  </div>
-                </div>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Status</Text>
-                  <div>
-                    {workflowTemplate && workflowInstances[selectedAppointment.id] ? (
-                      <WorkflowStatusBadge
-                        template={workflowTemplate}
-                        instance={workflowInstances[selectedAppointment.id]}
-                      />
-                    ) : (
-                      <Tag color={statusColors[selectedAppointment.status]} style={{ textTransform: 'capitalize' }}>
-                        {(selectedAppointment.status ?? '').replace(/_/g, ' ')}
-                      </Tag>
-                    )}
-                  </div>
-                </div>
-                {selectedAppointment.isTelehealth && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Telehealth</Text>
-                    <div>
-                      <Tag icon={<VideoCameraOutlined />} color="processing">Video Call</Tag>
-                    </div>
-                    {selectedAppointment.meetingLink && (
-                      <div style={{ marginTop: 4 }}>
-                        <a href={selectedAppointment.meetingLink} target="_blank" rel="noopener noreferrer">
-                          {selectedAppointment.meetingLink}
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )}
-                {selectedAppointment.reason && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Reason for Visit</Text>
-                    <div style={{ fontSize: 14 }}>{selectedAppointment.reason}</div>
-                  </div>
-                )}
-                {selectedAppointment.notes && (
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Notes</Text>
-                    <div style={{ fontSize: 14 }}>{selectedAppointment.notes}</div>
-                  </div>
+            {/* Header banner */}
+            <div style={{
+              background: typeBg[selectedAppointment.type] ?? '#f0f5ff',
+              borderLeft: `4px solid ${typeBorder[selectedAppointment.type] ?? '#85a5ff'}`,
+              borderRadius: 8,
+              padding: '12px 16px',
+              marginBottom: 24,
+            }}>
+              <Space size="middle">
+                <Tag color={typeColors[selectedAppointment.type]} style={{ textTransform: 'capitalize', fontSize: 14, margin: 0 }}>
+                  {(selectedAppointment.type ?? '').replace(/_/g, ' ')}
+                </Tag>
+                {workflowTemplate && workflowInstances[selectedAppointment.id] ? (
+                  <WorkflowStatusBadge
+                    template={workflowTemplate}
+                    instance={workflowInstances[selectedAppointment.id]}
+                  />
+                ) : (
+                  <Tag color={statusColors[selectedAppointment.status]} style={{ textTransform: 'capitalize', fontSize: 14, margin: 0 }}>
+                    {(selectedAppointment.status ?? '').replace(/_/g, ' ')}
+                  </Tag>
                 )}
               </Space>
             </div>
-            <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16 }}>
-              <Text strong>Quick Actions</Text>
-              <div style={{ marginTop: 12 }}>
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
+
+            {/* Details table */}
+          <Descriptions
+  bordered
+  column={1}
+  size="small"
+  labelStyle={{ width: '35%', fontWeight: 500 }}
+>
+  <Descriptions.Item label="Patient">
+    <Space>
+      <Avatar
+        size={28}
+        icon={<UserOutlined />}
+        style={{ backgroundColor: '#08979c' }}
+      />
+      <Text strong>{selectedAppointment.patientName}</Text>
+    </Space>
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Provider">
+    <Text>{selectedAppointment.providerName}</Text>
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Date">
+    <Text>
+      {dayjs(selectedAppointment.startTime).format('dddd, MMMM D, YYYY')}
+    </Text>
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Time">
+    <Space>
+      <ClockCircleOutlined style={{ color: '#8c8c8c' }} />
+      <Text>
+        {dayjs(selectedAppointment.startTime).format('h:mm A')} -{" "}
+        {dayjs(selectedAppointment.endTime).format('h:mm A')}
+      </Text>
+    </Space>
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Duration">
+    {(() => {
+      const start = dayjs(selectedAppointment.startTime);
+      const end = dayjs(selectedAppointment.endTime);
+      const minutes = end.diff(start, "minute");
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+
+      let durationText = "";
+
+      if (hours > 0)
+        durationText += `${hours} hour${hours > 1 ? "s" : ""}`;
+
+      if (remainingMinutes > 0)
+        durationText += `${hours > 0 ? " " : ""}${remainingMinutes} minute${
+          remainingMinutes > 1 ? "s" : ""
+        }`;
+
+      return <Text>{durationText || "0 minutes"}</Text>;
+    })()}
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Type">
+    <Tag
+      color={typeColors[selectedAppointment.type]}
+      style={{ textTransform: "capitalize" }}
+    >
+      {(selectedAppointment.type ?? "").replace(/_/g, " ")}
+    </Tag>
+  </Descriptions.Item>
+
+  <Descriptions.Item label="Status">
+    {workflowTemplate && workflowInstances[selectedAppointment.id] ? (
+      <WorkflowStatusBadge
+        template={workflowTemplate}
+        instance={workflowInstances[selectedAppointment.id]}
+      />
+    ) : (
+      <Tag
+        color={statusColors[selectedAppointment.status]}
+        style={{ textTransform: "capitalize" }}
+      >
+        {(selectedAppointment.status ?? "").replace(/_/g, " ")}
+      </Tag>
+    )}
+  </Descriptions.Item>
+
+  {selectedAppointment.isTelehealth && (
+    <Descriptions.Item label="Telehealth">
+      <Space direction="vertical" size={4}>
+        <Tag icon={<VideoCameraOutlined />} color="processing">
+          Video Call
+        </Tag>
+
+        {selectedAppointment.meetingLink && (
+          <a
+            href={selectedAppointment.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {selectedAppointment.meetingLink}
+          </a>
+        )}
+      </Space>
+    </Descriptions.Item>
+  )}
+</Descriptions>
+            {/* Reason for Visit */}
+            <div style={{ marginTop: 24 }}>
+              <Text strong>Reason for Visit</Text>
+              <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 8 }}>
+                <Text>{selectedAppointment.reason || 'No reason provided'}</Text>
+              </div>
+            </div>
+
+            {/* Notes */}
+            {selectedAppointment.notes && (
+              <div style={{ marginTop: 24 }}>
+                <Text strong>Notes</Text>
+                <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 12, marginTop: 8 }}>
+                  <Text>{selectedAppointment.notes}</Text>
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ marginTop: 24 }}>
+              <Text strong>Actions</Text>
+              <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 16, marginTop: 8 }}>
+                <Space size="middle">
                   {selectedAppointment.status === 'scheduled' && (
-                    <Button type="primary" ghost icon={<LoginOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'checked_in'); setDetailDrawerOpen(false); }} block>
+                    <Button type="primary" ghost icon={<LoginOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'checked_in'); setDetailDrawerOpen(false); }}>
                       Check In
                     </Button>
                   )}
                   {(selectedAppointment.status === 'confirmed' || selectedAppointment.status === 'checked_in') && (
-                    <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'in_progress'); setDetailDrawerOpen(false); }} block>
+                    <Button type="primary" icon={<PlayCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'in_progress'); setDetailDrawerOpen(false); }}>
                       Start Appointment
                     </Button>
                   )}
                   {selectedAppointment.status === 'in_progress' && (
-                    <Button style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'completed'); setDetailDrawerOpen(false); }} block>
+                    <Button style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => { changeStatus(selectedAppointment.id, 'completed'); setDetailDrawerOpen(false); }}>
                       Complete Appointment
                     </Button>
                   )}
                   {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && selectedAppointment.status !== 'no_show' && (
                     <Popconfirm title="Cancel this appointment?" onConfirm={() => { changeStatus(selectedAppointment.id, 'cancelled'); setDetailDrawerOpen(false); }}>
-                      <Button danger icon={<CloseCircleOutlined />} block>Cancel Appointment</Button>
+                      <Button danger icon={<CloseCircleOutlined />}>Cancel Appointment</Button>
                     </Popconfirm>
                   )}
                 </Space>
