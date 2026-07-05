@@ -284,13 +284,13 @@ const AiEncounterPage: React.FC = () => {
         </Descriptions>
       )}
 
-      <AudioRecorder
+      {/* <AudioRecorder
         onRecordingComplete={(blob, dur) => {
           setAudioBlob(blob);
           setTranscriptDuration(dur);
         }}
         disabled={loading}
-      />
+      /> */}
 
       <Divider />
 

@@ -10,7 +10,6 @@ import {
 } from 'typeorm';
 
 // Forward-reference interfaces for relations (actual entities in their own modules)
-// import { Insurance } from '../../insurances/entities/insurance.entity';
 // import { Allergy } from '../../clinical/entities/allergy.entity';
 // import { Encounter } from '../../clinical/entities/encounter.entity';
 // import { Appointment } from '../../appointments/entities/appointment.entity';
@@ -98,25 +97,21 @@ export class Patient {
 
   // ─── Relations ──────────────────────────────────────────────────
 
-  // TODO: Uncomment when Insurance entity is created
-  // @OneToMany(() => Insurance, (insurance) => insurance.patient)
-  // insurances!: Insurance[];
+  @OneToMany('PatientInsurance', 'patient')
+  insurances!: unknown[];
+
+  @OneToMany('Encounter', 'patient')
+  encounters!: unknown[];
 
   // TODO: Uncomment when Allergy entity is created
   // @OneToMany(() => Allergy, (allergy) => allergy.patient)
   // allergies!: Allergy[];
-
-  // TODO: Uncomment when Encounter entity is created
-  // @OneToMany(() => Encounter, (encounter) => encounter.patient)
-  // encounters!: Encounter[];
 
   // TODO: Uncomment when Appointment entity is created
   // @OneToMany(() => Appointment, (appointment) => appointment.patient)
   // appointments!: Appointment[];
 
   // Placeholder relation arrays for TypeORM eager loading
-  insurances?: unknown[];
   allergies?: unknown[];
-  encounters?: unknown[];
   appointments?: unknown[];
 }

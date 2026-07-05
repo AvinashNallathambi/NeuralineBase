@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Button,
@@ -14,6 +14,7 @@ import {
   Input,
   message,
   Empty,
+  Spin,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -29,10 +30,8 @@ import {
   FileTextOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { Claim, ClaimItem } from '../../types';
+import { billingService, EncounterClaim, ClaimLineItem } from '../../services/billingService';
 import { commonDiagnosisCodes } from '../../data/mockData';
-import type { Payment } from '../../data/mockData';
-import { useBillingStore, usePatientStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text, Paragraph } = Typography;
@@ -40,26 +39,47 @@ const { TextArea } = Input;
 
 const claimStatusColors: Record<string, string> = {
   draft: 'default',
+  ready_to_bill: 'gold',
   submitted: 'processing',
-  pending: 'gold',
-  approved: 'green',
-  denied: 'red',
+  partially_paid: 'blue',
   paid: 'cyan',
+  denied: 'red',
   appealed: 'purple',
+  cancelled: 'default',
 };
 
 const ClaimDetailPage: React.FC = () => {
-  const { claims: mockClaims, payments: mockPayments } = useBillingStore();
-  const { patients: mockPatients } = usePatientStore();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const [loading, setLoading] = useState(true);
+  const [claim, setClaim] = useState<EncounterClaim | null>(null);
   const [noteText, setNoteText] = useState('');
 
-  const claim = mockClaims.find((c) => c.id === id);
-  const patient = claim ? mockPatients.find((p) => p.id === claim.patientId) : null;
-  const claimPayments = claim
-    ? mockPayments.filter((p) => p.claimId === claim.id)
-    : [];
+  useEffect(() => {
+    if (id) {
+      fetchClaim(id);
+    }
+  }, [id]);
+
+  const fetchClaim = async (claimId: string) => {
+    setLoading(true);
+    try {
+      const data = await billingService.findOneClaim(claimId);
+      setClaim(data);
+    } catch (error) {
+      message.error('Failed to load claim');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: 100 }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   if (!claim) {
     return (
@@ -76,11 +96,12 @@ const ClaimDetailPage: React.FC = () => {
     );
   }
 
-  const insurance = patient?.insurance.find((i) => i.id === claim.insuranceId) ||
-    patient?.insurance[0];
+  // Diagnosis code lookups from line items
+  const diagnosisCodes = claim.lineItems
+    .filter((item) => item.codeType === 'ICD-10')
+    .map((item) => item.code);
 
-  // Diagnosis code lookups
-  const diagnosisDetails = claim.diagnosisCodes.map((code) => {
+  const diagnosisDetails = diagnosisCodes.map((code) => {
     const found = commonDiagnosisCodes.find((d) => d.code === code);
     return { code, description: found?.description || 'Unknown' };
   });
@@ -94,27 +115,27 @@ const ClaimDetailPage: React.FC = () => {
         <div>
           <Text strong>Claim Created</Text>
           <br />
-          <Text type="secondary">{claim.createdAt.split('T')[0]}</Text>
+          <Text type="secondary">{new Date(claim.createdAt).toLocaleDateString()}</Text>
         </div>
       ),
     },
   ];
 
-  if (claim.submittedDate) {
+  if (claim.submissionDate) {
     timelineItems.push({
       color: 'blue',
       dot: <SendOutlined />,
       children: (
         <div>
-          <Text strong>Submitted to {claim.insuranceProvider}</Text>
+          <Text strong>Submitted to {claim.insurancePayerName || 'Payer'}</Text>
           <br />
-          <Text type="secondary">{claim.submittedDate}</Text>
+          <Text type="secondary">{new Date(claim.submissionDate).toLocaleDateString()}</Text>
         </div>
       ),
     });
   }
 
-  if (claim.status === 'pending' || claim.status === 'submitted') {
+  if (claim.status === 'ready_to_bill' || claim.status === 'submitted') {
     timelineItems.push({
       color: 'gold',
       dot: <ClockCircleOutlined />,
@@ -128,16 +149,16 @@ const ClaimDetailPage: React.FC = () => {
     });
   }
 
-  if (claim.status === 'approved' || claim.status === 'paid') {
+  if (claim.status === 'paid' || claim.status === 'partially_paid') {
     timelineItems.push({
       color: 'green',
       dot: <CheckCircleOutlined />,
       children: (
         <div>
-          <Text strong>Approved</Text>
+          <Text strong>Payment Received</Text>
           <br />
           <Text type="secondary">
-            Approved amount: ${claim.approvedAmount?.toFixed(2) || '0.00'}
+            Paid: ${claim.totalPaid.toFixed(2)}
           </Text>
         </div>
       ),
@@ -153,23 +174,7 @@ const ClaimDetailPage: React.FC = () => {
           <Text strong>Denied</Text>
           <br />
           <Text type="secondary">
-            Reason: Documentation insufficient. Consider appeal.
-          </Text>
-        </div>
-      ),
-    });
-  }
-
-  if (claim.status === 'paid') {
-    timelineItems.push({
-      color: 'cyan',
-      dot: <DollarOutlined />,
-      children: (
-        <div>
-          <Text strong>Payment Received</Text>
-          <br />
-          <Text type="secondary">
-            Paid: ${claim.paidAmount?.toFixed(2) || '0.00'}
+            Reason: {claim.denialReason || 'Documentation insufficient. Consider appeal.'}
           </Text>
         </div>
       ),
@@ -177,8 +182,8 @@ const ClaimDetailPage: React.FC = () => {
   }
 
   // Service lines table
-  const serviceColumns: ColumnsType<ClaimItem> = [
-    { title: 'CPT Code', dataIndex: 'cptCode', key: 'cptCode', width: 100 },
+  const serviceColumns: ColumnsType<ClaimLineItem> = [
+    { title: 'Code', dataIndex: 'code', key: 'code', width: 100 },
     { title: 'Description', dataIndex: 'description', key: 'description' },
     { title: 'Qty', dataIndex: 'quantity', key: 'quantity', width: 60, align: 'center' },
     {
@@ -191,46 +196,15 @@ const ClaimDetailPage: React.FC = () => {
     },
     {
       title: 'Total',
-      dataIndex: 'totalPrice',
-      key: 'totalPrice',
+      dataIndex: 'totalCharge',
+      key: 'totalCharge',
       width: 110,
       align: 'right',
       render: (price: number) => <Text strong>${price.toFixed(2)}</Text>,
     },
   ];
 
-  // Payments table
-  const paymentColumns: ColumnsType<Payment> = [
-    { title: 'Payment ID', dataIndex: 'id', key: 'id', width: 100 },
-    { title: 'Date', dataIndex: 'paymentDate', key: 'paymentDate', width: 120 },
-    {
-      title: 'Method',
-      dataIndex: 'paymentMethod',
-      key: 'paymentMethod',
-      width: 110,
-      render: (method: string) => (
-        <Tag color={method === 'insurance' ? 'blue' : method === 'patient' ? 'green' : 'orange'}>
-          {method.charAt(0).toUpperCase() + method.slice(1)}
-        </Tag>
-      ),
-    },
-    {
-      title: 'Amount',
-      dataIndex: 'amount',
-      key: 'amount',
-      width: 110,
-      align: 'right',
-      render: (amount: number) => (
-        <Text strong style={{ color: '#52c41a' }}>
-          ${amount.toFixed(2)}
-        </Text>
-      ),
-    },
-    { title: 'Reference', dataIndex: 'reference', key: 'reference', width: 120 },
-  ];
-
-  const totalPaid = claimPayments.reduce((sum, p) => sum + p.amount, 0);
-  const adjustments = (claim.totalAmount || 0) - (claim.approvedAmount || claim.totalAmount);
+  const adjustments = claim.adjustmentAmount;
 
   return (
     <div>
@@ -255,14 +229,14 @@ const ClaimDetailPage: React.FC = () => {
                 color={claimStatusColors[claim.status]}
                 style={{ fontSize: 14, padding: '4px 12px' }}
               >
-                {claim.status.charAt(0).toUpperCase() + claim.status.slice(1)}
+                {claim.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
               </Tag>
             </Space>
             <div style={{ marginTop: 8 }}>
               <Text type="secondary">
-                Service Date: {claim.serviceDate}
-                {claim.submittedDate && ` | Submitted: ${claim.submittedDate}`}
-                {` | Created: ${claim.createdAt.split('T')[0]}`}
+                Service Date: {new Date(claim.serviceDate).toLocaleDateString()}
+                {claim.submissionDate && ` | Submitted: ${new Date(claim.submissionDate).toLocaleDateString()}`}
+                {` | Created: ${new Date(claim.createdAt).toLocaleDateString()}`}
               </Text>
             </div>
           </Col>
@@ -295,27 +269,20 @@ const ClaimDetailPage: React.FC = () => {
         <Col xs={24} lg={14}>
           {/* Patient Info */}
           <Card title="Patient Information" size="small" style={{ marginBottom: 16 }}>
-            {patient ? (
-              <Descriptions column={2} size="small">
-                <Descriptions.Item label="Name">
-                  {patient.firstName} {patient.lastName}
-                </Descriptions.Item>
-                <Descriptions.Item label="MRN">{patient.mrn}</Descriptions.Item>
-                <Descriptions.Item label="DOB">{patient.dateOfBirth}</Descriptions.Item>
-                <Descriptions.Item label="Phone">{patient.phone}</Descriptions.Item>
-              </Descriptions>
-            ) : (
-              <Text>{claim.patientName}</Text>
-            )}
+            <Descriptions column={2} size="small">
+              <Descriptions.Item label="Name">
+                {claim.patientName}
+              </Descriptions.Item>
+              <Descriptions.Item label="Patient ID">{claim.patientId}</Descriptions.Item>
+            </Descriptions>
           </Card>
 
           {/* Insurance Info */}
           <Card title="Insurance Information" size="small" style={{ marginBottom: 16 }}>
             <Descriptions column={2} size="small">
-              <Descriptions.Item label="Provider">{claim.insuranceProvider}</Descriptions.Item>
-              <Descriptions.Item label="Policy #">{insurance?.policyNumber || 'N/A'}</Descriptions.Item>
-              <Descriptions.Item label="Group #">{insurance?.groupNumber || 'N/A'}</Descriptions.Item>
-              <Descriptions.Item label="Subscriber">{insurance?.subscriberName || 'N/A'}</Descriptions.Item>
+              <Descriptions.Item label="Provider">{claim.insurancePayerName || 'Self-Pay'}</Descriptions.Item>
+              <Descriptions.Item label="Policy #">{claim.policyNumber || 'N/A'}</Descriptions.Item>
+              <Descriptions.Item label="Group #">{claim.groupNumber || 'N/A'}</Descriptions.Item>
             </Descriptions>
           </Card>
 
@@ -323,7 +290,8 @@ const ClaimDetailPage: React.FC = () => {
           <Card title="Provider Information" size="small" style={{ marginBottom: 16 }}>
             <Descriptions column={2} size="small">
               <Descriptions.Item label="Provider">{claim.providerName}</Descriptions.Item>
-              <Descriptions.Item label="Encounter">{claim.encounterId}</Descriptions.Item>
+              <Descriptions.Item label="NPI">{claim.providerNPI}</Descriptions.Item>
+              <Descriptions.Item label="Encounter">{claim.encounterId || 'N/A'}</Descriptions.Item>
             </Descriptions>
           </Card>
         </Col>
@@ -351,7 +319,7 @@ const ClaimDetailPage: React.FC = () => {
       <Card title="Service Lines" size="small" style={{ marginBottom: 24 }}>
         <Table
           columns={serviceColumns}
-          dataSource={claim.items}
+          dataSource={claim.lineItems}
           rowKey="id"
           pagination={false}
           size="small"
@@ -363,7 +331,7 @@ const ClaimDetailPage: React.FC = () => {
                 </Table.Summary.Cell>
                 <Table.Summary.Cell index={1} align="right">
                   <Text strong style={{ fontSize: 16 }}>
-                    ${claim.totalAmount.toFixed(2)}
+                    ${claim.totalBilled.toFixed(2)}
                   </Text>
                 </Table.Summary.Cell>
               </Table.Summary.Row>
@@ -380,22 +348,22 @@ const ClaimDetailPage: React.FC = () => {
               <Text type="secondary">Total Billed</Text>
               <br />
               <Text strong style={{ fontSize: 20 }}>
-                ${claim.totalAmount.toFixed(2)}
+                ${claim.totalBilled.toFixed(2)}
               </Text>
             </div>
           </Col>
           <Col xs={12} sm={6}>
             <div style={{ textAlign: 'center' }}>
-              <Text type="secondary">Approved Amount</Text>
+              <Text type="secondary">Total Allowed</Text>
               <br />
               <Text
                 strong
                 style={{
                   fontSize: 20,
-                  color: claim.approvedAmount !== undefined ? '#52c41a' : '#8c8c8c',
+                  color: claim.totalAllowed ? '#52c41a' : '#8c8c8c',
                 }}
               >
-                ${claim.approvedAmount?.toFixed(2) || 'Pending'}
+                ${claim.totalAllowed?.toFixed(2) || 'Pending'}
               </Text>
             </div>
           </Col>
@@ -407,10 +375,10 @@ const ClaimDetailPage: React.FC = () => {
                 strong
                 style={{
                   fontSize: 20,
-                  color: claim.patientResponsibility ? '#faad14' : '#8c8c8c',
+                  color: claim.patientResponsibility > 0 ? '#faad14' : '#8c8c8c',
                 }}
               >
-                ${claim.patientResponsibility?.toFixed(2) || 'N/A'}
+                ${claim.patientResponsibility.toFixed(2)}
               </Text>
             </div>
           </Col>
@@ -430,38 +398,6 @@ const ClaimDetailPage: React.FC = () => {
             </div>
           </Col>
         </Row>
-      </Card>
-
-      {/* Payment History */}
-      <Card title="Payment History" size="small" style={{ marginBottom: 24 }}>
-        {claimPayments.length > 0 ? (
-          <>
-            <Table
-              columns={paymentColumns}
-              dataSource={claimPayments}
-              rowKey="id"
-              pagination={false}
-              size="small"
-              summary={() => (
-                <Table.Summary fixed>
-                  <Table.Summary.Row>
-                    <Table.Summary.Cell index={0} colSpan={3} align="right">
-                      <Text strong>Total Paid:</Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={1} align="right">
-                      <Text strong style={{ fontSize: 16, color: '#52c41a' }}>
-                        ${totalPaid.toFixed(2)}
-                      </Text>
-                    </Table.Summary.Cell>
-                    <Table.Summary.Cell index={2} />
-                  </Table.Summary.Row>
-                </Table.Summary>
-              )}
-            />
-          </>
-        ) : (
-          <Empty description="No payments recorded yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        )}
       </Card>
 
       {/* Notes / Comments */}
@@ -489,28 +425,11 @@ const ClaimDetailPage: React.FC = () => {
           </Button>
         </div>
 
-        {/* Mock existing notes */}
-        <Divider style={{ margin: '12px 0' }} />
-        <div style={{ marginBottom: 12 }}>
-          <Space>
-            <Text strong>Dr. Lisa Chen</Text>
-            <Text type="secondary">2024-06-16 10:30 AM</Text>
-          </Space>
-          <Paragraph style={{ margin: '4px 0 0 0' }}>
-            Claim submitted with all supporting documentation. Please review and process.
-          </Paragraph>
-        </div>
-        {claim.status === 'denied' && (
-          <div>
-            <Space>
-              <Text strong>Insurance Review Team</Text>
-              <Text type="secondary">2024-06-18 2:15 PM</Text>
-            </Space>
-            <Paragraph style={{ margin: '4px 0 0 0', color: '#ff4d4f' }}>
-              Claim denied: Insufficient documentation for medical necessity. Please provide
-              additional clinical notes and resubmit or file an appeal within 90 days.
-            </Paragraph>
-          </div>
+        {claim.notes && (
+          <>
+            <Divider style={{ margin: '12px 0' }} />
+            <Paragraph style={{ margin: 0 }}>{claim.notes}</Paragraph>
+          </>
         )}
       </Card>
     </div>

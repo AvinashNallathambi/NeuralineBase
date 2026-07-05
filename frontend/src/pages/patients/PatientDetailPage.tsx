@@ -582,23 +582,29 @@ const PatientDetailPage: React.FC = () => {
         <Col xs={24}>
           <Card title="Latest Vitals" extra={<Text type="secondary">{dayjs(latest.date).format('MMMM D, YYYY')}</Text>}>
             <Row gutter={[16, 16]}>
-              <Col xs={12} sm={8} md={4}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="Blood Pressure" value={`${latest.systolic}/${latest.diastolic}`} suffix="mmHg" />
               </Col>
-              <Col xs={12} sm={8} md={4}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="Heart Rate" value={latest.hr} suffix="bpm" />
               </Col>
-              <Col xs={12} sm={8} md={4}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="Temperature" value={latest.temp} suffix="°F" precision={1} />
               </Col>
-              <Col xs={12} sm={8} md={4}>
-                <Statistic title="SpO2" value={latest.spo2} suffix="%" />
+              <Col xs={12} sm={12} md={6}>
+                <Statistic title="SpO₂" value={latest.spo2} suffix="%" />
               </Col>
-              <Col xs={12} sm={8} md={4}>
+              <Col xs={12} sm={12} md={6}>
+                <Statistic title="Respiratory Rate" value={16} suffix="/min" />
+              </Col>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="Weight" value={198} suffix="lbs" />
               </Col>
-              <Col xs={12} sm={8} md={4}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="BMI" value={28.4} precision={1} />
+              </Col>
+              <Col xs={12} sm={12} md={6}>
+                <Statistic title="Pain Score" value={2} suffix="/10" />
               </Col>
             </Row>
           </Card>

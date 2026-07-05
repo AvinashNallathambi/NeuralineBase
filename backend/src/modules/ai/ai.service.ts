@@ -5,6 +5,7 @@ export interface OllamaGenerateRequest {
   model: string;
   prompt: string;
   stream?: boolean;
+  format?: 'json' | string;
   options?: {
     temperature?: number;
     top_p?: number;
@@ -127,22 +128,56 @@ export class AiService {
 
   /**
    * Structured generation — asks the model to reply with valid JSON.
+   * Uses Ollama's native `format: json` to guarantee valid JSON output.
    */
   async generateStructured<T = unknown>(
     prompt: string,
     options?: { model?: string; temperature?: number; maxTokens?: number },
   ): Promise<T> {
     const jsonPrompt = `${prompt}\n\nRespond ONLY with valid JSON. Do not include markdown formatting, explanations, or text outside the JSON object.`;
-    const raw = await this.generate(jsonPrompt, { ...options, temperature: options?.temperature ?? 0.1 });
+    const model = options?.model || this.defaultModel;
+    const url = `${this.ollamaBaseUrl}/api/generate`;
+
+    this.logger.debug(`Calling Ollama generate (structured) [model=${model}]`);
 
     try {
-      // Try to extract JSON if wrapped in markdown
-      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      const jsonString = jsonMatch ? jsonMatch[1].trim() : raw.trim();
-      return JSON.parse(jsonString) as T;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: jsonPrompt,
+          stream: false,
+          format: 'json',
+          options: {
+            temperature: options?.temperature ?? 0.1,
+            num_predict: options?.maxTokens ?? 1024,
+          },
+        } as OllamaGenerateRequest),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        this.logger.error(`Ollama returned ${res.status}: ${text.slice(0, 200)}`);
+        throw new Error(`Ollama generation failed (${res.status})`);
+      }
+
+      const data = (await res.json()) as OllamaGenerateResponse;
+      this.logger.debug(`Ollama response received [model=${data.model}, done=${data.done}]`);
+      const raw = data.response.trim();
+
+      try {
+        const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        const jsonString = jsonMatch ? jsonMatch[1].trim() : raw.trim();
+        return JSON.parse(jsonString) as T;
+      } catch (err: any) {
+        this.logger.error(`Failed to parse Ollama response as JSON: ${err.message}`);
+        this.logger.debug(`Raw response (first 500 chars): ${raw.slice(0, 500)}`);
+        throw new Error('AI returned invalid JSON');
+      }
     } catch (err: any) {
-      this.logger.error(`Failed to parse Ollama response as JSON: ${err.message}`);
-      throw new Error('AI returned invalid JSON');
+      this.logger.error(`Ollama structured call failed: ${err.message}`);
+      throw err;
     }
   }
 
