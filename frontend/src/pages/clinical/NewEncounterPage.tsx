@@ -29,7 +29,6 @@ import {
   MedicineBoxOutlined,
   FileTextOutlined,
   ExperimentOutlined,
-  HeartOutlined,
   CheckCircleOutlined,
   PrinterOutlined,
   CloseOutlined,
@@ -47,6 +46,8 @@ import { patientService } from '../../services/patientService';
 import { billingService, PatientInsurance } from '../../services/billingService';
 import { aiService } from '../../services/aiService';
 import VitalsFormSection from '../../components/clinical/VitalsFormSection';
+import { clinicalTemplateService } from '../../services/clinicalTemplateService';
+import type { ClinicalTemplate } from '../../types';
 import dayjs from 'dayjs';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -307,6 +308,92 @@ const NewEncounterPage: React.FC = () => {
     markDirty();
   };
 
+  const templateId = searchParams.get('templateId');
+
+  const applyTemplate = useCallback((template: ClinicalTemplate) => {
+    const setIf = (field: string, value: any) => {
+      if (value === undefined || value === null || value === '') return;
+      form.setFieldsValue({ [field]: value });
+    };
+
+    if (template.encounterType) setIf('type', template.encounterType);
+    if (template.visitReason) setIf('visitReason', template.visitReason);
+    if (template.chiefComplaint) setIf('chiefComplaint', template.chiefComplaint);
+
+    const soap = template.soapTemplate || {};
+    setIf('subjective', soap.subjective);
+    setIf('objective', soap.objective);
+    setIf('assessment', soap.assessment);
+    setIf('plan', soap.plan);
+
+    const vitals = template.vitalsTemplate || {};
+    setIf('bloodPressure', vitals.bloodPressure);
+    setIf('heartRate', vitals.heartRate);
+    setIf('temperature', vitals.temperature);
+    setIf('temperatureRoute', vitals.temperatureRoute);
+    setIf('weight', vitals.weight);
+    setIf('weightUnit', vitals.weightUnit);
+    setIf('height', vitals.height);
+    setIf('heightUnit', vitals.heightUnit);
+    setIf('bmi', vitals.bmi);
+    setIf('oxygenSaturation', vitals.oxygenSaturation);
+    setIf('respiratoryRate', vitals.respiratoryRate);
+    setIf('painScore', vitals.painScore);
+    setIf('painLocation', vitals.painLocation);
+    setIf('bloodGlucose', vitals.bloodGlucose);
+    setIf('bloodGlucoseContext', vitals.bloodGlucoseContext);
+
+    const tp = template.treatmentPlanTemplate || {};
+    setIf('followUp', tp.followUp);
+    if (tp.followUpDate) setIf('followUpDate', dayjs(tp.followUpDate));
+    setIf('followUpProviderName', tp.followUpProviderName);
+    setIf('homeInstructions', tp.homeInstructions);
+    setIf('restrictions', tp.restrictions);
+    setIf('recallReminder', tp.recallReminder);
+    if (tp.goals && tp.goals.length) setIf('goals', tp.goals.join('\n'));
+    if (tp.interventions && tp.interventions.length) setIf('interventions', tp.interventions.join('\n'));
+
+    if (template.diagnosisTemplate && template.diagnosisTemplate.length) {
+      setDiagnoses(template.diagnosisTemplate.map((d) => ({ ...d })));
+    }
+    if (template.medicationTemplate && template.medicationTemplate.length) {
+      setMedications(template.medicationTemplate.map((m) => ({ ...m, isNew: true })));
+    }
+    const orders = template.ordersTemplate || {};
+    if (orders.labs && orders.labs.length) {
+      setLabs(orders.labs.map((l) => ({ name: l.name, priority: l.priority || 'routine', notes: l.notes || '' })));
+    }
+    if (orders.imaging && orders.imaging.length) {
+      setImagingOrders(orders.imaging.map((i) => ({ name: i.name, modality: i.modality || '', bodyPart: i.bodyPart || '', priority: i.priority || 'routine' })));
+    }
+    if (orders.referrals && orders.referrals.length) {
+      setReferrals(orders.referrals.map((r) => ({ specialty: r.specialty, reason: r.reason, urgency: r.urgency || 'routine' })));
+    }
+    if (tp.procedures && tp.procedures.length) {
+      setProcedures(tp.procedures.map((p) => ({ name: p.name, cptCode: p.cptCode || '', description: p.description, status: 'ordered' })));
+    }
+
+    markDirty();
+  }, [form, setDiagnoses, setMedications, setLabs, setImagingOrders, setReferrals, setProcedures, markDirty]);
+
+  useEffect(() => {
+    if (templateId && patients.length > 0) {
+      clinicalTemplateService
+        .apply(templateId)
+        .then(({ template }) => {
+          applyTemplate(template);
+          if (template.encounterType && form.getFieldValue('type') === 'office_visit') {
+            form.setFieldsValue({ type: template.encounterType });
+          }
+          message.success(`Template "${template.name}" loaded. Select a patient and save the encounter.`);
+        })
+        .catch((err: unknown) => {
+          const error = err as { response?: { data?: { message?: string } } };
+          message.error(error?.response?.data?.message || 'Failed to load template');
+        });
+    }
+  }, [templateId, patients.length, applyTemplate, form]);
+
   const buildPayload = (values: any, status: string): Partial<Encounter> => {
     const today = dayjs().toISOString();
     return {
@@ -314,6 +401,7 @@ const NewEncounterPage: React.FC = () => {
       providerId: values.providerId,
       appointmentId: values.appointmentId || undefined,
       departmentId: values.departmentId || undefined,
+      clinicalTemplateId: templateId || undefined,
       location: values.location || undefined,
       room: values.room || undefined,
       type: values.type || 'office_visit',

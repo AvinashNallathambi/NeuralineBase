@@ -450,6 +450,11 @@ export class CreateEncounterDto {
   chiefComplaint?: string;
 
   @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  clinicalTemplateId?: string;
+
+  @ApiPropertyOptional()
   @IsDateString()
   @IsOptional()
   arrivalTime?: string;

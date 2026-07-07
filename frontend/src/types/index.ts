@@ -551,3 +551,166 @@ export interface TransitionWorkflowDto {
   note?: string;
   metadata?: Record<string, unknown>;
 }
+
+export type ClinicalTemplateStatus = 'active' | 'inactive' | 'archived' | 'draft';
+
+export interface ClinicalTemplateSoap {
+  subjective?: string;
+  objective?: string;
+  assessment?: string;
+  plan?: string;
+}
+
+export interface ClinicalTemplateVitals {
+  bloodPressure?: string;
+  heartRate?: string;
+  temperature?: string;
+  temperatureRoute?: string;
+  weight?: string;
+  weightUnit?: string;
+  height?: string;
+  heightUnit?: string;
+  bmi?: string;
+  oxygenSaturation?: string;
+  respiratoryRate?: string;
+  painScore?: number;
+  painLocation?: string;
+  bloodGlucose?: string;
+  bloodGlucoseContext?: string;
+}
+
+export interface ClinicalTemplateDiagnosis {
+  code: string;
+  description: string;
+  isPrimary: boolean;
+  type?: 'chronic' | 'acute' | 'rule_out';
+  status?: 'active' | 'resolved' | 'ruled_out';
+  notes?: string;
+}
+
+export interface ClinicalTemplateMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  route?: string;
+  duration?: string;
+  refills?: number;
+  instructions?: string;
+}
+
+export interface ClinicalTemplateProcedure {
+  name: string;
+  cptCode?: string;
+  description: string;
+}
+
+export interface ClinicalTemplateOrderLab {
+  name: string;
+  loincCode?: string;
+  priority?: 'routine' | 'stat' | 'asap';
+  notes?: string;
+}
+
+export interface ClinicalTemplateOrderImaging {
+  name: string;
+  modality?: string;
+  bodyPart?: string;
+  priority?: 'routine' | 'stat' | 'asap';
+}
+
+export interface ClinicalTemplateOrderReferral {
+  specialty: string;
+  provider?: string;
+  reason: string;
+  urgency?: 'routine' | 'urgent' | 'emergent';
+}
+
+export interface ClinicalTemplateOrders {
+  labs?: ClinicalTemplateOrderLab[];
+  imaging?: ClinicalTemplateOrderImaging[];
+  referrals?: ClinicalTemplateOrderReferral[];
+  procedures?: ClinicalTemplateProcedure[];
+}
+
+export interface ClinicalTemplateTreatmentPlan {
+  medications?: ClinicalTemplateMedication[];
+  procedures?: ClinicalTemplateProcedure[];
+  followUp?: string;
+  followUpDate?: string;
+  followUpProviderName?: string;
+  referrals?: Array<{ specialty: string; provider?: string; reason: string; urgency?: string }>;
+  goals?: string[];
+  interventions?: string[];
+  homeInstructions?: string;
+  patientEducation?: string[];
+  restrictions?: string;
+  recallReminder?: string;
+}
+
+export interface ClinicalTemplateBillingCode {
+  codeType: 'CPT' | 'ICD10' | 'HCPCS' | 'SNOMED';
+  code: string;
+  description: string;
+  isPrimary?: boolean;
+}
+
+export interface ClinicalTemplate {
+  id: string;
+  tenantId: string;
+  name: string;
+  specialty: string;
+  visitType: string;
+  description?: string | null;
+  icon: string;
+  isDefault: boolean;
+  isFavorite: boolean;
+  usageCount: number;
+  status: ClinicalTemplateStatus;
+  encounterType?: string | null;
+  department?: string | null;
+  tags?: string[];
+  visitReason?: string;
+  chiefComplaint?: string;
+  soapTemplate: ClinicalTemplateSoap;
+  vitalsTemplate: ClinicalTemplateVitals;
+  diagnosisTemplate: ClinicalTemplateDiagnosis[];
+  medicationTemplate: ClinicalTemplateMedication[];
+  ordersTemplate: ClinicalTemplateOrders;
+  treatmentPlanTemplate: ClinicalTemplateTreatmentPlan;
+  patientInstructions?: string;
+  billingCodes: ClinicalTemplateBillingCode[];
+  providerNotes?: string;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateClinicalTemplateDto {
+  name: string;
+  specialty: string;
+  visitType: string;
+  description?: string;
+  icon?: string;
+  isDefault?: boolean;
+  isFavorite?: boolean;
+  status?: ClinicalTemplateStatus;
+  encounterType?: string;
+  department?: string;
+  tags?: string[];
+  visitReason?: string;
+  chiefComplaint?: string;
+  soapTemplate?: ClinicalTemplateSoap;
+  vitalsTemplate?: ClinicalTemplateVitals;
+  diagnosisTemplate?: ClinicalTemplateDiagnosis[];
+  medicationTemplate?: ClinicalTemplateMedication[];
+  ordersTemplate?: ClinicalTemplateOrders;
+  treatmentPlanTemplate?: ClinicalTemplateTreatmentPlan;
+  patientInstructions?: string;
+  billingCodes?: ClinicalTemplateBillingCode[];
+  providerNotes?: string;
+}
+
+export type UpdateClinicalTemplateDto = Partial<CreateClinicalTemplateDto>;
+

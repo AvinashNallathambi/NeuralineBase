@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { Encounter, EncounterStatus, EncounterType } from './entities/encounter.entity';
 import { CreateEncounterDto } from './dto/create-encounter.dto';
 import { UpdateEncounterDto } from './dto/update-encounter.dto';
+import { ClinicalTemplate } from './entities/clinical-template.entity';
 
 export interface PaginationOptions {
   page: number;
@@ -38,6 +39,8 @@ export class EncounterService {
   constructor(
     @InjectRepository(Encounter)
     private readonly encounterRepository: Repository<Encounter>,
+    @InjectRepository(ClinicalTemplate)
+    private readonly clinicalTemplateRepository: Repository<ClinicalTemplate>,
   ) {}
 
   async create(tenantId: string, createEncounterDto: CreateEncounterDto): Promise<Encounter> {
@@ -55,6 +58,7 @@ export class EncounterService {
     encounter.visitCategory = createEncounterDto.visitCategory || null;
     encounter.visitReason = createEncounterDto.visitReason || null;
     encounter.chiefComplaint = createEncounterDto.chiefComplaint || null;
+    encounter.clinicalTemplateId = createEncounterDto.clinicalTemplateId || null;
     encounter.arrivalTime = createEncounterDto.arrivalTime ? new Date(createEncounterDto.arrivalTime) : null;
     encounter.startTime = new Date(createEncounterDto.startTime);
     encounter.endTime = createEncounterDto.endTime ? new Date(createEncounterDto.endTime) : null;
@@ -94,7 +98,20 @@ export class EncounterService {
       },
     ];
 
-    return this.encounterRepository.save(encounter);
+    const saved = await this.encounterRepository.save(encounter);
+
+    if (saved.clinicalTemplateId) {
+      const template = await this.clinicalTemplateRepository.findOne({
+        where: { id: saved.clinicalTemplateId, tenantId },
+      });
+      if (template) {
+        template.usageCount += 1;
+        template.lastUsedAt = new Date();
+        await this.clinicalTemplateRepository.save(template);
+      }
+    }
+
+    return saved;
   }
 
   async findAll(

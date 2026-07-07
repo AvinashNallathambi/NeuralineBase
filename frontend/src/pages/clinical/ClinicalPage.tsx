@@ -30,6 +30,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import isToday from 'dayjs/plugin/isToday';
 import { encounterService, Encounter, PaginatedEncounters } from '../../services/encounterService';
 import { patientService } from '../../services/patientService';
+import ClinicalTemplateGallery from '../../components/clinical/ClinicalTemplateGallery';
 import type { ColumnsType } from 'antd/es/table';
 
 dayjs.extend(isToday);
@@ -484,6 +485,8 @@ const ClinicalPage: React.FC = () => {
           }}
         />
       </Card>
+
+      <ClinicalTemplateGallery />
     </div>
   );
 };

@@ -57,6 +57,10 @@ export class Encounter {
   @Index()
   departmentId!: string | null;
 
+  @Column({ name: 'clinical_template_id', type: 'uuid', nullable: true })
+  @Index()
+  clinicalTemplateId!: string | null;
+
   @Column({ name: 'location', type: 'varchar', length: 255, nullable: true })
   location!: string | null;
 

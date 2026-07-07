@@ -147,6 +147,7 @@ export interface Encounter {
   providerId: string;
   appointmentId?: string;
   departmentId?: string;
+  clinicalTemplateId?: string;
   location?: string;
   room?: string;
   type: 'office_visit' | 'telehealth' | 'hospital' | 'emergency' | 'home_health' | 'nursing_facility';
