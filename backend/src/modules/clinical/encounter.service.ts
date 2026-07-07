@@ -66,14 +66,17 @@ export class EncounterService {
     encounter.soapNote = createEncounterDto.soapNote || {};
     encounter.vitals = createEncounterDto.vitals || {};
     encounter.diagnoses = (createEncounterDto.diagnoses || []).map((d) => ({
+      problemListId: d.problemListId,
       code: d.code,
+      codeSystem: (d.codeSystem as 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
       description: d.description,
       isPrimary: d.isPrimary ?? false,
       type: d.type as 'chronic' | 'acute' | 'rule_out' | undefined,
-      status: (d.status as 'active' | 'resolved' | 'ruled_out' | undefined) || 'active',
+      status: (d.status as 'active' | 'resolved' | 'ruled_out' | 'inactive' | undefined) || 'active',
       onsetDate: d.onsetDate,
       resolvedDate: d.resolvedDate,
       notes: d.notes,
+      isBillable: d.isBillable ?? false,
     }));
     encounter.treatmentPlan = createEncounterDto.treatmentPlan || {};
     encounter.allergies = (createEncounterDto.allergies || []).map((a) => ({
@@ -223,14 +226,17 @@ export class EncounterService {
     }
     if (updateEncounterDto.diagnoses !== undefined) {
       encounter.diagnoses = updateEncounterDto.diagnoses.map((d) => ({
+        problemListId: d.problemListId,
         code: d.code,
+        codeSystem: (d.codeSystem as 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
         description: d.description,
         isPrimary: d.isPrimary ?? false,
         type: d.type as 'chronic' | 'acute' | 'rule_out' | undefined,
-        status: (d.status as 'active' | 'resolved' | 'ruled_out' | undefined) || 'active',
+        status: (d.status as 'active' | 'resolved' | 'ruled_out' | 'inactive' | undefined) || 'active',
         onsetDate: d.onsetDate,
         resolvedDate: d.resolvedDate,
         notes: d.notes,
+        isBillable: d.isBillable ?? false,
       }));
     }
     if (updateEncounterDto.allergies !== undefined) {

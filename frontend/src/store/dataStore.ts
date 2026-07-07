@@ -50,24 +50,21 @@ import { patientService } from '../services/patientService';
 // Helper to map a backend-format appointment to the frontend Appointment type
 // (backend uses appointmentType, reasonForVisit, remindersEnabled, etc.)
 const mapBackendAppointment = (raw: any): Appointment => {
-  const patient = mockPatients.find((p) => p.id === raw.patientId);
-  const provider = mockProviders.find((p) => p.id === raw.providerId);
-
   return {
     id: raw.id,
     patientId: raw.patientId,
-    patientName: patient ? `${patient.firstName} ${patient.lastName}` : raw.patientName || 'Unknown',
+    patientName: raw.patientName || '',
     providerId: raw.providerId,
-    providerName: provider ? `Dr. ${provider.firstName} ${provider.lastName}` : raw.providerName || 'Unknown',
-    type: (raw.type || raw.appointmentType || 'follow_up') as AppointmentType,
+    providerName: raw.providerName || '',
+    type: (raw.appointmentType || 'follow_up') as AppointmentType,
     status: (raw.status || 'scheduled') as AppointmentStatus,
     startTime: typeof raw.startTime === 'string' ? raw.startTime : raw.startTime?.toISOString?.() || new Date().toISOString(),
     endTime: typeof raw.endTime === 'string' ? raw.endTime : raw.endTime?.toISOString?.() || new Date().toISOString(),
-    reason: raw.reason || raw.reasonForVisit || '',
-    notes: raw.notes,
+    reason: raw.reasonForVisit || '',
+    notes: raw.notes || undefined,
     isTelehealth: raw.isTelehealth ?? false,
-    meetingLink: raw.meetingLink || raw.location?.meetingLink || raw.meetingRoomId,
-    reminders: raw.reminders ?? raw.remindersEnabled ?? true,
+    meetingLink: raw.location?.meetingLink || undefined,
+    reminders: raw.remindersEnabled ?? true,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : raw.createdAt?.toISOString?.() || new Date().toISOString(),
   };
 };
@@ -151,13 +148,12 @@ export const useAppointmentStore = create<AppointmentStore>(
         const created = await appointmentService.create({
           patientId: appointment.patientId,
           providerId: appointment.providerId,
-          type: appointment.type,
+          appointmentType: appointment.type,
           startTime: new Date(appointment.startTime),
           endTime: new Date(appointment.endTime),
-          reason: appointment.reason,
+          reasonForVisit: appointment.reason,
           notes: appointment.notes,
           isTelehealth: appointment.isTelehealth,
-          location: appointment.location,
           durationMinutes: appointment.durationMinutes,
           remindersEnabled: appointment.remindersEnabled,
         });
@@ -180,7 +176,21 @@ export const useAppointmentStore = create<AppointmentStore>(
     updateAppointment: async (id, updates) => {
       set({ loading: true, error: null });
       try {
-        const updated = await appointmentService.update(id, updates);
+        const dto: any = {};
+        if (updates.type !== undefined) dto.appointmentType = updates.type;
+        if (updates.reason !== undefined) dto.reasonForVisit = updates.reason;
+        if (updates.status !== undefined) dto.status = updates.status;
+        if (updates.startTime !== undefined) dto.startTime = new Date(updates.startTime);
+        if (updates.endTime !== undefined) dto.endTime = new Date(updates.endTime);
+        if (updates.notes !== undefined) dto.notes = updates.notes;
+        if (updates.isTelehealth !== undefined) dto.isTelehealth = updates.isTelehealth;
+        if (updates.location !== undefined) dto.location = updates.location;
+        if (updates.durationMinutes !== undefined) dto.durationMinutes = updates.durationMinutes;
+        if (updates.remindersEnabled !== undefined) dto.remindersEnabled = updates.remindersEnabled;
+        if (updates.patientId !== undefined) dto.patientId = updates.patientId;
+        if (updates.providerId !== undefined) dto.providerId = updates.providerId;
+
+        const updated = await appointmentService.update(id, dto);
         const mappedUpdated = mapBackendAppointment(updated);
         set((s) => ({
           appointments: s.appointments.map((a) =>

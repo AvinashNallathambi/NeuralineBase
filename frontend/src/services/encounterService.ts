@@ -25,14 +25,17 @@ export interface EncounterVitals {
 }
 
 export interface EncounterDiagnosis {
+  problemListId?: string;
   code: string;
+  codeSystem?: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
   description: string;
   isPrimary: boolean;
   type?: 'chronic' | 'acute' | 'rule_out';
-  status?: 'active' | 'resolved' | 'ruled_out';
+  status?: 'active' | 'resolved' | 'ruled_out' | 'inactive';
   onsetDate?: string;
   resolvedDate?: string;
   notes?: string;
+  isBillable?: boolean;
 }
 
 export interface EncounterMedication {

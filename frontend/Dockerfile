@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Vite build-time API URL (defaults to relative nginx proxy path)
+ARG VITE_API_URL=/api/v1
+
 # Copy dependency manifests first (layer caching)
 COPY package.json package-lock.json* yarn.lock* pnpm-lock.yaml* ./
 
@@ -13,11 +16,14 @@ RUN \
   elif [ -f yarn.lock ]; then \
     yarn install --frozen-lockfile; \
   else \
-    npm ci; \
+    npm install; \
   fi
 
 # Copy source code
 COPY . .
+
+# Make build-time env var available to Vite
+ENV VITE_API_URL=${VITE_API_URL}
 
 # Build production bundle
 RUN \

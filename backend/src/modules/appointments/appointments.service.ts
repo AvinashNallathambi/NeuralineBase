@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere, Between } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
+import { Patient } from '../patients/entities/patient.entity';
 import { ProviderAvailability } from './entities/provider-availability.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
@@ -45,6 +46,8 @@ export class AppointmentsService {
     private readonly appointmentRepository: Repository<Appointment>,
     @InjectRepository(ProviderAvailability)
     private readonly availabilityRepository: Repository<ProviderAvailability>,
+    @InjectRepository(Patient)
+    private readonly patientRepository: Repository<Patient>,
     private readonly workflowService: WorkflowService,
   ) {}
 
@@ -104,6 +107,23 @@ export class AppointmentsService {
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
+    // Backfill patientName for existing records that lack the denormalized column
+    const pendingIds = data
+      .filter((a) => a.patientId && !a.patientName)
+      .map((a) => a.patientId);
+    if (pendingIds.length > 0) {
+      const patients = await this.patientRepository
+        .createQueryBuilder('patient')
+        .where('patient.id IN (:...ids)', { ids: pendingIds })
+        .getMany();
+      const nameMap = new Map(patients.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+      for (const appointment of data) {
+        if (!appointment.patientName && appointment.patientId) {
+          appointment.patientName = nameMap.get(appointment.patientId) || null;
+        }
+      }
+    }
+
     return {
       data,
       total,
@@ -123,6 +143,13 @@ export class AppointmentsService {
 
     if (!appointment) {
       throw new NotFoundException(`Appointment with ID "${id}" not found`);
+    }
+
+    if (!appointment.patientName && appointment.patientId) {
+      const patient = await this.patientRepository.findOne({
+        where: { id: appointment.patientId, tenantId },
+      });
+      appointment.patientName = patient ? `${patient.firstName} ${patient.lastName}` : null;
     }
 
     return appointment;
@@ -195,9 +222,26 @@ export class AppointmentsService {
       );
     }
 
+    // Look up patient name for denormalized storage
+    let patientName: string | null = null;
+    if (dto.patientId) {
+      const patient = await this.patientRepository.findOne({
+        where: { id: dto.patientId, tenantId },
+      });
+      if (patient) {
+        patientName = `${patient.firstName} ${patient.lastName}`;
+      }
+    }
+
+    // Look up provider name — fall back to providerId as display name
+    let providerName: string | null = dto.providerId;
+    // In future: look up from a Users/Providers table
+
     const appointment = this.appointmentRepository.create({
       patientId: dto.patientId,
+      patientName,
       providerId: dto.providerId,
+      providerName,
       appointmentType: dto.type || dto.appointmentType,
       startTime: new Date(dto.startTime),
       endTime: new Date(dto.endTime),
@@ -295,8 +339,17 @@ export class AppointmentsService {
     if (newReason) {
       appointment.reasonForVisit = newReason || null;
     }
-    if (dto.patientId) appointment.patientId = dto.patientId;
-    if (dto.providerId) appointment.providerId = dto.providerId;
+    if (dto.patientId && dto.patientId !== appointment.patientId) {
+      appointment.patientId = dto.patientId;
+      const patient = await this.patientRepository.findOne({
+        where: { id: dto.patientId, tenantId },
+      });
+      appointment.patientName = patient ? `${patient.firstName} ${patient.lastName}` : null;
+    }
+    if (dto.providerId && dto.providerId !== appointment.providerId) {
+      appointment.providerId = dto.providerId;
+      appointment.providerName = dto.providerId;
+    }
     if (dto.startTime) appointment.startTime = new Date(dto.startTime);
     if (dto.endTime) appointment.endTime = new Date(dto.endTime);
     if (dto.location !== undefined) appointment.location = dto.location;

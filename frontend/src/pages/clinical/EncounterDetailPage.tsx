@@ -70,6 +70,7 @@ import { patientService } from '../../services/patientService';
 import { billingService, PatientInsurance } from '../../services/billingService';
 import { aiService } from '../../services/aiService';
 import VitalsFormSection from '../../components/clinical/VitalsFormSection';
+import IcdSearchInput from '../../components/icd/IcdSearchInput';
 import type { ColumnsType } from 'antd/es/table';
 
 dayjs.extend(relativeTime);
@@ -130,9 +131,12 @@ const EncounterDetailPage: React.FC = () => {
   const [diagnoses, setDiagnoses] = useState<EncounterDiagnosis[]>([]);
   const [diagCode, setDiagCode] = useState('');
   const [diagDesc, setDiagDesc] = useState('');
+  const [diagCodeSystem, setDiagCodeSystem] = useState<EncounterDiagnosis['codeSystem']>('ICD-10-CM');
+  const [diagProblemListId, setDiagProblemListId] = useState<string | undefined>();
   const [diagIsPrimary, setDiagIsPrimary] = useState(false);
   const [diagType, setDiagType] = useState<'chronic' | 'acute' | 'rule_out'>('acute');
-  const [diagStatus, setDiagStatus] = useState<'active' | 'resolved' | 'ruled_out'>('active');
+  const [diagStatus, setDiagStatus] = useState<'active' | 'resolved' | 'ruled_out' | 'inactive'>('active');
+  const [diagIsBillable, setDiagIsBillable] = useState(false);
 
   const [medications, setMedications] = useState<EncounterMedication[]>([]);
 
@@ -536,7 +540,7 @@ const EncounterDetailPage: React.FC = () => {
 
   const handleAddDiagnosis = () => {
     if (!diagCode.trim() || !diagDesc.trim()) {
-      message.warning('ICD code and description are required');
+      message.warning('Diagnosis code and description are required');
       return;
     }
     if (diagIsPrimary && diagnoses.some((d) => d.isPrimary)) {
@@ -545,13 +549,25 @@ const EncounterDetailPage: React.FC = () => {
     }
     setDiagnoses([
       ...diagnoses,
-      { code: diagCode.trim().toUpperCase(), description: diagDesc.trim(), isPrimary: diagIsPrimary, type: diagType, status: diagStatus },
+      {
+        problemListId: diagProblemListId,
+        code: diagCode.trim().toUpperCase(),
+        codeSystem: diagCodeSystem,
+        description: diagDesc.trim(),
+        isPrimary: diagIsPrimary,
+        type: diagType,
+        status: diagStatus,
+        isBillable: diagIsBillable,
+      },
     ]);
     setDiagCode('');
     setDiagDesc('');
+    setDiagCodeSystem('ICD-10-CM');
+    setDiagProblemListId(undefined);
     setDiagIsPrimary(false);
     setDiagType('acute');
     setDiagStatus('active');
+    setDiagIsBillable(false);
     markDirty();
   };
 
@@ -768,17 +784,19 @@ const EncounterDetailPage: React.FC = () => {
 
   const diagnosisColumns: ColumnsType<EncounterDiagnosis> = [
     {
-      title: 'ICD-10',
+      title: 'Code',
       dataIndex: 'code',
-      width: 120,
+      width: 140,
       render: (code, record) => (
         <Space>
           <Tag color={record.isPrimary ? 'red' : 'blue'}>{code}</Tag>
           {record.isPrimary && <Tag color="red">Primary</Tag>}
+          {record.problemListId && <Tag color="blue">Problem</Tag>}
         </Space>
       ),
     },
     { title: 'Description', dataIndex: 'description', ellipsis: true },
+    { title: 'System', dataIndex: 'codeSystem', width: 100, render: (s) => <Tag>{s || 'ICD-10-CM'}</Tag> },
     { title: 'Type', dataIndex: 'type', width: 100, render: (t) => t && <Tag>{t.replace(/_/g, ' ')}</Tag> },
     { title: 'Status', dataIndex: 'status', width: 90, render: (s) => s && <Tag color={s === 'active' ? 'green' : 'default'}>{s}</Tag> },
     canEdit
@@ -1168,11 +1186,21 @@ const EncounterDetailPage: React.FC = () => {
         >
           {canEdit && (
             <Row gutter={8} style={{ marginBottom: 12 }}>
-              <Col xs={24} md={4}>
-                <Input placeholder="ICD-10 Code" value={diagCode} onChange={(e) => setDiagCode(e.target.value.toUpperCase())} onPressEnter={handleAddDiagnosis} style={{ textTransform: 'uppercase' }} />
-              </Col>
-              <Col xs={24} md={8}>
-                <Input placeholder="Description" value={diagDesc} onChange={(e) => setDiagDesc(e.target.value)} onPressEnter={handleAddDiagnosis} />
+              <Col xs={24} md={12}>
+                <IcdSearchInput
+                  value={diagCode}
+                  description={diagDesc}
+                  onSelect={(selection) => {
+                    setDiagCode(selection.code);
+                    setDiagDesc(selection.description);
+                    setDiagCodeSystem((selection.codeSystem as EncounterDiagnosis['codeSystem']) || 'ICD-10-CM');
+                    setDiagProblemListId(selection.problemListId);
+                    setDiagIsBillable(!!selection.isBillable);
+                  }}
+                  placeholder="Search ICD-10 code, problem, or diagnosis description"
+                  patientId={encounter?.patientId}
+                  providerId={encounter?.providerId}
+                />
               </Col>
               <Col xs={12} md={3}>
                 <Select value={diagType} onChange={setDiagType} style={{ width: '100%' }}>

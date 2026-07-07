@@ -28,6 +28,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PatientsService, PaginatedResult } from './patients.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { CreatePatientProblemDto } from './dto/create-patient-problem.dto';
+import { UpdatePatientProblemDto } from './dto/update-patient-problem.dto';
+import { QueryPatientProblemDto } from './dto/query-patient-problem.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -180,5 +183,60 @@ export class PatientsController {
       documentType,
       description,
     );
+  }
+
+  @Get(':id/problems')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get patient problem list' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'List of patient problems' })
+  async findProblems(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: QueryPatientProblemDto,
+  ) {
+    return this.patientsService.findProblems(req.tenantId, id, query);
+  }
+
+  @Post(':id/problems')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a problem to the patient problem list' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiResponse({ status: 201, description: 'Problem created' })
+  async createProblem(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePatientProblemDto,
+  ) {
+    return this.patientsService.createProblem(req.tenantId, id, dto, req.user.id);
+  }
+
+  @Patch(':id/problems/:problemId')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Update a patient problem' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiParam({ name: 'problemId', type: String, description: 'Problem UUID' })
+  async updateProblem(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('problemId', ParseUUIDPipe) problemId: string,
+    @Body() dto: UpdatePatientProblemDto,
+  ) {
+    return this.patientsService.updateProblem(req.tenantId, id, problemId, dto);
+  }
+
+  @Delete(':id/problems/:problemId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a patient problem' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiParam({ name: 'problemId', type: String, description: 'Problem UUID' })
+  async removeProblem(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('problemId', ParseUUIDPipe) problemId: string,
+  ) {
+    return this.patientsService.removeProblem(req.tenantId, id, problemId);
   }
 }

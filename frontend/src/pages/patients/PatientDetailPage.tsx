@@ -43,6 +43,7 @@ import type { Patient, Allergy, MedicalHistory, Appointment, Claim } from '../..
 import { mockPatients, mockAppointments, mockClaims } from '../../data/mockData';
 import { usePatientStore, useAppointmentStore, useBillingStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
+import ProblemListSection from '../../components/patients/ProblemListSection';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -772,10 +773,14 @@ const PatientDetailPage: React.FC = () => {
     );
   };
 
+  // ── Tab: Problem List ──
+  const ProblemListTab = () => <ProblemListSection patientId={patient.id} />;
+
   // ── Tabs definition ──
   const tabItems = [
     { key: 'overview', label: 'Overview', children: <OverviewTab /> },
     { key: 'history', label: 'Medical History', children: <MedicalHistoryTab /> },
+    { key: 'problems', label: 'Problem List', children: <ProblemListTab /> },
     { key: 'allergies', label: `Allergies (${patient.allergies.length})`, children: <AllergiesTab /> },
     { key: 'appointments', label: 'Appointments', children: <AppointmentsTab /> },
     { key: 'documents', label: 'Documents', children: <DocumentsTab /> },
