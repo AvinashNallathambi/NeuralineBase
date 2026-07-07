@@ -17,6 +17,7 @@ import { FhirModule } from './modules/fhir/fhir.module';
 import { AiModule } from './modules/ai/ai.module';
 import { SuperbillsModule } from './modules/superbills/superbills.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
+import { IcdModule } from './modules/icd/icd.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
@@ -93,6 +94,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     AiModule,
     SuperbillsModule,
     WorkflowModule,
+    IcdModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules

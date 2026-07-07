@@ -37,12 +37,31 @@ export interface SuggestCodesResponse {
   procedures: CodeSuggestion[];
 }
 
+export interface SuggestDiagnosisRequest {
+  query: string;
+  limit?: number;
+}
+
+export interface DiagnosisSuggestion {
+  code: string;
+  description: string;
+  confidence: number;
+  rationale: string;
+}
+
+export interface SuggestDiagnosisResponse {
+  suggestions: DiagnosisSuggestion[];
+}
+
 export const aiService = {
   generateSoap: (data: GenerateSoapRequest) =>
     api.post<SoapNoteResponse>('/ai/generate-soap', data),
 
   suggestCodes: (data: SuggestCodesRequest) =>
     api.post<SuggestCodesResponse>('/ai/suggest-codes', data),
+
+  suggestDiagnosis: (data: SuggestDiagnosisRequest) =>
+    api.post<SuggestDiagnosisResponse>('/ai/suggest-diagnosis', data),
 
   health: () => api.get<{ status: string; model: string; available: boolean }>('/ai/health'),
 };

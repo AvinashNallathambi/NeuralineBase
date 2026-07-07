@@ -149,10 +149,20 @@ class VitalsDto {
 }
 
 class DiagnosisDto {
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  problemListId?: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   code!: string;
+
+  @ApiPropertyOptional({ enum: ['ICD-10-CM', 'SNOMED CT', 'ICD-11'], default: 'ICD-10-CM' })
+  @IsString()
+  @IsOptional()
+  codeSystem?: string;
 
   @ApiProperty()
   @IsString()
@@ -169,7 +179,7 @@ class DiagnosisDto {
   @IsOptional()
   type?: string;
 
-  @ApiPropertyOptional({ enum: ['active', 'resolved', 'ruled_out'] })
+  @ApiPropertyOptional({ enum: ['active', 'resolved', 'ruled_out', 'inactive'] })
   @IsString()
   @IsOptional()
   status?: string;
@@ -188,6 +198,11 @@ class DiagnosisDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @ApiPropertyOptional({ default: false })
+  @IsBoolean()
+  @IsOptional()
+  isBillable?: boolean;
 }
 
 class MedicationDto {

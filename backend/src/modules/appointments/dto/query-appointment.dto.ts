@@ -19,7 +19,7 @@ export class QueryAppointmentDto {
   providerId?: string;
 
   @IsOptional()
-  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other'])
+  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other', 'group_therapy', 'group_session', 'new_patient', 'annual_physical', 'urgent_care', 'telehealth'])
   appointmentType?: string;
 
   @IsOptional()

@@ -31,9 +31,9 @@ export class CreateAppointmentDto {
   @IsNotEmpty()
   providerId!: string;
 
-  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other', 'group_therapy', 'group_session'])
+  @IsEnum(['consultation', 'follow_up', 'procedure', 'emergency', 'wellness', 'mental_health', 'other', 'group_therapy', 'group_session', 'new_patient', 'annual_physical', 'urgent_care', 'telehealth'])
   @IsOptional()
-  appointmentType?: 'consultation' | 'follow_up' | 'procedure' | 'emergency' | 'wellness' | 'mental_health' | 'other' | 'group_therapy' | 'group_session';
+  appointmentType?: 'consultation' | 'follow_up' | 'procedure' | 'emergency' | 'wellness' | 'mental_health' | 'other' | 'group_therapy' | 'group_session' | 'new_patient' | 'annual_physical' | 'urgent_care' | 'telehealth';
 
   @IsString()
   @IsOptional()

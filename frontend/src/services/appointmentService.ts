@@ -4,65 +4,51 @@ export interface Appointment {
   id: string;
   tenantId: string;
   patientId: string;
+  patientName?: string;
   providerId: string;
-  type: string;
+  providerName?: string;
+  appointmentType: string;
   status: string;
   startTime: string;
   endTime: string;
-  reason?: string;
+  reasonForVisit?: string;
   notes?: string;
+  location?: any;
   isTelehealth: boolean;
-  meetingLink?: string;
-  meetingRoomId?: string;
   remindersEnabled: boolean;
-  reminderSent: boolean;
-  location?: string;
   durationMinutes?: number;
-  checkInTime?: string;
-  startTimeActual?: string;
-  endTimeActual?: string;
-  cancellationReason?: string;
-  cancelledBy?: string;
-  cancelledAt?: string;
-  noShowReason?: string;
   createdAt: string;
   updatedAt: string;
-  deletedAt?: string;
+  patient?: any;
 }
 
 export interface CreateAppointmentDto {
-  patientId: string;
+  patientId?: string;
   providerId: string;
-  type: string;
+  appointmentType: string;
   startTime: Date;
   endTime: Date;
-  reason?: string;
+  reasonForVisit?: string;
   notes?: string;
+  location?: any;
   isTelehealth?: boolean;
-  location?: string;
   durationMinutes?: number;
   remindersEnabled?: boolean;
 }
 
 export interface UpdateAppointmentDto {
-  type?: string;
+  appointmentType?: string;
   status?: string;
   startTime?: Date;
   endTime?: Date;
-  reason?: string;
+  reasonForVisit?: string;
   notes?: string;
+  location?: any;
   isTelehealth?: boolean;
-  location?: string;
   durationMinutes?: number;
   remindersEnabled?: boolean;
-  checkInTime?: Date;
-  startTimeActual?: Date;
-  endTimeActual?: Date;
-  cancellationReason?: string;
-  cancelledBy?: string;
-  noShowReason?: string;
-  meetingLink?: string;
-  meetingRoomId?: string;
+  patientId?: string;
+  providerId?: string;
 }
 
 export interface PaginationOptions {
@@ -71,7 +57,7 @@ export interface PaginationOptions {
   patientId?: string;
   providerId?: string;
   status?: string;
-  type?: string;
+  appointmentType?: string;
   startDate?: Date;
   endDate?: Date;
 }
@@ -95,7 +81,7 @@ class AppointmentService {
     if (options.patientId) params.append('patientId', options.patientId);
     if (options.providerId) params.append('providerId', options.providerId);
     if (options.status) params.append('status', options.status);
-    if (options.type) params.append('type', options.type);
+    if (options.appointmentType) params.append('appointmentType', options.appointmentType);
     if (options.startDate) params.append('startDate', options.startDate.toISOString());
     if (options.endDate) params.append('endDate', options.endDate.toISOString());
 
@@ -174,13 +160,12 @@ class AppointmentService {
   }
 
   async update(id: string, dto: UpdateAppointmentDto): Promise<Appointment> {
-    const response = await api.put(`${this.baseUrl}/${id}`, dto);
+    const response = await api.patch(`${this.baseUrl}/${id}`, dto);
     return response.data;
   }
 
-  async delete(id: string): Promise<{ message: string }> {
-    const response = await api.delete(`${this.baseUrl}/${id}`);
-    return response.data;
+  async delete(id: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${id}`);
   }
 }
 

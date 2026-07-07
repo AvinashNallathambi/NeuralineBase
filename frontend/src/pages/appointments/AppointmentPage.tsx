@@ -329,9 +329,9 @@ const AppointmentPage: React.FC = () => {
         const newAppt: Appointment = {
           id: `apt-${Date.now()}`,
           patientId: values.patientId as string,
-          patientName: patient ? `${patient.firstName} ${patient.lastName}` : 'Unknown',
+          patientName: patient ? `${patient.firstName} ${patient.lastName}` : '',
           providerId: values.providerId as string,
-          providerName: provider ? provider.name : 'Unknown',
+          providerName: provider ? provider.name : '',
           type: values.type as AppointmentType,
           status: 'scheduled',
           startTime: apptDate

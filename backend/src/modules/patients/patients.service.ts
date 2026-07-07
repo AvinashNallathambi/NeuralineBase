@@ -5,9 +5,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, FindOptionsWhere } from 'typeorm';
+import { Repository, Like, FindOptionsWhere, Brackets } from 'typeorm';
 import { Patient } from './entities/patient.entity';
+import { PatientProblem, ProblemClinicalStatus, ProblemVerificationStatus, DiagnosisCodingSystem } from './entities/patient-problem.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { CreatePatientProblemDto } from './dto/create-patient-problem.dto';
+import { UpdatePatientProblemDto } from './dto/update-patient-problem.dto';
 
 export interface PaginationOptions {
   page: number;
@@ -25,6 +28,12 @@ export interface PaginatedResult<T> {
   totalPages: number;
 }
 
+export interface ProblemListQuery {
+  clinicalStatus?: string;
+  isChronic?: string;
+  search?: string;
+}
+
 @Injectable()
 export class PatientsService {
   private readonly logger = new Logger(PatientsService.name);
@@ -32,6 +41,8 @@ export class PatientsService {
   constructor(
     @InjectRepository(Patient)
     private readonly patientRepository: Repository<Patient>,
+    @InjectRepository(PatientProblem)
+    private readonly problemRepository: Repository<PatientProblem>,
   ) {}
 
   /**
@@ -225,5 +236,113 @@ export class PatientsService {
       documentType,
       url: fileUrl,
     };
+  }
+
+  async findProblems(
+    tenantId: string,
+    patientId: string,
+    query: ProblemListQuery,
+  ): Promise<PatientProblem[]> {
+    await this.findOne(tenantId, patientId);
+
+    const qb = this.problemRepository
+      .createQueryBuilder('problem')
+      .where('problem.tenantId = :tenantId', { tenantId })
+      .andWhere('problem.patientId = :patientId', { patientId })
+      .andWhere('problem.deletedAt IS NULL');
+
+    if (query.clinicalStatus) {
+      qb.andWhere('problem.clinicalStatus = :clinicalStatus', { clinicalStatus: query.clinicalStatus });
+    }
+
+    if (query.isChronic !== undefined) {
+      qb.andWhere('problem.isChronic = :isChronic', { isChronic: query.isChronic === 'true' });
+    }
+
+    if (query.search) {
+      const search = `%${query.search}%`;
+      qb.andWhere(
+        new Brackets((sub) => {
+          sub.where('problem.code ILIKE :search', { search });
+          sub.orWhere('problem.description ILIKE :search', { search });
+        }),
+      );
+    }
+
+    qb.orderBy('problem.isChronic', 'DESC').addOrderBy('problem.clinicalStatus', 'ASC').addOrderBy('problem.createdAt', 'DESC');
+
+    return qb.getMany();
+  }
+
+  async findProblemById(tenantId: string, patientId: string, id: string): Promise<PatientProblem> {
+    const problem = await this.problemRepository.findOne({
+      where: { id, tenantId, patientId },
+    });
+    if (!problem) {
+      throw new NotFoundException(`Problem with ID "${id}" not found`);
+    }
+    return problem;
+  }
+
+  async createProblem(
+    tenantId: string,
+    patientId: string,
+    dto: CreatePatientProblemDto,
+    recordedBy?: string,
+  ): Promise<PatientProblem> {
+    await this.findOne(tenantId, patientId);
+
+    const problem = new PatientProblem();
+    problem.tenantId = tenantId;
+    problem.patientId = patientId;
+    problem.code = dto.code.toUpperCase().trim();
+    problem.codeSystem = dto.codeSystem || DiagnosisCodingSystem.ICD_10_CM;
+    problem.description = dto.description.trim();
+    problem.clinicalStatus = dto.clinicalStatus || ProblemClinicalStatus.ACTIVE;
+    problem.verificationStatus = dto.verificationStatus || ProblemVerificationStatus.CONFIRMED;
+    problem.priority = dto.priority || null;
+    problem.isChronic = dto.isChronic ?? false;
+    problem.onsetDate = dto.onsetDate ? new Date(dto.onsetDate) : null;
+    problem.resolutionDate = dto.resolutionDate ? new Date(dto.resolutionDate) : null;
+    problem.recordedBy = recordedBy || null;
+    problem.notes = dto.notes || null;
+
+    const saved = await this.problemRepository.save(problem);
+    this.logger.log(`Problem created for patient ${patientId}: ${saved.id}`);
+    return saved;
+  }
+
+  async updateProblem(
+    tenantId: string,
+    patientId: string,
+    id: string,
+    dto: UpdatePatientProblemDto,
+  ): Promise<PatientProblem> {
+    const problem = await this.findProblemById(tenantId, patientId, id);
+
+    if (dto.code) problem.code = dto.code.toUpperCase().trim();
+    if (dto.codeSystem) problem.codeSystem = dto.codeSystem;
+    if (dto.description) problem.description = dto.description.trim();
+    if (dto.clinicalStatus) problem.clinicalStatus = dto.clinicalStatus;
+    if (dto.verificationStatus) problem.verificationStatus = dto.verificationStatus;
+    if (dto.priority !== undefined) problem.priority = dto.priority || null;
+    if (dto.isChronic !== undefined) problem.isChronic = dto.isChronic;
+    if (dto.onsetDate !== undefined) problem.onsetDate = dto.onsetDate ? new Date(dto.onsetDate) : null;
+    if (dto.resolutionDate !== undefined) problem.resolutionDate = dto.resolutionDate ? new Date(dto.resolutionDate) : null;
+    if (dto.notes !== undefined) problem.notes = dto.notes || null;
+
+    if (problem.clinicalStatus === ProblemClinicalStatus.RESOLVED && !problem.resolutionDate) {
+      problem.resolutionDate = new Date();
+    }
+
+    const saved = await this.problemRepository.save(problem);
+    this.logger.log(`Problem updated for patient ${patientId}: ${id}`);
+    return saved;
+  }
+
+  async removeProblem(tenantId: string, patientId: string, id: string): Promise<void> {
+    const problem = await this.findProblemById(tenantId, patientId, id);
+    await this.problemRepository.softRemove(problem);
+    this.logger.log(`Problem soft deleted for patient ${patientId}: ${id}`);
   }
 }

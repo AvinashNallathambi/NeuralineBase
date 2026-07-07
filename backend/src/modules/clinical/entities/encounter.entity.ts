@@ -140,14 +140,17 @@ export class Encounter {
 
   @Column({ name: 'diagnoses', type: 'jsonb', default: [] })
   diagnoses!: Array<{
+    problemListId?: string;
     code: string;
+    codeSystem?: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
     description: string;
     isPrimary: boolean;
     type?: 'chronic' | 'acute' | 'rule_out';
-    status?: 'active' | 'resolved' | 'ruled_out';
+    status?: 'active' | 'resolved' | 'ruled_out' | 'inactive';
     onsetDate?: string;
     resolvedDate?: string;
     notes?: string;
+    isBillable?: boolean;
   }>;
 
   @Column({ name: 'treatment_plan', type: 'jsonb', default: {} })

@@ -22,11 +22,17 @@ export class Appointment {
   @Index()
   tenantId!: string;
 
-  @Column({ name: 'patient_id', type: 'varchar', length: 100, nullable: true })
+  @Column({ name: 'patient_id', type: 'varchar', nullable: true })
   patientId!: string | null;
 
   @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
+
+  @Column({ name: 'patient_name', type: 'varchar', length: 255, nullable: true })
+  patientName!: string | null;
+
+  @Column({ name: 'provider_name', type: 'varchar', length: 255, nullable: true })
+  providerName!: string | null;
 
   @Column({ name: 'appointment_type', length: 50 })
   appointmentType!: string;

@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { PatientProblem } from './icdService';
 
 export interface Patient {
   id: string;
@@ -118,6 +119,39 @@ class PatientService {
   async getPrescriptions(patientId: string): Promise<unknown[]> {
     const response = await api.get(`${this.baseUrl}/${patientId}/prescriptions`);
     return response.data;
+  }
+
+  async findProblems(
+    patientId: string,
+    query?: { clinicalStatus?: string; isChronic?: string; search?: string },
+  ): Promise<PatientProblem[]> {
+    const params = new URLSearchParams();
+    if (query?.clinicalStatus) params.append('clinicalStatus', query.clinicalStatus);
+    if (query?.isChronic) params.append('isChronic', query.isChronic);
+    if (query?.search) params.append('search', query.search);
+    const response = await api.get(`${this.baseUrl}/${patientId}/problems?${params.toString()}`);
+    return response.data;
+  }
+
+  async createProblem(
+    patientId: string,
+    data: Partial<PatientProblem>,
+  ): Promise<PatientProblem> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/problems`, data);
+    return response.data;
+  }
+
+  async updateProblem(
+    patientId: string,
+    problemId: string,
+    data: Partial<PatientProblem>,
+  ): Promise<PatientProblem> {
+    const response = await api.patch(`${this.baseUrl}/${patientId}/problems/${problemId}`, data);
+    return response.data;
+  }
+
+  async deleteProblem(patientId: string, problemId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/problems/${problemId}`);
   }
 }
 

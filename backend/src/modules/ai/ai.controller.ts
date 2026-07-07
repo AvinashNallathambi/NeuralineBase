@@ -14,6 +14,11 @@ interface SuggestCodesDto {
   plan: string;
 }
 
+interface SuggestDiagnosisDto {
+  query: string;
+  limit?: number;
+}
+
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
 export class AiController {
@@ -77,6 +82,36 @@ Rules:
 - Confidence must be between 0.0 and 1.0.
 - Only include codes you are highly confident about.
 - Suggest modifiers when clinically appropriate (e.g., modifier 25 for E/M with procedure).`;
+
+    return this.aiService.generateStructured(prompt);
+  }
+
+  @Post('suggest-diagnosis')
+  async suggestDiagnosis(@Body() dto: SuggestDiagnosisDto) {
+    this.logger.debug(`Suggesting ICD-10 codes from natural language query: "${dto.query.slice(0, 100)}"`);
+
+    const prompt = `You are a certified medical coder (CPC). Convert the following natural language clinical description into accurate ICD-10-CM diagnosis codes.
+
+Clinical Description: "${dto.query}"
+
+Return ONLY a JSON object with this exact shape:
+{
+  "suggestions": [
+    {
+      "code": "ICD-10-CM code",
+      "description": "full code description",
+      "confidence": 0.95,
+      "rationale": "brief clinical rationale"
+    }
+  ]
+}
+
+Rules:
+- Return up to ${dto.limit ?? 8} suggestions.
+- Confidence must be between 0.0 and 1.0.
+- Include the most specific code available.
+- Only suggest codes you are highly confident about.
+- If the query is not a medical condition, return an empty array.`;
 
     return this.aiService.generateStructured(prompt);
   }

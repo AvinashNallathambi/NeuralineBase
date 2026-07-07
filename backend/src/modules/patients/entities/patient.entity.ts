@@ -103,6 +103,9 @@ export class Patient {
   @OneToMany('Encounter', 'patient')
   encounters!: unknown[];
 
+  @OneToMany('PatientProblem', 'patient')
+  problems!: unknown[];
+
   // TODO: Uncomment when Allergy entity is created
   // @OneToMany(() => Allergy, (allergy) => allergy.patient)
   // allergies!: Allergy[];
