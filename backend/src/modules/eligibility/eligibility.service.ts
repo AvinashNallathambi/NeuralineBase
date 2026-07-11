@@ -288,6 +288,7 @@ export class EligibilityService {
       patientId: v.patientId,
       patientInsuranceId: v.patientInsuranceId,
       insurancePayerId: v.insurancePayerId || insurance?.insurancePayerId || null,
+      tradingPartnerId: insurance?.payer?.payerId || null,
       policyNumber: v.policyNumber || insurance?.policyNumber || null,
       groupNumber: v.groupNumber || insurance?.groupNumber || null,
       subscriberName: insurance?.subscriberName || null,

@@ -2,6 +2,7 @@ export interface EligibilityRequest {
   patientId: string;
   patientInsuranceId?: string | null;
   insurancePayerId?: string | null;
+  tradingPartnerId?: string | null;
   policyNumber?: string | null;
   groupNumber?: string | null;
   subscriberName?: string | null;

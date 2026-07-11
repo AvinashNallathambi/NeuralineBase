@@ -93,9 +93,9 @@ export class StediEligibilityProvider implements EligibilityProvider {
       subscriber.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
     }
 
-    // Date of birth
+    // Date of birth (Stedi expects YYYYMMDD format)
     if (request.subscriberDob) {
-      subscriber.dateOfBirth = request.subscriberDob; // Expected YYYY-MM-DD
+      subscriber.dateOfBirth = request.subscriberDob.replace(/-/g, '');
     }
 
     // Group number
@@ -113,9 +113,9 @@ export class StediEligibilityProvider implements EligibilityProvider {
       },
     };
 
-    // Add payer if known
-    if (request.insurancePayerId) {
-      body.tradingPartnerServiceId = request.insurancePayerId;
+    // Add payer if known (tradingPartnerId is the Stedi payer ID like "ABDCE")
+    if (request.tradingPartnerId) {
+      body.tradingPartnerServiceId = request.tradingPartnerId;
     }
 
     // Add provider info placeholder
