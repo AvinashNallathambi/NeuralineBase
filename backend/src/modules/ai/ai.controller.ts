@@ -1,6 +1,11 @@
-import { Controller, Post, Body, Get, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Logger, Request, ForbiddenException } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { IntegrationsService } from '../integrations/integrations.service';
+
+interface AuthenticatedRequest {
+  user: { id: string; email: string; tenantId: string; role: string };
+}
 
 interface GenerateSoapDto {
   transcript: string;
@@ -19,12 +24,38 @@ interface SuggestDiagnosisDto {
   limit?: number;
 }
 
+interface ReviewMedication {
+  medication: string;
+  dosage: string;
+  frequency: string;
+  route?: string;
+  duration?: string;
+  quantity?: number;
+  refills?: number;
+  rxNormCode?: string;
+}
+
+interface ReviewMedicationsDto {
+  medications: ReviewMedication[];
+  allergies?: string[];
+  conditions?: string[];
+  age?: number;
+  gender?: string;
+}
+
+interface ParsePrescriptionDto {
+  transcript: string;
+}
+
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
 export class AiController {
   private readonly logger = new Logger(AiController.name);
 
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly integrationsService: IntegrationsService,
+  ) {}
 
   @Get('health')
   async health() {
@@ -122,5 +153,94 @@ Rules:
     // For local dev, we return a mock or call the whisper service
     this.logger.debug('Transcription requested — proxy to whisper service');
     return { text: 'Transcription service available at /api/v1/ai/transcribe', note: 'Upload audio to Whisper service at port 8001' };
+  }
+
+  @Post('review-medications')
+  async reviewMedications(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ReviewMedicationsDto,
+  ) {
+    const enabled = await this.integrationsService.isEnabled(req.user.tenantId, 'ai_prescribing');
+    if (!enabled) {
+      throw new ForbiddenException('AI prescribing assistant is not enabled for this tenant');
+    }
+
+    this.logger.debug('Reviewing medications with AI assistant');
+
+    const prompt = `You are a clinical pharmacist assistant. Review the following medication list against the patient's allergies and conditions.
+
+Medications:
+${JSON.stringify(dto.medications, null, 2)}
+
+Patient Allergies: ${(dto.allergies || []).join(', ') || 'None known'}
+Patient Conditions: ${(dto.conditions || []).join(', ') || 'None known'}
+${dto.age ? `Age: ${dto.age}` : ''}
+${dto.gender ? `Gender: ${dto.gender}` : ''}
+
+Return ONLY a JSON object with this exact shape:
+{
+  "score": 0-100 integer representing overall prescription safety,
+  "summary": "1-2 sentence clinical summary",
+  "issues": [
+    { "severity": "error" | "warning" | "info", "message": "concise explanation and recommendation" }
+  ]
+}
+
+Rules:
+- Include drug-drug interactions, drug-allergy contraindications, condition-related cautions, dosing red flags, and duplicate therapy.
+- If no issues, return an empty issues array.
+- Be concise and clinically accurate.`;
+
+    return this.aiService.generateStructured<{
+      score: number;
+      summary: string;
+      issues: Array<{ severity: 'error' | 'warning' | 'info'; message: string }>;
+    }>(prompt);
+  }
+
+  @Post('parse-prescription')
+  async parsePrescription(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: ParsePrescriptionDto,
+  ) {
+    const enabled = await this.integrationsService.isEnabled(req.user.tenantId, 'voice_prescribing');
+    if (!enabled) {
+      throw new ForbiddenException('Voice-to-prescription is not enabled for this tenant');
+    }
+
+    this.logger.debug('Parsing prescription transcript into structured fields');
+
+    const prompt = `You are a medical prescription parser. Convert the following provider dictation into structured prescription data.
+
+Transcript:
+"""${dto.transcript}"""
+
+Return ONLY a JSON object with this exact shape:
+{
+  "medications": [
+    {
+      "medication": "string",
+      "dosage": "string",
+      "frequency": "string",
+      "route": "string",
+      "duration": "string",
+      "quantity": number,
+      "refills": number,
+      "instructions": "string"
+    }
+  ],
+  "notes": "string"
+}
+
+Rules:
+- Infer sensible defaults if information is missing (e.g., route Oral, refills 0).
+- Quantity should be a number.
+- Refills should be a number.
+- Do not include explanations outside the JSON.`;
+
+    return this.aiService.generateStructured<{
+      medications: ReviewMedication[];
+      notes?: string;
+    }>(prompt);
   }
 }

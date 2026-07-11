@@ -21,7 +21,7 @@ export class ProvidersController {
 
   @Get()
   async findAll(@Request() req: AuthenticatedRequest) {
-    return this.providersService.findAll(req.tenantId);
+    return this.providersService.findAll(req.user.tenantId);
   }
 
   @Get(':id')
@@ -29,6 +29,6 @@ export class ProvidersController {
     @Request() req: AuthenticatedRequest,
     @Param('id') id: string,
   ) {
-    return this.providersService.findOne(req.tenantId, id);
+    return this.providersService.findOne(req.user.tenantId, id);
   }
 }

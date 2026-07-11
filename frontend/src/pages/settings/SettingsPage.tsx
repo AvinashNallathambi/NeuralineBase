@@ -21,6 +21,7 @@ import {
   TimePicker,
   Modal,
   Select,
+  Alert,
   message,
 } from 'antd';
 import {
@@ -52,9 +53,83 @@ import {
 } from '@ant-design/icons';
 import { mockUsers, mockAuditLog } from '../../data/mockData';
 import type { User } from '../../types';
+import { useIntegrations } from '../../hooks/useIntegrations';
+import { integrationService, type Integration } from '../../services/integrationService';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
+
+const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }) => {
+  const [enabled, setEnabled] = useState(integration.enabled);
+  const [saving, setSaving] = useState(false);
+
+  const handleToggle = async (checked: boolean) => {
+    setSaving(true);
+    try {
+      await integrationService.update(integration.key, { enabled: checked });
+      setEnabled(checked);
+      message.success(`${integration.name} ${checked ? 'enabled' : 'disabled'}`);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to update integration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card bordered={false} style={{ borderRadius: 12 }}>
+      <Row align="middle" gutter={16}>
+        <Col>
+          <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
+        </Col>
+        <Col flex={1}>
+          <Text strong style={{ fontSize: 16 }}>{integration.name}</Text>
+          <br />
+          <Text type="secondary" style={{ fontSize: 12 }}>{integration.description}</Text>
+          <br />
+          <Tag color="blue" style={{ marginTop: 4 }}>{integration.provider || 'Internal'}</Tag>
+        </Col>
+        <Col>
+          <Switch
+            checked={enabled}
+            onChange={handleToggle}
+            loading={saving}
+            disabled={saving}
+          />
+        </Col>
+      </Row>
+    </Card>
+  );
+};
+
+const IntegrationsTabContent: React.FC = () => {
+  const { integrations, loading, error } = useIntegrations();
+
+  if (loading) {
+    return <Card loading bordered={false} style={{ borderRadius: 12 }} />;
+  }
+
+  if (error) {
+    return (
+      <Alert
+        message="Could not load integrations"
+        description={error.message}
+        type="error"
+        showIcon
+      />
+    );
+  }
+
+  return (
+    <Row gutter={[16, 16]}>
+      {integrations.map((integration) => (
+        <Col xs={24} md={12} key={integration.key}>
+          <IntegrationCard integration={integration} />
+        </Col>
+      ))}
+    </Row>
+  );
+};
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 const SettingsPage: React.FC = () => {
@@ -522,38 +597,7 @@ const SettingsPage: React.FC = () => {
   );
 
   // ─── Integrations Tab ─────────────────────────────────────────────────────────
-  const integrations = [
-    { key: 'lab', name: 'Lab Systems', desc: 'Connect with Quest Diagnostics and LabCorp for automated result delivery', icon: '🧪', enabled: true, provider: 'Quest Diagnostics' },
-    { key: 'pharmacy', name: 'Pharmacy Networks', desc: 'E-prescribing via Surescripts network to 65,000+ pharmacies', icon: '💊', enabled: true, provider: 'Surescripts' },
-    { key: 'insurance', name: 'Insurance Clearinghouse', desc: 'Real-time eligibility verification and claims submission', icon: '🏥', enabled: false, provider: 'Availity' },
-    { key: 'ehr', name: 'EHR Interoperability', desc: 'HL7 FHIR integration for health information exchange', icon: '🔗', enabled: false, provider: 'FHIR R4' },
-  ];
-
-  const IntegrationsTab = (
-    <Row gutter={[16, 16]}>
-      {integrations.map((integration) => (
-        <Col xs={24} md={12} key={integration.key}>
-          <Card bordered={false} style={{ borderRadius: 12 }}>
-            <Row align="middle" gutter={16}>
-              <Col>
-                <div style={{ fontSize: 36 }}>{integration.icon}</div>
-              </Col>
-              <Col flex={1}>
-                <Text strong style={{ fontSize: 16 }}>{integration.name}</Text>
-                <br />
-                <Text type="secondary" style={{ fontSize: 12 }}>{integration.desc}</Text>
-                <br />
-                <Tag color="blue" style={{ marginTop: 4 }}>{integration.provider}</Tag>
-              </Col>
-              <Col>
-                <Switch defaultChecked={integration.enabled} />
-              </Col>
-            </Row>
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  );
+  const IntegrationsTab = <IntegrationsTabContent />;
 
   // ─── Audit Log Tab ────────────────────────────────────────────────────────────
   const auditColumns = [

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Typography,
   Button,
@@ -14,6 +14,7 @@ import {
   List,
   message,
   Tooltip,
+  Modal,
 } from 'antd';
 import {
   PlusOutlined,
@@ -24,12 +25,16 @@ import {
   MedicineBoxOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
+  MessageOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { Prescription, PrescriptionItem } from '../../types';
 import type { RefillRequest } from '../../data/mockData';
 import { usePrescriptionStore } from '../../store/dataStore';
+import { useIntegrations } from '../../hooks/useIntegrations';
+import { prescriptionService, type PaginatedPrescriptions } from '../../services/prescriptionService';
 import type { ColumnsType } from 'antd/es/table';
+import type { TablePaginationConfig } from 'antd/es/table/interface';
 
 const { Title, Text } = Typography;
 
@@ -42,37 +47,74 @@ const statusColors: Record<string, string> = {
 };
 
 const PrescriptionPage: React.FC = () => {
-  const { prescriptions, refillRequests: storeRefillRequests } = usePrescriptionStore();
+  const { refillRequests: storeRefillRequests, addRefillRequest } = usePrescriptionStore();
   const navigate = useNavigate();
+  const { isEnabled } = useIntegrations();
   const [activeTab, setActiveTab] = useState('all');
   const [searchText, setSearchText] = useState('');
   const [refillRequests, setRefillRequests] = useState<RefillRequest[]>(storeRefillRequests);
+  const [data, setData] = useState<PaginatedPrescriptions>({
+    data: [],
+    total: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 0,
+  });
+  const [loading, setLoading] = useState(false);
+  const [refillModalOpen, setRefillModalOpen] = useState(false);
+  const [refillPrescription, setRefillPrescription] = useState<Prescription | null>(null);
+  const [refillNotes, setRefillNotes] = useState('');
 
-  const filteredPrescriptions = useMemo(() => {
-    let data = [...prescriptions];
+  const relativeTime = (dateStr: string) => {
+    const now = Date.now();
+    const date = new Date(dateStr).getTime();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(dateStr).toLocaleDateString();
+  };
 
-    if (activeTab !== 'all') {
-      data = data.filter((rx) => rx.status === activeTab);
+  const loadPrescriptions = async (page = 1, limit = 10) => {
+    setLoading(true);
+    try {
+      const result = await prescriptionService.findAll({
+        page,
+        limit,
+        search: searchText || undefined,
+        status: activeTab !== 'all' ? activeTab : undefined,
+      });
+      setData(result);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to load prescriptions');
+    } finally {
+      setLoading(false);
     }
+  };
 
-    if (searchText) {
-      const lower = searchText.toLowerCase();
-      data = data.filter(
-        (rx) =>
-          rx.patientName.toLowerCase().includes(lower) ||
-          rx.medications.some((m) => m.medication.toLowerCase().includes(lower))
-      );
-    }
+  useEffect(() => {
+    void loadPrescriptions(1, data.limit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, searchText]);
 
-    return data;
-  }, [activeTab, searchText, prescriptions]);
+  const handleTableChange = (pagination: TablePaginationConfig) => {
+    void loadPrescriptions(pagination.current || 1, pagination.pageSize || 10);
+  };
 
-  const activePrescriptions = prescriptions.filter((rx) => rx.status === 'active').length;
+  const activePrescriptions = useMemo(
+    () => data.data.filter((rx) => rx.status === 'active').length,
+    [data],
+  );
   const pendingRefills = refillRequests.filter((r) => r.status === 'pending').length;
   const todayStr = new Date().toISOString().split('T')[0];
-  const prescribedToday = prescriptions.filter(
-    (rx) => rx.prescribedDate.split('T')[0] === todayStr
-  ).length;
+  const prescribedToday = useMemo(
+    () => data.data.filter((rx) => (rx.prescribedDate || '').split('T')[0] === todayStr).length,
+    [data, todayStr],
+  );
 
   const handleApproveRefill = (id: string) => {
     setRefillRequests((prev) =>
@@ -130,8 +172,8 @@ const PrescriptionPage: React.FC = () => {
       dataIndex: 'prescribedDate',
       key: 'prescribedDate',
       width: 120,
-      render: (date: string) => date.split('T')[0],
-      sorter: (a, b) => a.prescribedDate.localeCompare(b.prescribedDate),
+      render: (date: string) => (date ? date.split('T')[0] : '-'),
+      sorter: (a, b) => (a.prescribedDate || '').localeCompare(b.prescribedDate || ''),
       defaultSortOrder: 'descend',
     },
     {
@@ -204,11 +246,15 @@ const PrescriptionPage: React.FC = () => {
             />
           </Tooltip>
           {record.status === 'active' && (
-            <Tooltip title="Refill">
+            <Tooltip title="Request Refill">
               <Button
                 type="text"
                 icon={<ReloadOutlined />}
-                onClick={() => message.info('Refill request initiated')}
+                onClick={() => {
+                  setRefillPrescription(record);
+                  setRefillNotes('');
+                  setRefillModalOpen(true);
+                }}
               />
             </Tooltip>
           )}
@@ -295,10 +341,18 @@ const PrescriptionPage: React.FC = () => {
 
         <Table
           columns={columns}
-          dataSource={filteredPrescriptions}
+          dataSource={data.data}
           rowKey="id"
           expandable={{ expandedRowRender }}
-          pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `Total ${total} prescriptions` }}
+          loading={loading}
+          pagination={{
+            current: data.page,
+            pageSize: data.limit,
+            total: data.total,
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total} prescriptions`,
+          }}
+          onChange={handleTableChange}
           scroll={{ x: 1200 }}
         />
       </Card>
@@ -369,7 +423,7 @@ const PrescriptionPage: React.FC = () => {
                 description={
                   <Space direction="vertical" size={0}>
                     <Text type="secondary">
-                      Rx: {item.prescriptionId} | Requested: {item.requestedDate?.split('T')[0]}
+                      Rx: {item.prescriptionId} | {relativeTime(item.requestedDate)}
                     </Text>
                     {item.notes && <Text type="secondary" italic>{item.notes}</Text>}
                   </Space>
@@ -379,6 +433,45 @@ const PrescriptionPage: React.FC = () => {
           )}
         />
       </Card>
+
+      <Modal
+        title="Request Refill"
+        open={refillModalOpen}
+        onOk={() => {
+          if (!refillPrescription) return;
+          const newRequest: RefillRequest = {
+            id: `rr-${Date.now()}`,
+            prescriptionId: refillPrescription.id,
+            patientName: refillPrescription.patientName,
+            medication: refillPrescription.medications[0]?.medication || '',
+            dosage: refillPrescription.medications[0]?.dosage || '',
+            requestedDate: new Date().toISOString(),
+            status: 'pending',
+            notes: refillNotes || undefined,
+          };
+          addRefillRequest(newRequest);
+          setRefillRequests((prev) => [newRequest, ...prev]);
+          message.success('Refill request submitted');
+          setRefillModalOpen(false);
+        }}
+        onCancel={() => setRefillModalOpen(false)}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text>
+            Request a refill for prescription <Text strong>{refillPrescription?.id}</Text>?
+          </Text>
+          <Text type="secondary">Patient: {refillPrescription?.patientName}</Text>
+          <Text type="secondary">
+            Medication: {refillPrescription?.medications[0]?.medication} {refillPrescription?.medications[0]?.dosage}
+          </Text>
+          <Input.TextArea
+            placeholder="Add notes (optional)..."
+            value={refillNotes}
+            onChange={(e) => setRefillNotes(e.target.value)}
+            rows={3}
+          />
+        </Space>
+      </Modal>
     </div>
   );
 };

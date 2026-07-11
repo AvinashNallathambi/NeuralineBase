@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Typography,
   Button,
@@ -10,7 +10,10 @@ import {
   Row,
   Col,
   Divider,
+  Spin,
   message,
+  Input,
+  Modal,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -21,6 +24,8 @@ import {
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { PrescriptionItem } from '../../types';
+import type { RefillRequest } from '../../data/mockData';
+import { prescriptionService, type Prescription } from '../../services/prescriptionService';
 import { usePrescriptionStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -37,22 +42,27 @@ const statusColors: Record<string, string> = {
 const PrescriptionDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { prescriptions } = usePrescriptionStore();
+  const [prescription, setPrescription] = useState<Prescription | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refillModalOpen, setRefillModalOpen] = useState(false);
+  const [refillNotes, setRefillNotes] = useState('');
+  const { addRefillRequest } = usePrescriptionStore();
 
-  const prescription = prescriptions.find((rx) => rx.id === id);
-
-  if (!prescription) {
-    return (
-      <div style={{ padding: 24 }}>
-        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/prescriptions')}>
-          Back to Prescriptions
-        </Button>
-        <Title level={4} style={{ marginTop: 24 }}>
-          Prescription not found
-        </Title>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    prescriptionService
+      .findOne(id)
+      .then((rx) => {
+        setPrescription(rx);
+        setError(null);
+      })
+      .catch((err: any) => {
+        setError(err?.response?.data?.message || 'Prescription not found');
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const medColumns: ColumnsType<PrescriptionItem> = [
     { title: 'Medication', dataIndex: 'medication', key: 'medication', width: 180 },
@@ -70,6 +80,27 @@ const PrescriptionDetailPage: React.FC = () => {
       render: (text: string) => text || '-',
     },
   ];
+
+  if (loading) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (error || !prescription) {
+    return (
+      <div style={{ padding: 24 }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/prescriptions')}>
+          Back to Prescriptions
+        </Button>
+        <Title level={4} style={{ marginTop: 24 }}>
+          {error || 'Prescription not found'}
+        </Title>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -97,7 +128,7 @@ const PrescriptionDetailPage: React.FC = () => {
               Print
             </Button>
             {prescription.status === 'active' && (
-              <Button icon={<ReloadOutlined />} onClick={() => message.info('Refill request initiated')}>
+              <Button icon={<ReloadOutlined />} onClick={() => { setRefillNotes(''); setRefillModalOpen(true); }}>
                 Request Refill
               </Button>
             )}
@@ -116,7 +147,7 @@ const PrescriptionDetailPage: React.FC = () => {
                 </Tag>
               </Descriptions.Item>
               <Descriptions.Item label="Prescribed Date">
-                {prescription.prescribedDate.split('T')[0]}
+                {prescription.prescribedDate ? prescription.prescribedDate.split('T')[0] : '-'}
               </Descriptions.Item>
               <Descriptions.Item label="Patient">{prescription.patientName}</Descriptions.Item>
               <Descriptions.Item label="Provider">{prescription.providerName}</Descriptions.Item>
@@ -157,7 +188,7 @@ const PrescriptionDetailPage: React.FC = () => {
               </div>
               <div>
                 <Text strong>Date Prescribed</Text>
-                <div><Text>{prescription.prescribedDate.split('T')[0]}</Text></div>
+                <div><Text>{prescription.prescribedDate ? prescription.prescribedDate.split('T')[0] : '-'}</Text></div>
               </div>
               <div>
                 <Text strong>Pharmacy</Text>
@@ -183,6 +214,43 @@ const PrescriptionDetailPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="Request Refill"
+        open={refillModalOpen}
+        onOk={() => {
+          const newRequest: RefillRequest = {
+            id: `rr-${Date.now()}`,
+            prescriptionId: prescription.id,
+            patientName: prescription.patientName,
+            medication: prescription.medications[0]?.medication || '',
+            dosage: prescription.medications[0]?.dosage || '',
+            requestedDate: new Date().toISOString(),
+            status: 'pending',
+            notes: refillNotes || undefined,
+          };
+          addRefillRequest(newRequest);
+          message.success('Refill request submitted');
+          setRefillModalOpen(false);
+        }}
+        onCancel={() => setRefillModalOpen(false)}
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text>
+            Request a refill for prescription <Text strong>{prescription.id}</Text>?
+          </Text>
+          <Text type="secondary">Patient: {prescription.patientName}</Text>
+          <Text type="secondary">
+            Medication: {prescription.medications[0]?.medication} {prescription.medications[0]?.dosage}
+          </Text>
+          <Input.TextArea
+            placeholder="Add notes (optional)..."
+            value={refillNotes}
+            onChange={(e) => setRefillNotes(e.target.value)}
+            rows={3}
+          />
+        </Space>
+      </Modal>
     </div>
   );
 };

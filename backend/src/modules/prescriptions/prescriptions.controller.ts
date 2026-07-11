@@ -30,7 +30,6 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 interface AuthenticatedRequest {
   user: { id: string; email: string; tenantId: string; role: string };
-  tenantId: string;
 }
 
 @ApiTags('Prescriptions')
@@ -57,7 +56,7 @@ export class PrescriptionsController {
     @Query('status') status?: string,
     @Query('patientId') patientId?: string,
   ): Promise<PaginatedResult<any>> {
-    return this.prescriptionsService.findAll(req.tenantId, {
+    return this.prescriptionsService.findAll(req.user.tenantId, {
       page: page || 1,
       limit: limit || 20,
       search,
@@ -76,7 +75,7 @@ export class PrescriptionsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.prescriptionsService.findOne(req.tenantId, id);
+    return this.prescriptionsService.findOne(req.user.tenantId, id);
   }
 
   @Post()
@@ -89,7 +88,7 @@ export class PrescriptionsController {
     @Request() req: AuthenticatedRequest,
     @Body() createPrescriptionDto: CreatePrescriptionDto,
   ) {
-    return this.prescriptionsService.create(req.tenantId, createPrescriptionDto);
+    return this.prescriptionsService.create(req.user.tenantId, createPrescriptionDto);
   }
 
   @Patch(':id')
@@ -103,7 +102,7 @@ export class PrescriptionsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePrescriptionDto: UpdatePrescriptionDto,
   ) {
-    return this.prescriptionsService.update(req.tenantId, id, updatePrescriptionDto);
+    return this.prescriptionsService.update(req.user.tenantId, id, updatePrescriptionDto);
   }
 
   @Delete(':id')
@@ -117,6 +116,6 @@ export class PrescriptionsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.prescriptionsService.softDelete(req.tenantId, id);
+    return this.prescriptionsService.softDelete(req.user.tenantId, id);
   }
 }

@@ -47,7 +47,7 @@ export class EncounterClaim {
   @Column({ name: 'encounter_id', type: 'uuid', nullable: true })
   encounterId!: string | null;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'provider_name', type: 'varchar', length: 255 })

@@ -11,6 +11,7 @@ import {
 import { SuperbillDiagnosis } from './superbill-diagnosis.entity';
 import { SuperbillProcedure } from './superbill-procedure.entity';
 import { SuperbillCharge } from './superbill-charge.entity';
+import { SuperbillPayment } from './superbill-payment.entity';
 
 export enum SuperbillStatus {
   DRAFT = 'draft',
@@ -120,6 +121,31 @@ export class Superbill {
 
   @Column({ nullable: true })
   notes: string;
+
+  @Column({ nullable: true })
+  providerTaxId: string;
+
+  @Column({ nullable: true })
+  posCode: string;
+
+  @Column({ nullable: true })
+  facilityName: string;
+
+  @Column({ nullable: true })
+  facilityNPI: string;
+
+  @Column({ nullable: true })
+  referralNumber: string;
+
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  balance: number;
+
+  @OneToMany(() => SuperbillPayment, (payment) => payment.superbill, {
+    cascade: true,
+    eager: true,
+    nullable: true,
+  })
+  payments: SuperbillPayment[];
 
   @CreateDateColumn()
   createdAt: Date;
