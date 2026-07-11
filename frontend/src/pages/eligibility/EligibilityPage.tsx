@@ -12,7 +12,6 @@ import {
   message,
   Popconfirm,
   Tabs,
-  Statistic,
   Progress,
   Tooltip,
 } from 'antd';
@@ -283,12 +282,12 @@ const EligibilityPage: React.FC = () => {
   ];
 
   const tabItems = [
-    { key: 'all', label: `All (${counts.total})` },
-    { key: 'active', label: `Active (${counts.active})` },
-    { key: 'pending', label: `Pending (${counts.pending})` },
-    { key: 'denied', label: `Denied (${counts.failed})` },
-    { key: 'expired', label: `Expired (${counts.inactive})` },
-    { key: 'issues', label: `Issues (${counts.error})` },
+    { key: 'all', label: <span><ThunderboltOutlined style={{ marginRight: 6 }} />All ({counts.total})</span> },
+    { key: 'active', label: <span><CheckCircleOutlined style={{ marginRight: 6, color: '#52c41a' }} />Active ({counts.active})</span> },
+    { key: 'pending', label: <span><ClockCircleOutlined style={{ marginRight: 6, color: '#faad14' }} />Pending ({counts.pending})</span> },
+    { key: 'denied', label: <span><CloseCircleOutlined style={{ marginRight: 6, color: '#ff4d4f' }} />Denied ({counts.failed})</span> },
+    { key: 'expired', label: <span><StopOutlined style={{ marginRight: 6, color: '#fa8c16' }} />Expired ({counts.inactive})</span> },
+    { key: 'issues', label: <span><ExclamationCircleOutlined style={{ marginRight: 6, color: '#cf1322' }} />Issues ({counts.error})</span> },
   ];
 
   return (
@@ -297,6 +296,9 @@ const EligibilityPage: React.FC = () => {
       <Row justify="space-between" align="middle">
         <Col>
           <Title level={3} style={{ margin: 0 }}>Insurance Eligibility</Title>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            Verify patient insurance coverage and benefits in real-time
+          </Text>
         </Col>
         <Col>
           <Space>
@@ -322,13 +324,21 @@ const EligibilityPage: React.FC = () => {
       <Row gutter={[16, 16]}>
         {statCards.map((stat) => (
           <Col xs={12} sm={8} md={4} key={stat.title}>
-            <Card size="small" hoverable style={{ textAlign: 'center' }}>
-              <Statistic
-                title={stat.title}
-                value={stat.value}
-                prefix={stat.icon}
-                valueStyle={{ color: stat.color, fontSize: 20 }}
-              />
+            <Card
+              size="small"
+              hoverable
+              style={{ textAlign: 'center', borderTop: `3px solid ${stat.color}` }}
+              bodyStyle={{ padding: '16px 12px' }}
+            >
+              <div style={{ fontSize: 28, color: stat.color, marginBottom: 8 }}>
+                {stat.icon}
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 600, color: stat.color, lineHeight: 1.2 }}>
+                {stat.value}
+              </div>
+              <div style={{ fontSize: 13, color: '#8c8c8c', marginTop: 4 }}>
+                {stat.title}
+              </div>
             </Card>
           </Col>
         ))}
