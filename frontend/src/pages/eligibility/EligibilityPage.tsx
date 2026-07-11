@@ -12,6 +12,7 @@ import {
   message,
   Popconfirm,
   Tabs,
+  Statistic,
   Progress,
   Tooltip,
 } from 'antd';
@@ -27,6 +28,7 @@ import {
   ExclamationCircleOutlined,
   StopOutlined,
   ThunderboltOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useEligibilityStore } from '../../store/dataStore';
@@ -295,10 +297,15 @@ const EligibilityPage: React.FC = () => {
       {/* Header */}
       <Row justify="space-between" align="middle">
         <Col>
-          <Title level={3} style={{ margin: 0 }}>Insurance Eligibility</Title>
-          <Text type="secondary" style={{ fontSize: 13 }}>
-            Verify patient insurance coverage and benefits in real-time
-          </Text>
+          <Space align="center">
+            <SafetyCertificateOutlined style={{ fontSize: 28, color: '#1890ff' }} />
+            <div>
+              <Title level={3} style={{ margin: 0 }}>Insurance Eligibility</Title>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                Verify patient insurance coverage and benefits in real-time
+              </Text>
+            </div>
+          </Space>
         </Col>
         <Col>
           <Space>
@@ -324,21 +331,13 @@ const EligibilityPage: React.FC = () => {
       <Row gutter={[16, 16]}>
         {statCards.map((stat) => (
           <Col xs={12} sm={8} md={4} key={stat.title}>
-            <Card
-              size="small"
-              hoverable
-              style={{ textAlign: 'center', borderTop: `3px solid ${stat.color}` }}
-              bodyStyle={{ padding: '16px 12px' }}
-            >
-              <div style={{ fontSize: 28, color: stat.color, marginBottom: 8 }}>
-                {stat.icon}
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: stat.color, lineHeight: 1.2 }}>
-                {stat.value}
-              </div>
-              <div style={{ fontSize: 13, color: '#8c8c8c', marginTop: 4 }}>
-                {stat.title}
-              </div>
+            <Card size="small" hoverable style={{ textAlign: 'center' }}>
+              <Statistic
+                title={stat.title}
+                value={stat.value}
+                prefix={stat.icon}
+                valueStyle={{ color: stat.color, fontSize: 20 }}
+              />
             </Card>
           </Col>
         ))}
