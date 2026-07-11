@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EligibilityController } from './eligibility.controller';
 import { EligibilityAiController } from './eligibility-ai.controller';
 import { EligibilityService } from './eligibility.service';
@@ -10,6 +11,7 @@ import { EligibilitySchedulerService } from './eligibility-scheduler.service';
 import { InsuranceVerification } from './entities/insurance-verification.entity';
 import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
 import { MockEligibilityProvider } from './providers/mock-eligibility.provider';
+import { StediEligibilityProvider } from './providers/stedi-eligibility.provider';
 import { ELIGIBILITY_PROVIDER } from './providers/eligibility-provider.interface';
 import { AiModule } from '../ai/ai.module';
 
@@ -17,6 +19,7 @@ import { AiModule } from '../ai/ai.module';
   imports: [
     TypeOrmModule.forFeature([InsuranceVerification, PatientInsurance]),
     BullModule.registerQueue({ name: 'eligibility' }),
+    ConfigModule,
     AiModule,
   ],
   controllers: [EligibilityController, EligibilityAiController],
@@ -27,7 +30,14 @@ import { AiModule } from '../ai/ai.module';
     EligibilitySchedulerService,
     {
       provide: ELIGIBILITY_PROVIDER,
-      useClass: MockEligibilityProvider,
+      useFactory: (configService: ConfigService) => {
+        const stediKey = configService.get<string>('STEDI_API_KEY');
+        if (stediKey) {
+          return new StediEligibilityProvider(configService);
+        }
+        return new MockEligibilityProvider();
+      },
+      inject: [ConfigService],
     },
   ],
   exports: [EligibilityService],
