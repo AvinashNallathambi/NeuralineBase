@@ -10,11 +10,11 @@ import type {
   LabOrder,
   Claim,
   Message,
-  Notification,
-  EligibilityCheck,
+  EligibilityVerification,
+  CoverageSummary,
+  CreateEligibilityVerificationDto,
+  EligibilityQuery,
   Superbill,
-  ProviderSchedule,
-  ProviderAvailabilityOverride,
   WorkflowTemplate,
   WorkflowInstance,
   CreateWorkflowTemplateDto,
@@ -22,27 +22,19 @@ import type {
 } from '../types';
 import type { Payment, RefillRequest, ImagingOrder } from '../data/mockData';
 import {
-  mockPatients,
   mockProviders,
   mockEncounters,
   mockPrescriptions,
   mockLabOrders,
   mockClaims,
   mockMessages,
-  mockNotifications,
   mockPayments,
   mockRefillRequests,
   mockImagingOrders,
-  mockRecentActivities,
-  mockDashboardStats,
-  mockUsers,
-  mockAuditLog,
   mockEligibilityChecks,
   mockSuperbills,
-  mockProviderSchedules,
-  mockAvailabilityOverrides,
 } from '../data/mockData';
-import type { User, Activity, DashboardStats } from '../types';
+import type { User } from '../types';
 import { appointmentService } from '../services/appointmentService';
 import { workflowService } from '../services/workflowService';
 import { patientService } from '../services/patientService';
@@ -146,7 +138,7 @@ export const useAppointmentStore = create<AppointmentStore>(
       set({ loading: true, error: null });
       try {
         const created = await appointmentService.create({
-          patientId: appointment.patientId,
+          patientId: appointment.patientId || undefined,
           providerId: appointment.providerId,
           appointmentType: appointment.type,
           startTime: new Date(appointment.startTime),
@@ -187,7 +179,7 @@ export const useAppointmentStore = create<AppointmentStore>(
         if (updates.location !== undefined) dto.location = updates.location;
         if (updates.durationMinutes !== undefined) dto.durationMinutes = updates.durationMinutes;
         if (updates.remindersEnabled !== undefined) dto.remindersEnabled = updates.remindersEnabled;
-        if (updates.patientId !== undefined) dto.patientId = updates.patientId;
+        if (updates.patientId !== undefined) dto.patientId = updates.patientId || undefined;
         if (updates.providerId !== undefined) dto.providerId = updates.providerId;
 
         const updated = await appointmentService.update(id, dto);
@@ -578,26 +570,136 @@ export const useProviderStore = create<ProviderStore>(
 );
 
 // ── Eligibility Store ─────────────────────────────────────────────────────────
+import { eligibilityService, type EligibilityCounts } from '../services/eligibilityService';
+
 interface EligibilityStore {
-  checks: EligibilityCheck[];
-  addCheck: (check: EligibilityCheck) => void;
-  updateCheck: (id: string, updates: Partial<EligibilityCheck>) => void;
-  deleteCheck: (id: string) => void;
+  verifications: EligibilityVerification[];
+  total: number;
+  counts: EligibilityCounts;
+  coverageSummary: CoverageSummary | null;
+  loading: boolean;
+  error: string | null;
+  fetchVerifications: (query?: EligibilityQuery) => Promise<void>;
+  fetchCounts: () => Promise<void>;
+  fetchCoverageSummary: (patientId: string) => Promise<void>;
+  createVerification: (dto: CreateEligibilityVerificationDto) => Promise<EligibilityVerification | null>;
+  rerunVerification: (id: string) => Promise<EligibilityVerification | null>;
+  updateVerification: (id: string, updates: Partial<CreateEligibilityVerificationDto>) => Promise<EligibilityVerification | null>;
+  deleteVerification: (id: string) => Promise<void>;
+  batchVerify: (patientIds: string[]) => Promise<EligibilityVerification[]>;
 }
 
 export const useEligibilityStore = create<EligibilityStore>(
   (set) => ({
-    checks: [...mockEligibilityChecks],
-    addCheck: (check) =>
-      set((s) => ({ checks: [check, ...s.checks] })),
-    updateCheck: (id, updates) =>
-      set((s) => ({
-        checks: s.checks.map((c) =>
-          c.id === id ? { ...c, ...updates } : c
-        ),
-      })),
-    deleteCheck: (id) =>
-      set((s) => ({ checks: s.checks.filter((c) => c.id !== id) })),
+    verifications: [...mockEligibilityChecks],
+    total: 0,
+    counts: { total: 0, active: 0, pending: 0, inactive: 0, failed: 0, error: 0 },
+    coverageSummary: null,
+    loading: false,
+    error: null,
+
+    fetchVerifications: async (query = {}) => {
+      set({ loading: true, error: null });
+      try {
+        const result = await eligibilityService.findAll(query);
+        set({ verifications: result.data, total: result.total, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch eligibility verifications:', error);
+        set({ error: 'Failed to fetch eligibility verifications', loading: false });
+      }
+    },
+
+    fetchCounts: async () => {
+      try {
+        const counts = await eligibilityService.getCounts();
+        set({ counts });
+      } catch (error) {
+        console.error('Failed to fetch eligibility counts:', error);
+      }
+    },
+
+    fetchCoverageSummary: async (patientId) => {
+      set({ loading: true, error: null });
+      try {
+        const summary = await eligibilityService.coverageSummary(patientId);
+        set({ coverageSummary: summary, loading: false });
+      } catch (error) {
+        console.error('Failed to fetch coverage summary:', error);
+        set({ error: 'Failed to fetch coverage summary', loading: false, coverageSummary: null });
+      }
+    },
+
+    createVerification: async (dto) => {
+      set({ loading: true, error: null });
+      try {
+        const created = await eligibilityService.create(dto);
+        set((s) => ({ verifications: [created, ...s.verifications], loading: false }));
+        return created;
+      } catch (error) {
+        console.error('Failed to create eligibility verification:', error);
+        set({ error: 'Failed to create eligibility verification', loading: false });
+        return null;
+      }
+    },
+
+    rerunVerification: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await eligibilityService.rerun(id);
+        set((s) => ({
+          verifications: s.verifications.map((v) => (v.id === id ? updated : v)),
+          loading: false,
+        }));
+        return updated;
+      } catch (error) {
+        console.error('Failed to rerun verification:', error);
+        set({ error: 'Failed to rerun verification', loading: false });
+        return null;
+      }
+    },
+
+    updateVerification: async (id, updates) => {
+      set({ loading: true, error: null });
+      try {
+        const updated = await eligibilityService.update(id, updates);
+        set((s) => ({
+          verifications: s.verifications.map((v) => (v.id === id ? updated : v)),
+          loading: false,
+        }));
+        return updated;
+      } catch (error) {
+        console.error('Failed to update verification:', error);
+        set({ error: 'Failed to update verification', loading: false });
+        return null;
+      }
+    },
+
+    deleteVerification: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        await eligibilityService.delete(id);
+        set((s) => ({
+          verifications: s.verifications.filter((v) => v.id !== id),
+          loading: false,
+        }));
+      } catch (error) {
+        console.error('Failed to delete verification:', error);
+        set({ error: 'Failed to delete verification', loading: false });
+      }
+    },
+
+    batchVerify: async (patientIds) => {
+      set({ loading: true, error: null });
+      try {
+        const results = await eligibilityService.batchVerify(patientIds);
+        set((s) => ({ verifications: [...results, ...s.verifications], loading: false }));
+        return results;
+      } catch (error) {
+        console.error('Failed to run batch verification:', error);
+        set({ error: 'Failed to run batch verification', loading: false });
+        return [];
+      }
+    },
   }),
 );
 
@@ -607,10 +709,13 @@ interface SuperbillStore {
   loading: boolean;
   error: string | null;
   fetchSuperbills: (options?: { patientId?: string; providerId?: string; status?: string }) => Promise<void>;
-  addSuperbill: (superbill: Partial<Superbill>) => Promise<void>;
-  updateSuperbill: (id: string, updates: Partial<Superbill>) => Promise<void>;
+  addSuperbill: (superbill: Partial<Superbill>) => Promise<Superbill | null>;
+  updateSuperbill: (id: string, updates: Partial<Superbill>) => Promise<Superbill | null>;
   deleteSuperbill: (id: string) => Promise<void>;
-  submitSuperbill: (id: string) => Promise<void>;
+  submitSuperbill: (id: string) => Promise<Superbill | null>;
+  resubmitSuperbill: (id: string) => Promise<Superbill | null>;
+  voidSuperbill: (id: string) => Promise<Superbill | null>;
+  correctedClaimSuperbill: (id: string) => Promise<Superbill | null>;
 }
 
 import { superbillService } from '../services/superbillService';
@@ -637,12 +742,14 @@ export const useSuperbillStore = create<SuperbillStore>(
       try {
         const created = await superbillService.create(superbill);
         set((s) => ({ superbills: [created, ...s.superbills], loading: false }));
+        return created;
       } catch (error) {
         console.error('Failed to create superbill:', error);
         set({ error: 'Failed to create superbill', loading: false });
         // Fallback for UI if backend is not available
         const fallback = { ...superbill, id: Math.random().toString() } as Superbill;
         set((s) => ({ superbills: [fallback, ...s.superbills] }));
+        return fallback;
       }
     },
 
@@ -654,12 +761,15 @@ export const useSuperbillStore = create<SuperbillStore>(
           superbills: s.superbills.map((sb) => (sb.id === id ? updated : sb)),
           loading: false,
         }));
+        return updated;
       } catch (error) {
         console.error('Failed to update superbill:', error);
         set({ error: 'Failed to update superbill', loading: false });
+        const fallback = { ...updates, id } as Superbill;
         set((s) => ({
-          superbills: s.superbills.map((sb) => (sb.id === id ? { ...sb, ...updates } : sb)),
+          superbills: s.superbills.map((sb) => (sb.id === id ? fallback : sb)),
         }));
+        return fallback;
       }
     },
 
@@ -686,57 +796,81 @@ export const useSuperbillStore = create<SuperbillStore>(
           superbills: s.superbills.map((sb) => (sb.id === id ? submitted : sb)),
           loading: false,
         }));
+        return submitted;
       } catch (error) {
         console.error('Failed to submit superbill:', error);
         set({ error: 'Failed to submit superbill', loading: false });
+        const fallback = { status: 'submitted', submissionDate: new Date().toISOString() } as Partial<Superbill>;
         set((s) => ({
           superbills: s.superbills.map((sb) =>
             sb.id === id
-              ? { ...sb, status: 'submitted', submissionDate: new Date().toISOString() }
+              ? { ...sb, ...fallback }
               : sb
           ),
         }));
+        return null;
       }
     },
-  }),
-);
 
-// ── Provider Availability Store ───────────────────────────────────────────────
-interface ProviderAvailabilityStore {
-  schedules: ProviderSchedule[];
-  overrides: ProviderAvailabilityOverride[];
-  addSchedule: (schedule: ProviderSchedule) => void;
-  updateSchedule: (id: string, updates: Partial<ProviderSchedule>) => void;
-  deleteSchedule: (id: string) => void;
-  addOverride: (override: ProviderAvailabilityOverride) => void;
-  updateOverride: (id: string, updates: Partial<ProviderAvailabilityOverride>) => void;
-  deleteOverride: (id: string) => void;
-}
+    resubmitSuperbill: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        const resubmitted = await superbillService.resubmit(id);
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? resubmitted : sb)),
+          loading: false,
+        }));
+        return resubmitted;
+      } catch (error) {
+        console.error('Failed to resubmit superbill:', error);
+        set({ error: 'Failed to resubmit superbill', loading: false });
+        const fallback = { status: 'resubmitted', submissionDate: new Date().toISOString() } as Partial<Superbill>;
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? { ...sb, ...fallback } : sb)),
+        }));
+        return null;
+      }
+    },
 
-export const useProviderAvailabilityStore = create<ProviderAvailabilityStore>(
-  (set) => ({
-    schedules: [...mockProviderSchedules],
-    overrides: [...mockAvailabilityOverrides],
-    addSchedule: (schedule) =>
-      set((s) => ({ schedules: [...s.schedules, schedule] })),
-    updateSchedule: (id, updates) =>
-      set((s) => ({
-        schedules: s.schedules.map((sc) =>
-          sc.id === id ? { ...sc, ...updates } : sc
-        ),
-      })),
-    deleteSchedule: (id) =>
-      set((s) => ({ schedules: s.schedules.filter((sc) => sc.id !== id) })),
-    addOverride: (override) =>
-      set((s) => ({ overrides: [override, ...s.overrides] })),
-    updateOverride: (id, updates) =>
-      set((s) => ({
-        overrides: s.overrides.map((o) =>
-          o.id === id ? { ...o, ...updates } : o
-        ),
-      })),
-    deleteOverride: (id) =>
-      set((s) => ({ overrides: s.overrides.filter((o) => o.id !== id) })),
+    voidSuperbill: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        const voided = await superbillService.markVoid(id);
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? voided : sb)),
+          loading: false,
+        }));
+        return voided;
+      } catch (error) {
+        console.error('Failed to void superbill:', error);
+        set({ error: 'Failed to void superbill', loading: false });
+        const fallback = { status: 'voided' } as Partial<Superbill>;
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? { ...sb, ...fallback } : sb)),
+        }));
+        return null;
+      }
+    },
+
+    correctedClaimSuperbill: async (id) => {
+      set({ loading: true, error: null });
+      try {
+        const corrected = await superbillService.correctedClaim(id);
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? corrected : sb)),
+          loading: false,
+        }));
+        return corrected;
+      } catch (error) {
+        console.error('Failed to correct superbill:', error);
+        set({ error: 'Failed to correct superbill', loading: false });
+        const fallback = { status: 'corrected' } as Partial<Superbill>;
+        set((s) => ({
+          superbills: s.superbills.map((sb) => (sb.id === id ? { ...sb, ...fallback } : sb)),
+        }));
+        return null;
+      }
+    },
   }),
 );
 
