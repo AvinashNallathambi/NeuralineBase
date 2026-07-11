@@ -86,7 +86,8 @@ export class PatientsService {
     queryBuilder
       .orderBy('patient.createdAt', 'DESC')
       .skip(skip)
-      .take(limit);
+      .take(limit)
+      .loadRelationCountAndMap('patient.insuranceCount', 'patient.insurances');
 
     const [data, total] = await queryBuilder.getManyAndCount();
 
@@ -105,6 +106,7 @@ export class PatientsService {
   async findOne(tenantId: string, id: string): Promise<Patient> {
     const patient = await this.patientRepository.findOne({
       where: { id, tenantId },
+      relations: ['insurances', 'insurances.payer'],
     });
 
     if (!patient) {
@@ -133,6 +135,11 @@ export class PatientsService {
       }
     }
 
+    // Auto-generate MRN if not provided (format: MRN-YYYY-NNNNN)
+    if (!dto.mrn) {
+      dto.mrn = await this.generateMrn(tenantId);
+    }
+
     const patient = this.patientRepository.create({
       ...dto,
       tenantId,
@@ -140,8 +147,37 @@ export class PatientsService {
     });
 
     const saved = await this.patientRepository.save(patient);
-    this.logger.log(`Patient created: ${saved.id} in tenant ${tenantId}`);
+    this.logger.log(`Patient created: ${saved.id} (MRN: ${saved.mrn}) in tenant ${tenantId}`);
     return saved;
+  }
+
+  /**
+   * Generate a unique MRN for a patient within a tenant.
+   * Format: MRN-YYYY-NNNNN (e.g., MRN-2026-00001)
+   */
+  private async generateMrn(tenantId: string): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `MRN-${year}-`;
+
+    // Find the highest existing MRN with this prefix for this tenant
+    const patients = await this.patientRepository
+      .createQueryBuilder('patient')
+      .select('patient.mrn', 'mrn')
+      .where('patient.tenantId = :tenantId', { tenantId })
+      .andWhere('patient.mrn LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('patient.mrn', 'DESC')
+      .limit(1)
+      .getRawOne<{ mrn: string | null }>();
+
+    let nextNum = 1;
+    if (patients?.mrn) {
+      const currentNum = parseInt(patients.mrn.replace(prefix, ''), 10);
+      if (!isNaN(currentNum)) {
+        nextNum = currentNum + 1;
+      }
+    }
+
+    return `${prefix}${String(nextNum).padStart(5, '0')}`;
   }
 
   /**

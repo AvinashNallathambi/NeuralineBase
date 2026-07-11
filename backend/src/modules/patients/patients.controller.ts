@@ -37,7 +37,6 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 interface AuthenticatedRequest {
   user: { id: string; email: string; tenantId: string; role: string };
-  tenantId: string;
 }
 
 @ApiTags('Patients')
@@ -64,7 +63,7 @@ export class PatientsController {
     @Query('status') status?: string,
     @Query('gender') gender?: string,
   ): Promise<PaginatedResult<any>> {
-    return this.patientsService.findAll(req.tenantId, {
+    return this.patientsService.findAll(req.user.tenantId, {
       page: page || 1,
       limit: limit || 20,
       search,
@@ -83,7 +82,7 @@ export class PatientsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.patientsService.findOne(req.tenantId, id);
+    return this.patientsService.findOne(req.user.tenantId, id);
   }
 
   @Post()
@@ -97,7 +96,7 @@ export class PatientsController {
     @Request() req: AuthenticatedRequest,
     @Body() createPatientDto: CreatePatientDto,
   ) {
-    return this.patientsService.create(req.tenantId, createPatientDto);
+    return this.patientsService.create(req.user.tenantId, createPatientDto);
   }
 
   @Patch(':id')
@@ -111,7 +110,7 @@ export class PatientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePatientDto: Partial<CreatePatientDto>,
   ) {
-    return this.patientsService.update(req.tenantId, id, updatePatientDto);
+    return this.patientsService.update(req.user.tenantId, id, updatePatientDto);
   }
 
   @Delete(':id')
@@ -125,7 +124,7 @@ export class PatientsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.patientsService.softDelete(req.tenantId, id);
+    return this.patientsService.softDelete(req.user.tenantId, id);
   }
 
   @Get(':id/encounters')
@@ -137,7 +136,7 @@ export class PatientsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.patientsService.getEncounters(req.tenantId, id);
+    return this.patientsService.getEncounters(req.user.tenantId, id);
   }
 
   @Get(':id/prescriptions')
@@ -149,7 +148,7 @@ export class PatientsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.patientsService.getPrescriptions(req.tenantId, id);
+    return this.patientsService.getPrescriptions(req.user.tenantId, id);
   }
 
   @Post(':id/documents')
@@ -177,7 +176,7 @@ export class PatientsController {
     @Body('description') description: string,
   ) {
     return this.patientsService.uploadDocument(
-      req.tenantId,
+      req.user.tenantId,
       id,
       file,
       documentType,
@@ -195,7 +194,7 @@ export class PatientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: QueryPatientProblemDto,
   ) {
-    return this.patientsService.findProblems(req.tenantId, id, query);
+    return this.patientsService.findProblems(req.user.tenantId, id, query);
   }
 
   @Post(':id/problems')
@@ -209,7 +208,7 @@ export class PatientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreatePatientProblemDto,
   ) {
-    return this.patientsService.createProblem(req.tenantId, id, dto, req.user.id);
+    return this.patientsService.createProblem(req.user.tenantId, id, dto, req.user.id);
   }
 
   @Patch(':id/problems/:problemId')
@@ -223,7 +222,7 @@ export class PatientsController {
     @Param('problemId', ParseUUIDPipe) problemId: string,
     @Body() dto: UpdatePatientProblemDto,
   ) {
-    return this.patientsService.updateProblem(req.tenantId, id, problemId, dto);
+    return this.patientsService.updateProblem(req.user.tenantId, id, problemId, dto);
   }
 
   @Delete(':id/problems/:problemId')
@@ -237,6 +236,6 @@ export class PatientsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('problemId', ParseUUIDPipe) problemId: string,
   ) {
-    return this.patientsService.removeProblem(req.tenantId, id, problemId);
+    return this.patientsService.removeProblem(req.user.tenantId, id, problemId);
   }
 }

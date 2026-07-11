@@ -69,15 +69,15 @@ const BillingPage = lazyWithRetry(() => import("../pages/billing/BillingPage"));
 const ClaimDetailPage = lazyWithRetry(
   () => import("../pages/billing/ClaimDetailPage"),
 );
-// const InsuranceEligibilityPage = lazyWithRetry(() => import('../pages/insurance/InsuranceEligibilityPage'));
+const EligibilityPage = lazyWithRetry(() => import('../pages/eligibility/EligibilityPage'));
 const SuperbillListPage = lazyWithRetry(() => import('../pages/superbills/SuperbillListPage'));
 const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbills/SuperbillDetailPage'));
 const CreateSuperbillPage = lazyWithRetry(() => import('../pages/superbills/CreateSuperbillPage'));
 const EditSuperbillPage = lazyWithRetry(() => import('../pages/superbills/EditSuperbillPage'));
 const WorkflowListPage = lazyWithRetry(() => import('../pages/workflow/WorkflowListPage'));
 const WorkflowBuilderPage = lazyWithRetry(() => import('../pages/workflow/WorkflowBuilderPage'));
-// const ProviderAvailabilityPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderAvailabilityPage'));
-// const ProviderScheduleDetailPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderScheduleDetailPage'));
+const ProviderAvailabilityPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderAvailabilityPage'));
+const ProviderScheduleDetailPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderScheduleDetailPage'));
 const AiEncounterPage = lazyWithRetry(
   () => import("../pages/ai-encounter/AiEncounterPage"),
 );
@@ -271,14 +271,14 @@ const router = createBrowserRouter([
           </LazyPage>
         ),
       },
-      // {
-      //   path: '/eligibility',
-      //   element: (
-      //     <LazyPage>
-      //       <InsuranceEligibilityPage />
-      //     </LazyPage>
-      //   ),
-      // },
+      {
+        path: '/eligibility',
+        element: (
+          <LazyPage>
+            <EligibilityPage />
+          </LazyPage>
+        ),
+      },
       {
         path: '/superbills',
         element: (
@@ -311,22 +311,22 @@ const router = createBrowserRouter([
           </LazyPage>
         ),
       },
-      // {
-      //   path: '/provider-availability',
-      //   element: (
-      //     <LazyPage>
-      //       <ProviderAvailabilityPage />
-      //     </LazyPage>
-      //   ),
-      // },
-      // {
-      //   path: '/provider-availability/:id',
-      //   element: (
-      //     <LazyPage>
-      //       <ProviderScheduleDetailPage />
-      //     </LazyPage>
-      //   ),
-      // },
+      {
+        path: '/provider-availability',
+        element: (
+          <LazyPage>
+            <ProviderAvailabilityPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/provider-availability/:id',
+        element: (
+          <LazyPage>
+            <ProviderScheduleDetailPage />
+          </LazyPage>
+        ),
+      },
       {
         path: "/ai-encounter",
         element: (

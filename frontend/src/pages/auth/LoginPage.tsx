@@ -110,7 +110,7 @@ const LoginPage: React.FC = () => {
               } as any)
             : mockTenant,
         );
-        message.success(`Welcome back, ${user.firstName || "Doctor"}!`);
+        message.success(`Welcome back, ${user.firstName || "Doctor"}!`, 120);
         navigate("/dashboard");
       }
     } catch (err: any) {
@@ -144,7 +144,7 @@ const LoginPage: React.FC = () => {
             } as any)
           : mockTenant,
       );
-      message.success(`Welcome back, ${user.firstName || "Doctor"}!`);
+message.success(`Welcome back, ${user.firstName || "Doctor"}!`, 120);
     } else {
       message.error("Login session expired. Please sign in again.");
       setMfaStep(false);

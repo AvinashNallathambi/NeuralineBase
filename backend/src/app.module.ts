@@ -18,6 +18,10 @@ import { AiModule } from './modules/ai/ai.module';
 import { SuperbillsModule } from './modules/superbills/superbills.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { IcdModule } from './modules/icd/icd.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { MedicationsModule } from './modules/medications/medications.module';
+import { PharmaciesModule } from './modules/pharmacies/pharmacies.module';
+import { ProvidersModule } from './modules/providers/providers.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
@@ -95,6 +99,10 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     SuperbillsModule,
     WorkflowModule,
     IcdModule,
+    IntegrationsModule,
+    MedicationsModule,
+    PharmaciesModule,
+    ProvidersModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules
