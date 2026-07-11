@@ -54,6 +54,7 @@ export interface Patient {
 
 export interface Address {
   street: string;
+  street2?: string;
   city: string;
   state: string;
   zipCode: string;
@@ -64,6 +65,7 @@ export interface EmergencyContact {
   name: string;
   relationship: string;
   phone: string;
+  email?: string;
 }
 
 export interface Insurance {
@@ -76,6 +78,8 @@ export interface Insurance {
   effectiveDate: string;
   expirationDate: string;
   isPrimary: boolean;
+  payerId?: string;
+  authorizationNumber?: string;
 }
 
 export interface Allergy {
@@ -110,7 +114,10 @@ export interface Appointment {
   notes?: string;
   isTelehealth: boolean;
   meetingLink?: string;
+  location?: any;
   reminders: boolean;
+  remindersEnabled?: boolean;
+  durationMinutes?: number;
   createdAt: string;
   // Group appointment fields
   isGroup?: boolean;
@@ -337,6 +344,7 @@ export interface ProviderAvailability {
   startTime: string; // HH:MM format
   endTime: string; // HH:MM format
   isAvailable: boolean;
+  slotDuration: number;
   appointmentTypes?: string[];
   locationId?: string | null;
   maxAppointments?: number | null;
@@ -347,6 +355,22 @@ export interface ProviderAvailability {
   expiryDate?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type OverrideType = 'time_off' | 'modified_hours' | 'on_call' | 'holiday' | 'break' | 'out_of_office';
+
+export interface ProviderAvailabilityOverride {
+  id: string;
+  providerId: string;
+  overrideDate: string;
+  overrideType: OverrideType;
+  isAvailable: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  isRecurring: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Report {
@@ -371,18 +395,42 @@ export interface Superbill {
   providerAddress: Address;
   encounterId?: string;
   serviceDate: string;
-  submissionDate?: string;
-  status: 'draft' | 'submitted' | 'processed' | 'paid' | 'rejected';
+  submissionDate?: string | null;
+  status: 'draft' | 'submitted' | 'processed' | 'paid' | 'rejected' | 'resubmitted' | 'voided' | 'corrected';
   insurance: SuperbillInsurance;
   diagnoses: SuperbillDiagnosis[];
   procedures: SuperbillProcedure[];
   charges: SuperbillCharge[];
   totalAmount: number;
   patientResponsibility: number;
-  insurancePayment?: number;
-  notes?: string;
+  insurancePayment?: number | null;
+  notes?: string | null;
+  posCode?: string;
+  facilityName?: string;
+  facilityNPI?: string;
+  providerTaxId?: string;
+  feeSchedule?: string;
+  referralNumber?: string;
+  claimFrequency?: string;
+  admissionDate?: string;
+  dischargeDate?: string;
+  isEmploymentRelated?: boolean;
+  isAutoAccident?: boolean;
+  isOtherAccident?: boolean;
+  balance?: number;
+  payments?: SuperbillPayment[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SuperbillPayment {
+  id: string;
+  type: 'copay' | 'insurance_payment' | 'write_off' | 'adjustment';
+  amount: number;
+  date?: string;
+  note?: string;
+  source?: string;
+  createdAt: string;
 }
 
 export interface SuperbillInsurance {
@@ -392,7 +440,7 @@ export interface SuperbillInsurance {
   subscriberName: string;
   subscriberRelation: string;
   payerId: string;
-  authorizationNumber?: string;
+  authorizationNumber?: string | null;
 }
 
 export interface SuperbillDiagnosis {
@@ -410,7 +458,7 @@ export interface SuperbillProcedure {
   units: number;
   charge: number;
   serviceDate: string;
-  diagnosisPointer: string[]; // ICD codes this procedure links to
+  diagnosisPointer: number[]; // Numeric pointer values (1-N) to corresponding diagnoses
 }
 
 export interface SuperbillCharge {
@@ -533,6 +581,7 @@ export interface WorkflowInstance {
   status: string;
   templateId: string;
   template?: WorkflowTemplate;
+  availableTransitions?: WorkflowStepConfig[];
   createdAt: string;
   updatedAt: string;
 }
@@ -713,4 +762,124 @@ export interface CreateClinicalTemplateDto {
 }
 
 export type UpdateClinicalTemplateDto = Partial<CreateClinicalTemplateDto>;
+
+export type EligibilityVerificationStatus = 'pending' | 'active' | 'inactive' | 'failed' | 'error';
+export type EligibilityVerificationType = 'real-time' | 'batch' | 'scheduled' | 'manual';
+export type EligibilityCoverageStatus = 'active' | 'inactive' | 'terminated' | 'unknown';
+
+export interface CoverageBenefit {
+  category: string;
+  copay?: number | null;
+  coinsurance?: number | null;
+  network?: string | null;
+  priorAuth?: boolean;
+  visitLimit?: number | null;
+}
+
+export interface EligibilityVerification {
+  id: string;
+  patientId: string;
+  appointmentId?: string | null;
+  patientInsuranceId?: string | null;
+  insurancePayerId?: string | null;
+  status: EligibilityVerificationStatus;
+  verificationType: EligibilityVerificationType;
+  coverageStatus: EligibilityCoverageStatus;
+  serviceType?: string | null;
+  effectiveDate?: string | null;
+  expirationDate?: string | null;
+  deductibleIndividual?: number | null;
+  deductibleFamily?: number | null;
+  deductibleRemaining?: number | null;
+  outOfPocketIndividual?: number | null;
+  outOfPocketFamily?: number | null;
+  outOfPocketRemaining?: number | null;
+  copayAmount?: number | null;
+  coinsurancePercentage?: number | null;
+  authorizationRequired: boolean;
+  referralRequired: boolean;
+  benefitLimitations?: Record<string, unknown> | null;
+  benefits?: CoverageBenefit[] | null;
+  planName?: string | null;
+  planType?: string | null;
+  network?: string | null;
+  subscriberName?: string | null;
+  subscriberRelation?: string | null;
+  patientName?: string | null;
+  payerName?: string | null;
+  providerName?: string | null;
+  policyNumber?: string | null;
+  groupNumber?: string | null;
+  verifiedAt?: string | null;
+  verifiedByName?: string | null;
+  notes?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CoverageSummary {
+  id: string;
+  patientId: string;
+  appointmentId?: string | null;
+  status: EligibilityVerificationStatus;
+  coverageStatus: EligibilityCoverageStatus;
+  payerName?: string | null;
+  providerName?: string | null;
+  policyNumber?: string | null;
+  groupNumber?: string | null;
+  planName?: string | null;
+  planType?: string | null;
+  network?: string | null;
+  subscriberName?: string | null;
+  subscriberRelation?: string | null;
+  patientName?: string | null;
+  effectiveDate?: string | null;
+  expirationDate?: string | null;
+  deductibleIndividual?: number | null;
+  deductibleFamily?: number | null;
+  deductibleRemaining?: number | null;
+  outOfPocketIndividual?: number | null;
+  outOfPocketFamily?: number | null;
+  outOfPocketRemaining?: number | null;
+  copayAmount?: number | null;
+  coinsurancePercentage?: number | null;
+  authorizationRequired: boolean;
+  referralRequired: boolean;
+  benefitLimitations?: Record<string, unknown> | null;
+  benefits?: CoverageBenefit[] | null;
+  verifiedAt?: string | null;
+  verifiedByName?: string | null;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+export interface CreateEligibilityVerificationDto {
+  patientId: string;
+  appointmentId?: string;
+  patientInsuranceId?: string;
+  insurancePayerId?: string;
+  verificationType?: EligibilityVerificationType;
+  serviceType?: string;
+  policyNumber?: string;
+  groupNumber?: string;
+  serviceDate?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface EligibilityQuery {
+  page?: number;
+  limit?: number;
+  patientId?: string;
+  appointmentId?: string;
+  status?: EligibilityVerificationStatus;
+  serviceType?: string;
+  verifiedFrom?: string;
+  verifiedTo?: string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'ASC' | 'DESC';
+}
 
