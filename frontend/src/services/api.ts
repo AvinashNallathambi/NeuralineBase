@@ -10,11 +10,23 @@ export const api = axios.create({
 });
 
 // Request interceptor to add auth token
+// Checks both staff token and patient portal token
 api.interceptors.request.use(
   (config) => {
-    const token = sessionStorage.getItem('neuraline_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // For patient portal endpoints, use patient token
+    const url = config.url || '';
+    const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+
+    if (isPatientEndpoint) {
+      const patientToken = sessionStorage.getItem('neuraline_patient_token');
+      if (patientToken) {
+        config.headers.Authorization = `Bearer ${patientToken}`;
+      }
+    } else {
+      const token = sessionStorage.getItem('neuraline_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -28,14 +40,23 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      message.info('Logged out due to security concern');
-      
-      // Clear session storage
-      sessionStorage.clear();
-      
-      // Redirect to login
-      window.location.href = '/login';
+      const url = error.config?.url || '';
+      const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+
+      if (isPatientEndpoint) {
+        // Patient token expired — redirect to patient login
+        sessionStorage.removeItem('neuraline_patient_token');
+        sessionStorage.removeItem('neuraline_patient_user');
+        if (window.location.pathname.startsWith('/portal')) {
+          message.info('Your session has expired. Please sign in again.');
+          window.location.href = '/patient/login';
+        }
+      } else {
+        // Staff token expired
+        message.info('Logged out due to security concern');
+        sessionStorage.clear();
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

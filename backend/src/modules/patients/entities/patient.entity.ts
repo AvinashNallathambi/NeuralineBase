@@ -52,6 +52,28 @@ export class Patient {
   @Column({ name: 'phone', type: 'varchar', length: 20, nullable: true })
   phone!: string | null;
 
+  // ─── Patient Portal Auth Fields ─────────────────────────────────
+  @Column({ name: 'password_hash', type: 'varchar', length: 255, nullable: true })
+  passwordHash!: string | null;
+
+  @Column({ name: 'mfa_enabled', type: 'boolean', default: false })
+  mfaEnabled!: boolean;
+
+  @Column({ name: 'mfa_secret', type: 'varchar', length: 255, nullable: true })
+  mfaSecret!: string | null;
+
+  @Column({ name: 'portal_active', type: 'boolean', default: false })
+  portalActive!: boolean;
+
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt!: Date | null;
+
+  @Column({ name: 'password_reset_token', type: 'varchar', length: 255, nullable: true })
+  passwordResetToken!: string | null;
+
+  @Column({ name: 'password_reset_expires_at', type: 'timestamptz', nullable: true })
+  passwordResetExpiresAt!: Date | null;
+
   @Column({ name: 'address', type: 'jsonb', nullable: true })
   address!: {
     street1: string;

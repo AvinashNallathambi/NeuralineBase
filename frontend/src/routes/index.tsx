@@ -8,6 +8,7 @@ import { Spin } from "antd";
 import MainLayout from "../layouts/MainLayout";
 import AuthLayout from "../layouts/AuthLayout";
 import ProtectedRoute from "../components/security/ProtectedRoute";
+import PatientRoute from "../components/security/PatientRoute";
 import SessionTimeoutProvider from "../components/security/SessionTimeoutProvider";
 
 // Retry wrapper for dynamic imports – handles stale chunk errors after redeployment
@@ -111,6 +112,20 @@ const ForgotPasswordPage = lazyWithRetry(
   () => import("../pages/auth/ForgotPasswordPage"),
 );
 
+// Patient Portal
+const PatientLoginPage = lazyWithRetry(() => import("../pages/auth/PatientLoginPage"));
+const PatientPortalLayout = lazyWithRetry(() => import("../layouts/PatientPortalLayout"));
+const PortalDashboardPage = lazyWithRetry(() => import("../pages/portal/PortalDashboardPage"));
+const PortalAppointmentsPage = lazyWithRetry(() => import("../pages/portal/PortalAppointmentsPage"));
+const PortalPrescriptionsPage = lazyWithRetry(() => import("../pages/portal/PortalPrescriptionsPage"));
+const PortalLabResultsPage = lazyWithRetry(() => import("../pages/portal/PortalLabResultsPage"));
+const PortalBillingPage = lazyWithRetry(() => import("../pages/portal/PortalBillingPage"));
+const PortalEobsPage = lazyWithRetry(() => import("../pages/portal/PortalEobsPage"));
+const PortalInsurancePage = lazyWithRetry(() => import("../pages/portal/PortalInsurancePage"));
+const PortalProfilePage = lazyWithRetry(() => import("../pages/portal/PortalProfilePage"));
+const PortalMessagesPage = lazyWithRetry(() => import("../pages/portal/PortalMessagesPage"));
+const PortalAiAssistantPage = lazyWithRetry(() => import("../pages/portal/PortalAiAssistantPage"));
+
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
   <div
@@ -167,6 +182,15 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <ForgotPasswordPage />
+          </LazyPage>
+        ),
+      },
+      // Patient portal login (separate from staff login)
+      {
+        path: "/patient/login",
+        element: (
+          <LazyPage>
+            <PatientLoginPage />
           </LazyPage>
         ),
       },
@@ -466,6 +490,105 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PatientPortalPage />
+          </LazyPage>
+        ),
+      },
+    ],
+  },
+
+  // Patient Portal routes – separate layout, patient-only auth
+  {
+    element: (
+      <PatientRoute>
+        <PatientPortalLayout />
+      </PatientRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <LazyPage>
+            <PortalDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/dashboard",
+        element: (
+          <LazyPage>
+            <PortalDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/appointments",
+        element: (
+          <LazyPage>
+            <PortalAppointmentsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/prescriptions",
+        element: (
+          <LazyPage>
+            <PortalPrescriptionsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/lab-results",
+        element: (
+          <LazyPage>
+            <PortalLabResultsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/billing",
+        element: (
+          <LazyPage>
+            <PortalBillingPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/eobs",
+        element: (
+          <LazyPage>
+            <PortalEobsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/insurance",
+        element: (
+          <LazyPage>
+            <PortalInsurancePage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/profile",
+        element: (
+          <LazyPage>
+            <PortalProfilePage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/messages",
+        element: (
+          <LazyPage>
+            <PortalMessagesPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/ai-assistant",
+        element: (
+          <LazyPage>
+            <PortalAiAssistantPage />
           </LazyPage>
         ),
       },

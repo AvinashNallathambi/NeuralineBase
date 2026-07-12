@@ -27,6 +27,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MedicationsModule } from './modules/medications/medications.module';
 import { PharmaciesModule } from './modules/pharmacies/pharmacies.module';
 import { ProvidersModule } from './modules/providers/providers.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
@@ -113,6 +114,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     MedicationsModule,
     PharmaciesModule,
     ProvidersModule,
+    MessagingModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules

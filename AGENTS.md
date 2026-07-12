@@ -48,9 +48,71 @@ npx typeorm migration:revert -d src/config/database.config.ts
 To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env` or Docker env, then disable it and create a migration before committing.
 
 ## Backend Modules
-- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation
+- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Reports, Telemedicine, Users
 - AuthService uses in-memory dev user (no UsersService/DB persistence yet)
+
+## Patient Portal
+The patient portal provides a dedicated, patient-facing interface separate from the staff EMR. It has its own authentication system, layout, and AI features.
+
+### Patient Authentication
+- **Separate JWT strategy** (`patient-jwt`): Patients get tokens with `role: 'patient'`
+- **Login endpoint**: `POST /api/v1/patients/auth/login` (requires email, password, tenantId)
+- **Other endpoints**: `/patients/auth/refresh`, `/patients/auth/logout`, `/patients/auth/forgot-password`, `/patients/auth/reset-password`, `/patients/auth/me`, `/patients/auth/:patientId/setup-account`
+- **Guard**: `PatientJwtAuthGuard` — only validates patient tokens (not staff tokens)
+- **Token storage**: `sessionStorage` under key `neuraline_patient_token`
+- **Account lockout**: 5 failed attempts = 15-min lockout (same as staff auth)
+- **Patient entity** extended with: `passwordHash`, `mfaEnabled`, `mfaSecret`, `portalActive`, `lastLoginAt`, `passwordResetToken`, `passwordResetExpiresAt`
+
+### Patient Portal API (all under `/api/v1/patients/portal`, requires patient JWT)
+- `GET /dashboard` — Aggregated summary (appointments, prescriptions, labs, invoices, EOBs, outstanding balance)
+- `GET /appointments` — Patient's appointments
+- `GET /appointments/available-slots` — Available slots for a provider/date
+- `POST /appointments/request` — Request a new appointment (self-scheduling)
+- `GET /prescriptions` — Patient's prescriptions
+- `POST /prescriptions/:id/refill` — Request a prescription refill
+- `GET /lab-results` — Patient's lab orders with tests
+- `GET /invoices` — Patient's invoices
+- `POST /invoices/:id/pay` — Make a payment on an invoice
+- `GET /eobs` — Patient's EOBs from remittance module
+- `GET /insurance` — Patient's insurance policies
+
+### Patient Portal AI (all under `/api/v1/patients/portal/ai`, requires patient JWT)
+- `POST /explain-lab-result` — AI explains a lab result in plain language
+- `POST /assess-symptoms` — AI symptom checker with care navigation (self-care / schedule / urgent care / emergency)
+- `POST /check-interactions` — AI medication interaction checker
+- `POST /health-education` — AI generates personalized health education articles
+- `POST /visit-questions` — AI generates questions to ask your doctor
+
+### Secure Messaging Module (`/api/v1/messaging`)
+- **Entities**: `Conversation` (patient-provider thread), `Message` (individual messages)
+- **Patient endpoints** (requires patient JWT):
+  - `GET /patient/conversations` — List patient's conversations
+  - `GET /patient/conversations/:id` — Get conversation with messages (auto-marks read)
+  - `POST /patient/conversations` — Start a new conversation
+  - `POST /patient/conversations/:id/reply` — Reply to a conversation
+  - `GET /patient/unread-count` — Get unread message count
+- **Provider endpoints** (requires staff JWT):
+  - `GET /provider/conversations` — List all conversations
+  - `GET /provider/conversations/:id` — Get conversation with messages
+  - `POST /provider/conversations/:id/reply` — Provider replies
+  - `POST /provider/conversations/:id/close` — Close a conversation
+
+### Frontend Patient Portal
+- **Login page**: `/patient/login` (separate from staff login at `/login`)
+- **Portal layout**: `PatientPortalLayout` — dedicated sidebar with patient menu (no admin features)
+- **Route guard**: `PatientRoute` — redirects to `/patient/login` if not authenticated
+- **Pages**:
+  - `/portal` (dashboard) — Summary with stats and recent items
+  - `/portal/appointments` — View appointments + request new ones with slot picker
+  - `/portal/prescriptions` — View prescriptions + request refills
+  - `/portal/lab-results` — View lab results with collapsible test details
+  - `/portal/billing` — View invoices + make payments
+  - `/portal/eobs` — View insurance EOBs with adjustment details
+  - `/portal/insurance` — View insurance policies
+  - `/portal/messages` — Secure messaging with care team
+  - `/portal/ai-assistant` — AI Health Assistant (5 tabs: lab explainer, symptom checker, drug interactions, health education, visit prep)
+  - `/portal/profile` — View profile information
 
 ### Billing Module
 The billing module (`backend/src/modules/billing/`) provides claim lifecycle management, invoicing, and insurance master data:
