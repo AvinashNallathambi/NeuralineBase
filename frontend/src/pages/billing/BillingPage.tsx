@@ -92,15 +92,18 @@ const BillingPage: React.FC = () => {
 
   const fetchPatients = async () => {
     try {
-      const data = await patientService.findAll();
-      setPatients(data);
+      const result = await patientService.findAll({ page: 1, limit: 100 });
+      setPatients(result.data);
     } catch (error) {
       message.error('Failed to load patients');
     }
   };
 
   // Stats
-  const totalClaims = claims.reduce((sum, c) => sum + c.totalBilled, 0);
+  const totalClaims = claims.reduce(
+    (sum, c) => sum + Number(c.totalBilled || 0),
+    0
+  );
   const pendingCount = claims.filter(
     (c) => c.status === 'ready_to_bill' || c.status === 'submitted'
   ).length;
@@ -108,7 +111,7 @@ const BillingPage: React.FC = () => {
   const deniedCount = claims.filter((c) => c.status === 'denied').length;
   const paidAmount = claims
     .filter((c) => c.status === 'paid')
-    .reduce((sum, c) => sum + c.totalPaid, 0);
+    .reduce((sum, c) => sum + Number(c.totalPaid || 0), 0);
 
   // Filtered claims
   const filteredClaims = useMemo(() => {
@@ -130,7 +133,7 @@ const BillingPage: React.FC = () => {
     }
 
     return data;
-  }, [activeTab, searchText]);
+  }, [activeTab, searchText, claims]);
 
   // Service line total
   const calculatedTotal = serviceLines.reduce(
@@ -247,10 +250,10 @@ const BillingPage: React.FC = () => {
       dataIndex: 'totalBilled',
       key: 'totalBilled',
       width: 130,
-      render: (amount: number) => (
-        <Text strong>${amount.toFixed(2)}</Text>
+      render: (amount: number | string) => (
+        <Text strong>${Number(amount || 0).toFixed(2)}</Text>
       ),
-      sorter: (a, b) => a.totalBilled - b.totalBilled,
+      sorter: (a, b) => Number(a.totalBilled) - Number(b.totalBilled),
     },
     {
       title: 'Status',

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   Typography,
   Button,
@@ -15,6 +15,7 @@ import {
   message,
   Tooltip,
   Modal,
+  Popconfirm,
 } from 'antd';
 import {
   PlusOutlined,
@@ -25,14 +26,15 @@ import {
   MedicineBoxOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
-  MessageOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import type { Prescription, PrescriptionItem } from '../../types';
-import type { RefillRequest } from '../../data/mockData';
-import { usePrescriptionStore } from '../../store/dataStore';
-import { useIntegrations } from '../../hooks/useIntegrations';
-import { prescriptionService, type PaginatedPrescriptions } from '../../services/prescriptionService';
+import {
+  prescriptionService,
+  type PaginatedPrescriptions,
+  type Prescription,
+  type RefillRequest,
+} from '../../services/prescriptionService';
 import type { ColumnsType } from 'antd/es/table';
 import type { TablePaginationConfig } from 'antd/es/table/interface';
 
@@ -41,18 +43,26 @@ const { Title, Text } = Typography;
 const statusColors: Record<string, string> = {
   active: 'green',
   draft: 'gold',
+  sent: 'cyan',
   completed: 'blue',
   cancelled: 'default',
+  discontinued: 'volcano',
   expired: 'red',
 };
 
+const refillStatusColors: Record<string, string> = {
+  pending: 'orange',
+  approved: 'green',
+  denied: 'red',
+  completed: 'blue',
+};
+
 const PrescriptionPage: React.FC = () => {
-  const { refillRequests: storeRefillRequests, addRefillRequest } = usePrescriptionStore();
   const navigate = useNavigate();
-  const { isEnabled } = useIntegrations();
   const [activeTab, setActiveTab] = useState('all');
   const [searchText, setSearchText] = useState('');
-  const [refillRequests, setRefillRequests] = useState<RefillRequest[]>(storeRefillRequests);
+  const [refillRequests, setRefillRequests] = useState<RefillRequest[]>([]);
+  const [refillLoading, setRefillLoading] = useState(false);
   const [data, setData] = useState<PaginatedPrescriptions>({
     data: [],
     total: 0,
@@ -64,6 +74,7 @@ const PrescriptionPage: React.FC = () => {
   const [refillModalOpen, setRefillModalOpen] = useState(false);
   const [refillPrescription, setRefillPrescription] = useState<Prescription | null>(null);
   const [refillNotes, setRefillNotes] = useState('');
+  const [refillSubmitting, setRefillSubmitting] = useState(false);
 
   const relativeTime = (dateStr: string) => {
     const now = Date.now();
@@ -79,7 +90,7 @@ const PrescriptionPage: React.FC = () => {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  const loadPrescriptions = async (page = 1, limit = 10) => {
+  const loadPrescriptions = useCallback(async (page = 1, limit = 10) => {
     setLoading(true);
     try {
       const result = await prescriptionService.findAll({
@@ -94,12 +105,28 @@ const PrescriptionPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchText, activeTab]);
+
+  const loadRefills = useCallback(async () => {
+    setRefillLoading(true);
+    try {
+      const refills = await prescriptionService.findAllRefills();
+      setRefillRequests(refills);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to load refill requests');
+    } finally {
+      setRefillLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     void loadPrescriptions(1, data.limit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, searchText]);
+
+  useEffect(() => {
+    void loadRefills();
+  }, [loadRefills]);
 
   const handleTableChange = (pagination: TablePaginationConfig) => {
     void loadPrescriptions(pagination.current || 1, pagination.pageSize || 10);
@@ -109,29 +136,76 @@ const PrescriptionPage: React.FC = () => {
     () => data.data.filter((rx) => rx.status === 'active').length,
     [data],
   );
-  const pendingRefills = refillRequests.filter((r) => r.status === 'pending').length;
+  const pendingRefills = useMemo(
+    () => refillRequests.filter((r) => r.status === 'pending').length,
+    [refillRequests],
+  );
   const todayStr = new Date().toISOString().split('T')[0];
   const prescribedToday = useMemo(
     () => data.data.filter((rx) => (rx.prescribedDate || '').split('T')[0] === todayStr).length,
     [data, todayStr],
   );
 
-  const handleApproveRefill = (id: string) => {
-    setRefillRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'approved' as const } : r))
-    );
-    message.success('Refill request approved');
+  const handleApproveRefill = async (prescriptionId: string, refillId: string) => {
+    try {
+      await prescriptionService.updateRefill(prescriptionId, refillId, { status: 'approved' });
+      message.success('Refill request approved');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to approve refill');
+    }
   };
 
-  const handleDenyRefill = (id: string) => {
-    setRefillRequests((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'denied' as const } : r))
-    );
-    message.warning('Refill request denied');
+  const handleDenyRefill = async (prescriptionId: string, refillId: string) => {
+    try {
+      await prescriptionService.updateRefill(prescriptionId, refillId, { status: 'denied' });
+      message.warning('Refill request denied');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to deny refill');
+    }
+  };
+
+  const handleCompleteRefill = async (prescriptionId: string, refillId: string) => {
+    try {
+      await prescriptionService.updateRefill(prescriptionId, refillId, { status: 'completed' });
+      message.success('Refill completed');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to complete refill');
+    }
+  };
+
+  const handleDeleteRefill = async (prescriptionId: string, refillId: string) => {
+    try {
+      await prescriptionService.deleteRefill(prescriptionId, refillId);
+      message.success('Refill request deleted');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to delete refill');
+    }
+  };
+
+  const handleRequestRefill = async () => {
+    if (!refillPrescription) return;
+    setRefillSubmitting(true);
+    try {
+      await prescriptionService.createRefill(refillPrescription.id, {
+        notes: refillNotes || undefined,
+      });
+      message.success('Refill request submitted');
+      setRefillModalOpen(false);
+      setRefillNotes('');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to submit refill request');
+    } finally {
+      setRefillSubmitting(false);
+    }
   };
 
   const expandedRowRender = (record: Prescription) => {
-    const medColumns: ColumnsType<PrescriptionItem> = [
+    const medColumns: ColumnsType<any> = [
       { title: 'Medication', dataIndex: 'medication', key: 'medication', width: 180 },
       { title: 'Dosage', dataIndex: 'dosage', key: 'dosage', width: 100 },
       { title: 'Frequency', dataIndex: 'frequency', key: 'frequency', width: 140 },
@@ -245,7 +319,7 @@ const PrescriptionPage: React.FC = () => {
               onClick={() => message.info('Printing prescription...')}
             />
           </Tooltip>
-          {record.status === 'active' && (
+          {(record.status === 'active' || record.status === 'sent') && (
             <Tooltip title="Request Refill">
               <Button
                 type="text"
@@ -267,13 +341,64 @@ const PrescriptionPage: React.FC = () => {
     { key: 'all', label: 'All' },
     { key: 'active', label: 'Active' },
     { key: 'draft', label: 'Draft' },
+    { key: 'sent', label: 'Sent' },
     { key: 'completed', label: 'Completed' },
+    { key: 'discontinued', label: 'Discontinued' },
+    { key: 'cancelled', label: 'Cancelled' },
     { key: 'expired', label: 'Expired' },
   ];
 
+  const renderRefillActions = (item: RefillRequest) => {
+    if (item.status === 'pending') {
+      return [
+        <Button
+          key="approve"
+          type="primary"
+          size="small"
+          onClick={() => handleApproveRefill(item.prescriptionId, item.id)}
+        >
+          Approve
+        </Button>,
+        <Button
+          key="deny"
+          danger
+          size="small"
+          onClick={() => handleDenyRefill(item.prescriptionId, item.id)}
+        >
+          Deny
+        </Button>,
+        <Popconfirm
+          key="delete"
+          title="Delete this refill request?"
+          onConfirm={() => handleDeleteRefill(item.prescriptionId, item.id)}
+        >
+          <Button type="text" danger size="small" icon={<DeleteOutlined />} />
+        </Popconfirm>,
+      ];
+    }
+    if (item.status === 'approved') {
+      return [
+        <Button
+          key="complete"
+          size="small"
+          onClick={() => handleCompleteRefill(item.prescriptionId, item.id)}
+        >
+          Complete
+        </Button>,
+        <Tag key="status" color={refillStatusColors[item.status]}>
+          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+        </Tag>,
+      ];
+    }
+    return [
+      <Tag key="status" color={refillStatusColors[item.status] || 'default'}>
+        {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+      </Tag>,
+    ];
+  };
+
   return (
     <div>
-      {/* Header */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
           <Title level={3} style={{ margin: 0 }}>
@@ -292,7 +417,6 @@ const PrescriptionPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Summary Cards */}
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         <Col xs={24} sm={8}>
           <Card>
@@ -326,7 +450,6 @@ const PrescriptionPage: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Filters & Table */}
       <Card>
         <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
@@ -357,7 +480,6 @@ const PrescriptionPage: React.FC = () => {
         />
       </Card>
 
-      {/* Refill Requests */}
       <Card
         title={
           <Space>
@@ -372,38 +494,10 @@ const PrescriptionPage: React.FC = () => {
       >
         <List
           dataSource={refillRequests}
+          loading={refillLoading}
+          locale={{ emptyText: 'No refill requests' }}
           renderItem={(item) => (
-            <List.Item
-              actions={
-                item.status === 'pending'
-                  ? [
-                      <Button
-                        key="approve"
-                        type="primary"
-                        size="small"
-                        onClick={() => handleApproveRefill(item.id)}
-                      >
-                        Approve
-                      </Button>,
-                      <Button
-                        key="deny"
-                        danger
-                        size="small"
-                        onClick={() => handleDenyRefill(item.id)}
-                      >
-                        Deny
-                      </Button>,
-                    ]
-                  : [
-                      <Tag
-                        key="status"
-                        color={item.status === 'approved' ? 'green' : 'red'}
-                      >
-                        {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                      </Tag>,
-                    ]
-              }
-            >
+            <List.Item actions={renderRefillActions(item)}>
               <List.Item.Meta
                 avatar={
                   <MedicineBoxOutlined
@@ -417,13 +511,13 @@ const PrescriptionPage: React.FC = () => {
                   <Space>
                     <Text strong>{item.patientName}</Text>
                     <Text type="secondary">-</Text>
-                    <Text>{item.medication}</Text>
+                    <Text>{item.medication} {item.dosage}</Text>
                   </Space>
                 }
                 description={
                   <Space direction="vertical" size={0}>
                     <Text type="secondary">
-                      Rx: {item.prescriptionId} | {relativeTime(item.requestedDate)}
+                      Rx: {item.prescriptionId} | {relativeTime(item.createdAt)}
                     </Text>
                     {item.notes && <Text type="secondary" italic>{item.notes}</Text>}
                   </Space>
@@ -437,23 +531,8 @@ const PrescriptionPage: React.FC = () => {
       <Modal
         title="Request Refill"
         open={refillModalOpen}
-        onOk={() => {
-          if (!refillPrescription) return;
-          const newRequest: RefillRequest = {
-            id: `rr-${Date.now()}`,
-            prescriptionId: refillPrescription.id,
-            patientName: refillPrescription.patientName,
-            medication: refillPrescription.medications[0]?.medication || '',
-            dosage: refillPrescription.medications[0]?.dosage || '',
-            requestedDate: new Date().toISOString(),
-            status: 'pending',
-            notes: refillNotes || undefined,
-          };
-          addRefillRequest(newRequest);
-          setRefillRequests((prev) => [newRequest, ...prev]);
-          message.success('Refill request submitted');
-          setRefillModalOpen(false);
-        }}
+        onOk={handleRequestRefill}
+        confirmLoading={refillSubmitting}
         onCancel={() => setRefillModalOpen(false)}
       >
         <Space direction="vertical" style={{ width: '100%' }}>

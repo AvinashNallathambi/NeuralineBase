@@ -33,7 +33,6 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { PrescriptionItem } from '../../types';
-import { usePrescriptionStore } from '../../store/dataStore';
 import { useIntegrations } from '../../hooks/useIntegrations';
 import { patientService, type Patient } from '../../services/patientService';
 import { providerService } from '../../services/providerService';
@@ -120,7 +119,6 @@ interface ProviderInfo {
 
 const NewPrescriptionPage: React.FC = () => {
   const navigate = useNavigate();
-  const { addPrescription } = usePrescriptionStore();
   const { isEnabled } = useIntegrations();
   const aiEnabled = isEnabled('ai_prescribing');
   const voiceEnabled = isEnabled('voice_prescribing');
@@ -392,9 +390,8 @@ const NewPrescriptionPage: React.FC = () => {
 
     try {
       const saved = await prescriptionService.create(newPrescription);
-      addPrescription(saved);
       message.success('Prescription sent to pharmacy successfully!');
-      navigate('/prescriptions');
+      navigate(`/prescriptions/${saved.id}`);
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to send prescription');
     }
@@ -437,9 +434,8 @@ const NewPrescriptionPage: React.FC = () => {
 
     try {
       const saved = await prescriptionService.create(draftPrescription);
-      addPrescription(saved);
       message.success('Prescription saved as draft');
-      navigate('/prescriptions');
+      navigate(`/prescriptions/${saved.id}`);
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to save draft');
     }

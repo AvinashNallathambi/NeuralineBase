@@ -10,6 +10,7 @@ import {
   JoinColumn,
   OneToMany,
 } from 'typeorm';
+import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
 
 export enum InvoiceStatus {
   DRAFT = 'draft',
@@ -83,22 +84,22 @@ export class Invoice {
   })
   status!: InvoiceStatus;
 
-  @Column({ name: 'subtotal', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'subtotal', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   subtotal!: number;
 
-  @Column({ name: 'tax_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'tax_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   taxAmount!: number;
 
-  @Column({ name: 'discount_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'discount_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   discountAmount!: number;
 
-  @Column({ name: 'total_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'total_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   totalAmount!: number;
 
-  @Column({ name: 'amount_paid', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'amount_paid', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   amountPaid!: number;
 
-  @Column({ name: 'balance_due', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'balance_due', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   balanceDue!: number;
 
   @Column({ name: 'payment_method', type: 'varchar', length: 50, nullable: true })

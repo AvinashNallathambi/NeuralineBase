@@ -10,6 +10,7 @@ import { Repository, Like, FindOptionsWhere, Between } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import { Patient } from '../patients/entities/patient.entity';
 import { ProviderAvailability } from './entities/provider-availability.entity';
+import { ProviderAvailabilityOverride } from './entities/provider-availability-override.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentDto } from './dto/query-appointment.dto';
@@ -46,6 +47,8 @@ export class AppointmentsService {
     private readonly appointmentRepository: Repository<Appointment>,
     @InjectRepository(ProviderAvailability)
     private readonly availabilityRepository: Repository<ProviderAvailability>,
+    @InjectRepository(ProviderAvailabilityOverride)
+    private readonly overrideRepository: Repository<ProviderAvailabilityOverride>,
     @InjectRepository(Patient)
     private readonly patientRepository: Repository<Patient>,
     private readonly workflowService: WorkflowService,
@@ -526,6 +529,26 @@ export class AppointmentsService {
     return this.availabilityRepository.find({
       where: { tenantId, providerId },
       order: { dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * Find all availability records for the tenant (across all providers)
+   */
+  async findAllAvailability(tenantId: string): Promise<ProviderAvailability[]> {
+    return this.availabilityRepository.find({
+      where: { tenantId },
+      order: { providerId: 'ASC', dayOfWeek: 'ASC', startTime: 'ASC' },
+    });
+  }
+
+  /**
+   * Find all override records for the tenant (across all providers)
+   */
+  async findAllOverrides(tenantId: string): Promise<ProviderAvailabilityOverride[]> {
+    return this.overrideRepository.find({
+      where: { tenantId },
+      order: { overrideDate: 'ASC', providerId: 'ASC' },
     });
   }
 

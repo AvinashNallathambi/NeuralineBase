@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Typography,
   Button,
@@ -14,6 +14,8 @@ import {
   message,
   Input,
   Modal,
+  Timeline,
+  Popconfirm,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -21,12 +23,19 @@ import {
   MedicineBoxOutlined,
   EditOutlined,
   ReloadOutlined,
+  CheckCircleOutlined,
+  StopOutlined,
+  SendOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { PrescriptionItem } from '../../types';
-import type { RefillRequest } from '../../data/mockData';
-import { prescriptionService, type Prescription } from '../../services/prescriptionService';
-import { usePrescriptionStore } from '../../store/dataStore';
+import {
+  prescriptionService,
+  type Prescription,
+  type RefillRequest,
+  type StatusHistoryEntry,
+  type PrescriptionStatus,
+} from '../../services/prescriptionService';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -34,8 +43,10 @@ const { Title, Text } = Typography;
 const statusColors: Record<string, string> = {
   active: 'green',
   draft: 'gold',
+  sent: 'cyan',
   completed: 'blue',
   cancelled: 'default',
+  discontinued: 'volcano',
   expired: 'red',
 };
 
@@ -47,24 +58,96 @@ const PrescriptionDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [refillModalOpen, setRefillModalOpen] = useState(false);
   const [refillNotes, setRefillNotes] = useState('');
-  const { addRefillRequest } = usePrescriptionStore();
+  const [refillSubmitting, setRefillSubmitting] = useState(false);
+  const [refills, setRefills] = useState<RefillRequest[]>([]);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryEntry[]>([]);
+  const [statusTransitionLoading, setStatusTransitionLoading] = useState(false);
 
-  useEffect(() => {
+  const loadPrescription = useCallback(async () => {
     if (!id) return;
     setLoading(true);
-    prescriptionService
-      .findOne(id)
-      .then((rx) => {
-        setPrescription(rx);
-        setError(null);
-      })
-      .catch((err: any) => {
-        setError(err?.response?.data?.message || 'Prescription not found');
-      })
-      .finally(() => setLoading(false));
+    try {
+      const rx = await prescriptionService.findOne(id);
+      setPrescription(rx);
+      setError(null);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'Prescription not found');
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
-  const medColumns: ColumnsType<PrescriptionItem> = [
+  const loadRefills = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await prescriptionService.findRefills(id);
+      setRefills(data);
+    } catch {
+      setRefills([]);
+    }
+  }, [id]);
+
+  const loadStatusHistory = useCallback(async () => {
+    if (!id) return;
+    try {
+      const data = await prescriptionService.getStatusHistory(id);
+      setStatusHistory(data);
+    } catch {
+      setStatusHistory([]);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    void loadPrescription();
+    void loadRefills();
+    void loadStatusHistory();
+  }, [loadPrescription, loadRefills, loadStatusHistory]);
+
+  const handleStatusTransition = async (newStatus: PrescriptionStatus, reason?: string) => {
+    if (!id) return;
+    setStatusTransitionLoading(true);
+    try {
+      await prescriptionService.updateStatus(id, { status: newStatus, reason });
+      message.success(`Status changed to ${newStatus}`);
+      await loadPrescription();
+      await loadStatusHistory();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to change status');
+    } finally {
+      setStatusTransitionLoading(false);
+    }
+  };
+
+  const handleRequestRefill = async () => {
+    if (!prescription) return;
+    setRefillSubmitting(true);
+    try {
+      await prescriptionService.createRefill(prescription.id, {
+        notes: refillNotes || undefined,
+      });
+      message.success('Refill request submitted');
+      setRefillModalOpen(false);
+      setRefillNotes('');
+      await loadRefills();
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to submit refill request');
+    } finally {
+      setRefillSubmitting(false);
+    }
+  };
+
+  const handleDeletePrescription = async () => {
+    if (!prescription) return;
+    try {
+      await prescriptionService.delete(prescription.id);
+      message.success('Prescription deleted');
+      navigate('/prescriptions');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to delete prescription');
+    }
+  };
+
+  const medColumns: ColumnsType<any> = [
     { title: 'Medication', dataIndex: 'medication', key: 'medication', width: 180 },
     { title: 'Dosage', dataIndex: 'dosage', key: 'dosage', width: 100 },
     { title: 'Frequency', dataIndex: 'frequency', key: 'frequency', width: 160 },
@@ -102,6 +185,15 @@ const PrescriptionDetailPage: React.FC = () => {
     );
   }
 
+  const isEditable = prescription.status === 'draft' || prescription.status === 'active';
+  const canRefill = prescription.status === 'active' || prescription.status === 'sent';
+  const canSign = prescription.status === 'draft';
+  const canSend = prescription.status === 'active';
+  const canComplete = prescription.status === 'active' || prescription.status === 'sent';
+  const canDiscontinue = prescription.status === 'active' || prescription.status === 'sent';
+  const canCancel = prescription.status === 'draft' || prescription.status === 'active';
+  const canDelete = prescription.status === 'draft' || prescription.status === 'cancelled';
+
   return (
     <div>
       <Space style={{ marginBottom: 24 }}>
@@ -120,17 +212,95 @@ const PrescriptionDetailPage: React.FC = () => {
           </Space>
         </Col>
         <Col>
-          <Space>
-            <Button icon={<EditOutlined />} onClick={() => message.info('Edit not implemented')}>
-              Edit
-            </Button>
+          <Space wrap>
+            {isEditable && (
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => navigate(`/prescriptions/${prescription.id}/edit`)}
+              >
+                Edit
+              </Button>
+            )}
+            {canSign && (
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                loading={statusTransitionLoading}
+                onClick={() => handleStatusTransition('active', 'Prescription signed and activated')}
+              >
+                Sign & Activate
+              </Button>
+            )}
+            {canSend && (
+              <Button
+                icon={<SendOutlined />}
+                loading={statusTransitionLoading}
+                onClick={() => handleStatusTransition('sent', 'Sent to pharmacy')}
+              >
+                Send to Pharmacy
+              </Button>
+            )}
+            {canComplete && (
+              <Popconfirm
+                title="Mark this prescription as completed?"
+                onConfirm={() => handleStatusTransition('completed', 'Prescription completed')}
+              >
+                <Button
+                  icon={<CheckCircleOutlined />}
+                  loading={statusTransitionLoading}
+                >
+                  Complete
+                </Button>
+              </Popconfirm>
+            )}
+            {canDiscontinue && (
+              <Popconfirm
+                title="Discontinue this prescription?"
+                onConfirm={() => handleStatusTransition('discontinued', 'Prescription discontinued')}
+              >
+                <Button
+                  danger
+                  icon={<StopOutlined />}
+                  loading={statusTransitionLoading}
+                >
+                  Discontinue
+                </Button>
+              </Popconfirm>
+            )}
+            {canCancel && (
+              <Popconfirm
+                title="Cancel this prescription?"
+                onConfirm={() => handleStatusTransition('cancelled', 'Prescription cancelled')}
+              >
+                <Button
+                  icon={<StopOutlined />}
+                  loading={statusTransitionLoading}
+                >
+                  Cancel
+                </Button>
+              </Popconfirm>
+            )}
             <Button icon={<PrinterOutlined />} onClick={() => message.info('Printing prescription...')}>
               Print
             </Button>
-            {prescription.status === 'active' && (
-              <Button icon={<ReloadOutlined />} onClick={() => { setRefillNotes(''); setRefillModalOpen(true); }}>
+            {canRefill && (
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => { setRefillNotes(''); setRefillModalOpen(true); }}
+              >
                 Request Refill
               </Button>
+            )}
+            {canDelete && (
+              <Popconfirm
+                title="Delete this prescription?"
+                description="This action soft-deletes the prescription."
+                onConfirm={handleDeletePrescription}
+              >
+                <Button danger icon={<DeleteOutlined />}>
+                  Delete
+                </Button>
+              </Popconfirm>
             )}
           </Space>
         </Col>
@@ -173,6 +343,64 @@ const PrescriptionDetailPage: React.FC = () => {
               scroll={{ x: 900 }}
             />
           </Card>
+
+          {refills.length > 0 && (
+            <Card title="Refill History" style={{ marginBottom: 24 }}>
+              <Timeline
+                items={refills.map((r) => ({
+                  color: r.status === 'approved' || r.status === 'completed' ? 'green'
+                    : r.status === 'denied' ? 'red' : 'orange',
+                  children: (
+                    <div>
+                      <Space>
+                        <Text strong>{r.medication} {r.dosage}</Text>
+                        <Tag color={r.status === 'approved' ? 'green' : r.status === 'denied' ? 'red' : r.status === 'completed' ? 'blue' : 'orange'}>
+                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                        </Tag>
+                      </Space>
+                      <div>
+                        <Text type="secondary">
+                          {new Date(r.createdAt).toLocaleString()}
+                          {r.reviewedAt && ` | Reviewed: ${new Date(r.reviewedAt).toLocaleString()}`}
+                        </Text>
+                      </div>
+                      {r.notes && <Text type="secondary" italic>{r.notes}</Text>}
+                    </div>
+                  ),
+                }))}
+              />
+            </Card>
+          )}
+
+          {statusHistory.length > 0 && (
+            <Card title="Status History">
+              <Timeline
+                items={statusHistory.map((h) => ({
+                  color: statusColors[h.newStatus] || 'blue',
+                  children: (
+                    <div>
+                      <Space>
+                        <Tag color={statusColors[h.newStatus] || 'default'}>
+                          {h.newStatus.charAt(0).toUpperCase() + h.newStatus.slice(1)}
+                        </Tag>
+                        {h.previousStatus && (
+                          <Text type="secondary">
+                            from {h.previousStatus.charAt(0).toUpperCase() + h.previousStatus.slice(1)}
+                          </Text>
+                        )}
+                      </Space>
+                      <div>
+                        <Text type="secondary">
+                          {new Date(h.createdAt).toLocaleString()}
+                        </Text>
+                      </div>
+                      {h.reason && <Text type="secondary" italic>{h.reason}</Text>}
+                    </div>
+                  ),
+                }))}
+              />
+            </Card>
+          )}
         </Col>
 
         <Col xs={24} lg={8}>
@@ -218,21 +446,8 @@ const PrescriptionDetailPage: React.FC = () => {
       <Modal
         title="Request Refill"
         open={refillModalOpen}
-        onOk={() => {
-          const newRequest: RefillRequest = {
-            id: `rr-${Date.now()}`,
-            prescriptionId: prescription.id,
-            patientName: prescription.patientName,
-            medication: prescription.medications[0]?.medication || '',
-            dosage: prescription.medications[0]?.dosage || '',
-            requestedDate: new Date().toISOString(),
-            status: 'pending',
-            notes: refillNotes || undefined,
-          };
-          addRefillRequest(newRequest);
-          message.success('Refill request submitted');
-          setRefillModalOpen(false);
-        }}
+        onOk={handleRequestRefill}
+        confirmLoading={refillSubmitting}
         onCancel={() => setRefillModalOpen(false)}
       >
         <Space direction="vertical" style={{ width: '100%' }}>

@@ -13,6 +13,15 @@ export interface PrescriptionItem {
   instructions?: string;
 }
 
+export type PrescriptionStatus =
+  | 'draft'
+  | 'active'
+  | 'sent'
+  | 'completed'
+  | 'cancelled'
+  | 'discontinued'
+  | 'expired';
+
 export interface Prescription {
   id: string;
   patientId: string;
@@ -21,10 +30,12 @@ export interface Prescription {
   providerName: string;
   encounterId?: string;
   medications: PrescriptionItem[];
-  status: 'draft' | 'active' | 'completed' | 'cancelled' | 'expired';
+  status: PrescriptionStatus;
   prescribedDate: string;
   pharmacy?: string;
   notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface CreatePrescriptionDto {
@@ -34,7 +45,7 @@ export interface CreatePrescriptionDto {
   providerName: string;
   encounterId?: string;
   medications: PrescriptionItem[];
-  status?: 'draft' | 'active' | 'completed' | 'cancelled' | 'expired';
+  status?: PrescriptionStatus;
   prescribedDate?: string;
   pharmacy?: string;
   notes?: string;
@@ -56,6 +67,47 @@ export interface PaginatedPrescriptions {
   page: number;
   limit: number;
   totalPages: number;
+}
+
+export type RefillStatus = 'pending' | 'approved' | 'denied' | 'completed';
+
+export interface RefillRequest {
+  id: string;
+  prescriptionId: string;
+  patientName: string;
+  medication: string;
+  dosage: string;
+  status: RefillStatus;
+  requestedBy?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRefillDto {
+  notes?: string;
+}
+
+export interface UpdateRefillDto {
+  status: RefillStatus;
+  notes?: string;
+}
+
+export interface UpdatePrescriptionStatusDto {
+  status: PrescriptionStatus;
+  reason?: string;
+}
+
+export interface StatusHistoryEntry {
+  id: string;
+  prescriptionId: string;
+  previousStatus: string | null;
+  newStatus: string;
+  changedBy?: string | null;
+  reason?: string | null;
+  createdAt: string;
 }
 
 class PrescriptionService {
@@ -90,6 +142,47 @@ class PrescriptionService {
 
   async delete(id: string): Promise<void> {
     await api.delete(`${this.baseUrl}/${id}`);
+  }
+
+  async updateStatus(id: string, dto: UpdatePrescriptionStatusDto): Promise<Prescription> {
+    const response = await api.post(`${this.baseUrl}/${id}/status`, dto);
+    return response.data;
+  }
+
+  async getStatusHistory(id: string): Promise<StatusHistoryEntry[]> {
+    const response = await api.get(`${this.baseUrl}/${id}/status-history`);
+    return response.data;
+  }
+
+  async findAllRefills(): Promise<RefillRequest[]> {
+    const response = await api.get(`${this.baseUrl}/refills`);
+    return response.data;
+  }
+
+  async findRefills(prescriptionId: string): Promise<RefillRequest[]> {
+    const response = await api.get(`${this.baseUrl}/${prescriptionId}/refills`);
+    return response.data;
+  }
+
+  async createRefill(prescriptionId: string, dto: CreateRefillDto): Promise<RefillRequest> {
+    const response = await api.post(`${this.baseUrl}/${prescriptionId}/refill`, dto);
+    return response.data;
+  }
+
+  async updateRefill(
+    prescriptionId: string,
+    refillId: string,
+    dto: UpdateRefillDto,
+  ): Promise<RefillRequest> {
+    const response = await api.patch(
+      `${this.baseUrl}/${prescriptionId}/refills/${refillId}`,
+      dto,
+    );
+    return response.data;
+  }
+
+  async deleteRefill(prescriptionId: string, refillId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${prescriptionId}/refills/${refillId}`);
   }
 }
 

@@ -63,6 +63,26 @@ export class AppointmentsController {
     return this.appointmentsService.findAll(req.tenantId, query);
   }
 
+  // ── Provider Availability Endpoints ─────────────────────────────────────────
+  // NOTE: These routes MUST be declared before @Get(':id') to avoid
+  // 'availability' being captured as an appointment UUID param.
+
+  @Get('availability')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get all provider availability records for the tenant' })
+  @ApiResponse({ status: 200, description: 'List of all provider availability' })
+  async findAllAvailability(@Request() req: AuthenticatedRequest) {
+    return this.appointmentsService.findAllAvailability(req.tenantId);
+  }
+
+  @Get('availability-overrides')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get all provider availability overrides for the tenant' })
+  @ApiResponse({ status: 200, description: 'List of all provider availability overrides' })
+  async findAllOverrides(@Request() req: AuthenticatedRequest) {
+    return this.appointmentsService.findAllOverrides(req.tenantId);
+  }
+
   @Get(':id')
   @Roles('admin', 'doctor', 'nurse', 'receptionist')
   @ApiOperation({ summary: 'Get appointment by ID' })
@@ -216,7 +236,7 @@ export class AppointmentsController {
     return this.appointmentsService.cancelWorkflow(req.tenantId, id, reason);
   }
 
-  // ── Provider Availability Endpoints ─────────────────────────────────────────
+  // ── Provider Availability CRUD Endpoints ────────────────────────────────────
 
   @Post('availability')
   @Roles('admin', 'doctor', 'receptionist')

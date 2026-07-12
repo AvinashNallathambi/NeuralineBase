@@ -8,6 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
 
 @Entity('claim_line_items')
 @Index(['claimId', 'codeType', 'code'])
@@ -34,31 +35,31 @@ export class ClaimLineItem {
   @Column({ name: 'quantity', type: 'int', default: 1 })
   quantity!: number;
 
-  @Column({ name: 'unit_price', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'unit_price', type: 'decimal', precision: 10, scale: 2, transformer: DecimalTransformer })
   unitPrice!: number;
 
-  @Column({ name: 'total_charge', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'total_charge', type: 'decimal', precision: 10, scale: 2, transformer: DecimalTransformer })
   totalCharge!: number;
 
-  @Column({ name: 'allowed_amount', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'allowed_amount', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   allowedAmount!: number | null;
 
-  @Column({ name: 'paid_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'paid_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   paidAmount!: number;
 
-  @Column({ name: 'patient_responsibility', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'patient_responsibility', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   patientResponsibility!: number;
 
-  @Column({ name: 'deductible_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'deductible_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   deductibleAmount!: number;
 
-  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   copayAmount!: number;
 
-  @Column({ name: 'coinsurance_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'coinsurance_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   coinsuranceAmount!: number;
 
-  @Column({ name: 'adjustment_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'adjustment_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   adjustmentAmount!: number;
 
   @Column({ name: 'adjustment_reason', type: 'varchar', length: 255, nullable: true })

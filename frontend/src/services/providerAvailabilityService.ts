@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ProviderAvailability } from '../types';
+import type { ProviderAvailability, ProviderAvailabilityOverride } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000/api/v1';
 
@@ -66,6 +66,22 @@ class ProviderAvailabilityService {
   }
 
   // ── Provider Availability Methods ─────────────────────────────────────────
+
+  async findAllAvailability(): Promise<ProviderAvailability[]> {
+    const response = await axios.get(
+      `${API_BASE}/appointments/availability`,
+      this.getHeaders(),
+    );
+    return response.data;
+  }
+
+  async findAllOverrides(): Promise<ProviderAvailabilityOverride[]> {
+    const response = await axios.get(
+      `${API_BASE}/appointments/availability-overrides`,
+      this.getHeaders(),
+    );
+    return response.data;
+  }
 
   async createAvailability(dto: CreateProviderAvailabilityDto): Promise<ProviderAvailability> {
     const response = await axios.post(

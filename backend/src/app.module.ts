@@ -10,6 +10,11 @@ import { ClinicalModule } from './modules/clinical/clinical.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
 import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { RemittanceModule } from './modules/remittance/remittance.module';
+import { DenialsModule } from './modules/denials/denials.module';
+import { AppealsModule } from './modules/appeals/appeals.module';
+import { UnderpaymentsModule } from './modules/underpayments/underpayments.module';
+import { AutomationModule } from './modules/automation/automation.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { TelemedicineModule } from './modules/telemedicine/telemedicine.module';
 import { ReportsModule } from './modules/reports/reports.module';
@@ -91,6 +96,11 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     PrescriptionsModule,
     LaboratoryModule,
     BillingModule,
+    RemittanceModule,
+    DenialsModule,
+    AppealsModule,
+    UnderpaymentsModule,
+    AutomationModule,
     NotificationsModule,
     TelemedicineModule,
     ReportsModule,
