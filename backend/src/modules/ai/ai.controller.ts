@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Logger, Request, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Logger, Request, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IntegrationsService } from '../integrations/integrations.service';
@@ -66,6 +66,10 @@ export class AiController {
   async generateSoap(@Body() dto: GenerateSoapDto) {
     this.logger.debug('Generating SOAP note from transcript');
 
+    if (!dto.transcript || !dto.transcript.trim()) {
+      throw new HttpException('Transcript is required', HttpStatus.BAD_REQUEST);
+    }
+
     const prompt = `You are a medical documentation assistant. Convert the following clinical encounter transcript into a structured SOAP note.
 
 Transcript:
@@ -83,12 +87,24 @@ Return ONLY a JSON object with this exact shape:
 
 Be concise but clinically thorough. Use professional medical terminology.`;
 
-    return this.aiService.generateStructured(prompt);
+    try {
+      return await this.aiService.generateStructured(prompt);
+    } catch (err: any) {
+      this.logger.error(`SOAP generation failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI SOAP generation failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   @Post('suggest-codes')
   async suggestCodes(@Body() dto: SuggestCodesDto) {
     this.logger.debug('Suggesting medical codes from SOAP note');
+
+    if (!dto.subjective && !dto.objective && !dto.assessment && !dto.plan) {
+      throw new HttpException('SOAP note content is required', HttpStatus.BAD_REQUEST);
+    }
 
     const prompt = `You are a certified medical coder (CPC). Based on the following SOAP note, suggest the most accurate ICD-10 diagnosis codes and CPT procedure codes.
 
@@ -114,12 +130,24 @@ Rules:
 - Only include codes you are highly confident about.
 - Suggest modifiers when clinically appropriate (e.g., modifier 25 for E/M with procedure).`;
 
-    return this.aiService.generateStructured(prompt);
+    try {
+      return await this.aiService.generateStructured(prompt);
+    } catch (err: any) {
+      this.logger.error(`Code suggestion failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI code suggestion failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   @Post('suggest-diagnosis')
   async suggestDiagnosis(@Body() dto: SuggestDiagnosisDto) {
     this.logger.debug(`Suggesting ICD-10 codes from natural language query: "${dto.query.slice(0, 100)}"`);
+
+    if (!dto.query || !dto.query.trim()) {
+      throw new HttpException('Query is required', HttpStatus.BAD_REQUEST);
+    }
 
     const prompt = `You are a certified medical coder (CPC). Convert the following natural language clinical description into accurate ICD-10-CM diagnosis codes.
 
@@ -144,7 +172,15 @@ Rules:
 - Only suggest codes you are highly confident about.
 - If the query is not a medical condition, return an empty array.`;
 
-    return this.aiService.generateStructured(prompt);
+    try {
+      return await this.aiService.generateStructured(prompt);
+    } catch (err: any) {
+      this.logger.error(`Diagnosis suggestion failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI diagnosis suggestion failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 
   @Post('transcribe')
