@@ -10,6 +10,7 @@ import {
   JoinColumn,
   OneToMany,
 } from 'typeorm';
+import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
 
 export enum ClaimStatus {
   DRAFT = 'draft',
@@ -81,28 +82,28 @@ export class EncounterClaim {
   })
   status!: ClaimStatus;
 
-  @Column({ name: 'total_billed', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'total_billed', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   totalBilled!: number;
 
-  @Column({ name: 'total_allowed', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'total_allowed', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   totalAllowed!: number | null;
 
-  @Column({ name: 'total_paid', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'total_paid', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   totalPaid!: number;
 
-  @Column({ name: 'patient_responsibility', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'patient_responsibility', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   patientResponsibility!: number;
 
-  @Column({ name: 'deductible_applied', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'deductible_applied', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   deductibleApplied!: number;
 
-  @Column({ name: 'copay_applied', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'copay_applied', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   copayApplied!: number;
 
-  @Column({ name: 'coinsurance_applied', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'coinsurance_applied', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   coinsuranceApplied!: number;
 
-  @Column({ name: 'adjustment_amount', type: 'decimal', precision: 10, scale: 2, default: 0 })
+  @Column({ name: 'adjustment_amount', type: 'decimal', precision: 10, scale: 2, default: 0, transformer: DecimalTransformer })
   adjustmentAmount!: number;
 
   @Column({ name: 'denial_reason', type: 'text', nullable: true })

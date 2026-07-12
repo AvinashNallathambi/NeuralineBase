@@ -29,7 +29,7 @@ services:
       dockerfile: Dockerfile
     container_name: neuraline-api-gateway
     ports:
-      - '4001:4000'
+      - '4000:4000'
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,7 +45,7 @@ services:
       # in production. Shown inline here for development convenience only.
       - DB_USERNAME=${DB_USERNAME:-neuraline}
       - DB_PASSWORD=${DB_PASSWORD:-neuraline_dev}
-      - DB_SYNCHRONIZE=true
+      - DB_SYNCHRONIZE=false
       - DB_LOGGING=false
       - REDIS_HOST=redis
       - REDIS_PORT=6379

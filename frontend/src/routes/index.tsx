@@ -62,13 +62,27 @@ const PrescriptionDetailPage = lazyWithRetry(
 const NewPrescriptionPage = lazyWithRetry(
   () => import("../pages/prescriptions/NewPrescriptionPage"),
 );
+const EditPrescriptionPage = lazyWithRetry(
+  () => import("../pages/prescriptions/EditPrescriptionPage"),
+);
 const LaboratoryPage = lazyWithRetry(
   () => import("../pages/laboratory/LaboratoryPage"),
+);
+const LabOrderDetailPage = lazyWithRetry(
+  () => import("../pages/laboratory/LabOrderDetailPage"),
+);
+const PatientLabHistoryPage = lazyWithRetry(
+  () => import("../pages/laboratory/PatientLabHistoryPage"),
 );
 const BillingPage = lazyWithRetry(() => import("../pages/billing/BillingPage"));
 const ClaimDetailPage = lazyWithRetry(
   () => import("../pages/billing/ClaimDetailPage"),
 );
+const RemittancePage = lazyWithRetry(() => import("../pages/remittance/RemittancePage"));
+const DenialsPage = lazyWithRetry(() => import("../pages/denials/DenialsPage"));
+const AppealsPage = lazyWithRetry(() => import("../pages/appeals/AppealsPage"));
+const UnderpaymentsPage = lazyWithRetry(() => import("../pages/underpayments/UnderpaymentsPage"));
+const AutomationPage = lazyWithRetry(() => import("../pages/automation/AutomationPage"));
 const EligibilityPage = lazyWithRetry(() => import('../pages/eligibility/EligibilityPage'));
 const SuperbillListPage = lazyWithRetry(() => import('../pages/superbills/SuperbillListPage'));
 const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbills/SuperbillDetailPage'));
@@ -240,6 +254,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "/prescriptions/:id/edit",
+        element: (
+          <LazyPage>
+            <EditPrescriptionPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: "/prescriptions/:id",
         element: (
           <LazyPage>
@@ -256,6 +278,22 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "/laboratory/:id",
+        element: (
+          <LazyPage>
+            <LabOrderDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/laboratory/patient/:patientId",
+        element: (
+          <LazyPage>
+            <PatientLabHistoryPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: "/billing",
         element: (
           <LazyPage>
@@ -268,6 +306,46 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <ClaimDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/remittance",
+        element: (
+          <LazyPage>
+            <RemittancePage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/denials",
+        element: (
+          <LazyPage>
+            <DenialsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/appeals",
+        element: (
+          <LazyPage>
+            <AppealsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/underpayments",
+        element: (
+          <LazyPage>
+            <UnderpaymentsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/automation",
+        element: (
+          <LazyPage>
+            <AutomationPage />
           </LazyPage>
         ),
       },

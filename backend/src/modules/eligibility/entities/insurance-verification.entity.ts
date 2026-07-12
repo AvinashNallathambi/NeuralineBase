@@ -9,6 +9,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
 import { PatientInsurance } from '../../billing/entities/patient-insurance.entity';
 
 export enum VerificationStatus {
@@ -89,28 +90,28 @@ export class InsuranceVerification {
   @Column({ name: 'expiration_date', type: 'date', nullable: true })
   expirationDate!: Date | null;
 
-  @Column({ name: 'deductible_individual', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'deductible_individual', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   deductibleIndividual!: number | null;
 
-  @Column({ name: 'deductible_family', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'deductible_family', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   deductibleFamily!: number | null;
 
-  @Column({ name: 'deductible_remaining', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'deductible_remaining', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   deductibleRemaining!: number | null;
 
-  @Column({ name: 'out_of_pocket_individual', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'out_of_pocket_individual', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   outOfPocketIndividual!: number | null;
 
-  @Column({ name: 'out_of_pocket_family', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'out_of_pocket_family', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   outOfPocketFamily!: number | null;
 
-  @Column({ name: 'out_of_pocket_remaining', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'out_of_pocket_remaining', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   outOfPocketRemaining!: number | null;
 
-  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   copayAmount!: number | null;
 
-  @Column({ name: 'coinsurance_percentage', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({ name: 'coinsurance_percentage', type: 'decimal', precision: 5, scale: 2, nullable: true, transformer: DecimalTransformer })
   coinsurancePercentage!: number | null;
 
   @Column({ name: 'authorization_required', type: 'boolean', default: false })

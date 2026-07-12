@@ -9,6 +9,7 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
+import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
 import { InsurancePayer } from './insurance-payer.entity';
 
 export enum InsuranceRelation {
@@ -80,13 +81,13 @@ export class PatientInsurance {
   @Column({ name: 'expiration_date', type: 'date', nullable: true })
   expirationDate!: Date | null;
 
-  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'copay_amount', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   copayAmount!: number | null;
 
-  @Column({ name: 'deductible_amount', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'deductible_amount', type: 'decimal', precision: 10, scale: 2, nullable: true, transformer: DecimalTransformer })
   deductibleAmount!: number | null;
 
-  @Column({ name: 'coinsurance_percentage', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  @Column({ name: 'coinsurance_percentage', type: 'decimal', precision: 5, scale: 2, nullable: true, transformer: DecimalTransformer })
   coinsurancePercentage!: number | null;
 
   @Column({ name: 'status', type: 'varchar', length: 20, default: 'active' })
