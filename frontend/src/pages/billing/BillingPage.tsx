@@ -33,7 +33,6 @@ import {
   MinusCircleOutlined,
   FileDoneOutlined,
   CreditCardOutlined,
-  SendOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { billingService, EncounterClaim, ClaimLineItem } from '../../services/billingService';
@@ -203,40 +202,6 @@ const BillingPage: React.FC = () => {
     }
   };
 
-  const [submittingClaimId, setSubmittingClaimId] = useState<string | null>(null);
-
-  const handleSubmitToClearinghouse = async (claim: EncounterClaim) => {
-    setSubmittingClaimId(claim.id);
-    try {
-      const result = await billingService.submitClaim(claim.id);
-      if (result.accepted) {
-        message.success(
-          `Claim ${claim.claimNumber} submitted (tracking: ${result.clearinghouseTrackingId})`,
-        );
-        fetchClaims();
-      } else {
-        message.error(
-          `Submission rejected: ${result.errorMessage || result.errorCode || 'unknown error'}`,
-        );
-      }
-    } catch (error: any) {
-      const detail = error?.response?.data?.message || error?.message || 'Failed to submit claim';
-      message.error(detail);
-    } finally {
-      setSubmittingClaimId(null);
-    }
-  };
-
-  const handleCheckSubmissionStatus = async (claim: EncounterClaim) => {
-    try {
-      const result = await billingService.getClaimSubmissionStatus(claim.id);
-      message.info(`Status: ${result.status}${result.payerClaimId ? ` (payer claim: ${result.payerClaimId})` : ''}`);
-    } catch (error: any) {
-      const detail = error?.response?.data?.message || error?.message || 'Failed to fetch status';
-      message.error(detail);
-    }
-  };
-
   const columns: ColumnsType<EncounterClaim> = [
     {
       title: 'Claim #',
@@ -304,36 +269,15 @@ const BillingPage: React.FC = () => {
     {
       title: 'Actions',
       key: 'actions',
-      width: 130,
+      width: 80,
       render: (_: unknown, record: EncounterClaim) => (
-        <Space size={0}>
-          <Tooltip title="View Details">
-            <Button
-              type="text"
-              icon={<EyeOutlined />}
-              onClick={() => navigate(`/billing/${record.id}`)}
-            />
-          </Tooltip>
-          {record.status === 'ready_to_bill' && (
-            <Tooltip title="Submit to Clearinghouse">
-              <Button
-                type="text"
-                icon={<SendOutlined style={{ color: '#0D7C8A' }} />}
-                loading={submittingClaimId === record.id}
-                onClick={() => handleSubmitToClearinghouse(record)}
-              />
-            </Tooltip>
-          )}
-          {record.status === 'submitted' && (
-            <Tooltip title="Check Submission Status">
-              <Button
-                type="text"
-                icon={<ClockCircleOutlined style={{ color: '#faad14' }} />}
-                onClick={() => handleCheckSubmissionStatus(record)}
-              />
-            </Tooltip>
-          )}
-        </Space>
+        <Tooltip title="View Details">
+          <Button
+            type="text"
+            icon={<EyeOutlined />}
+            onClick={() => navigate(`/billing/${record.id}`)}
+          />
+        </Tooltip>
       ),
     },
   ];

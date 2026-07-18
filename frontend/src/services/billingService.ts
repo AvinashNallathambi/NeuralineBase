@@ -169,29 +169,6 @@ class BillingService {
     return response.data;
   }
 
-  async submitClaim(id: string): Promise<{
-    accepted: boolean;
-    clearinghouseTrackingId: string;
-    status: string;
-    errorCode?: string | null;
-    errorMessage?: string | null;
-    claim: EncounterClaim;
-  }> {
-    const response = await api.post(`${this.baseUrl}/claims/${id}/submit`, {});
-    return response.data;
-  }
-
-  async getClaimSubmissionStatus(id: string): Promise<{
-    clearinghouseTrackingId: string | null;
-    status: string;
-    payerClaimId?: string | null;
-    errorCode?: string | null;
-    errorMessage?: string | null;
-  }> {
-    const response = await api.get(`${this.baseUrl}/claims/${id}/submission-status`);
-    return response.data;
-  }
-
   // ─── Invoices ───────────────────────────────────────────────────
 
   async findAllInvoices(params?: {

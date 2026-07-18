@@ -15,6 +15,7 @@ import {
   Empty,
   Space,
   Radio,
+  TimePicker,
 } from 'antd';
 import {
   CalendarOutlined,
@@ -24,22 +25,17 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons';
 import patientPortalService from '../../services/patientPortalService';
-import { useNavigate } from 'react-router-dom';
-import type { PortalProvider } from '../../services/patientPortalService';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
 const PortalAppointmentsPage: React.FC = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
-  const [providers, setProviders] = useState<PortalProvider[]>([]);
-  const [slots, setSlots] = useState<{ start: string; end: string }[]>([]);
+  const [slots, setSlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -58,20 +54,7 @@ const PortalAppointmentsPage: React.FC = () => {
     }
   };
 
-  const openModal = async () => {
-    setModalVisible(true);
-    setSelectedSlot(null);
-    setSlots([]);
-    try {
-      const data = await patientPortalService.getProviders();
-      setProviders(data);
-    } catch {
-      setProviders([]);
-    }
-  };
-
   const handleDateChange = async (date: any) => {
-    setSelectedSlot(null);
     if (!date) {
       setSlots([]);
       return;
@@ -93,26 +76,15 @@ const PortalAppointmentsPage: React.FC = () => {
     }
   };
 
-  const handleSlotSelect = (slotStart: string) => {
-    setSelectedSlot(slotStart);
-  };
-
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
-      if (!selectedSlot) {
-        message.warning('Please select a time slot');
-        return;
-      }
       setSubmitting(true);
-      // Combine the selected date with the selected slot time
-      const dateStr = values.preferredDate.format('YYYY-MM-DD');
-      const preferredDateTime = `${dateStr}T${selectedSlot}:00`;
       await patientPortalService.requestAppointment({
         providerId: values.providerId,
         appointmentType: values.appointmentType,
         reasonForVisit: values.reasonForVisit,
-        preferredDate: preferredDateTime,
+        preferredDate: values.preferredDate.format('YYYY-MM-DDTHH:mm:ss'),
         isTelehealth: values.isTelehealth === 'telehealth',
         notes: values.notes,
       });
@@ -120,7 +92,6 @@ const PortalAppointmentsPage: React.FC = () => {
       setModalVisible(false);
       form.resetFields();
       setSlots([]);
-      setSelectedSlot(null);
       loadAppointments();
     } catch (err: any) {
       if (err.errorFields) return;
@@ -140,6 +111,13 @@ const PortalAppointmentsPage: React.FC = () => {
     no_show: 'orange',
   };
 
+  // Mock providers — in production this would come from an API
+  const providers = [
+    { id: 'prov-1', name: 'Dr. Sarah Chen' },
+    { id: 'prov-2', name: 'Dr. Michael Rodriguez' },
+    { id: 'prov-3', name: 'Dr. Emily Johnson' },
+  ];
+
   if (loading) {
     return <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" /></div>;
   }
@@ -157,7 +135,7 @@ const PortalAppointmentsPage: React.FC = () => {
         <Title level={3} style={{ margin: 0 }}>
           <CalendarOutlined /> My Appointments
         </Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openModal}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>
           Request Appointment
         </Button>
       </div>
@@ -184,17 +162,7 @@ const PortalAppointmentsPage: React.FC = () => {
                       </Text>
                       {appt.providerName && <Text type="secondary">Provider: {appt.providerName}</Text>}
                       {appt.isTelehealth && appt.meetingLink && (
-                        <Button
-                          type="link"
-                          onClick={() => {
-                            if (appt.meetingLink.startsWith('/portal/visit/')) {
-                              navigate(appt.meetingLink);
-                            } else {
-                              window.open(appt.meetingLink, '_blank');
-                            }
-                          }}
-                          style={{ padding: 0 }}
-                        >
+                        <Button type="link" href={appt.meetingLink} target="_blank" style={{ padding: 0 }}>
                           Join Video Visit
                         </Button>
                       )}
@@ -206,7 +174,7 @@ const PortalAppointmentsPage: React.FC = () => {
           />
         ) : (
           <Empty description="No upcoming appointments">
-            <Button type="primary" onClick={openModal}>
+            <Button type="primary" onClick={() => setModalVisible(true)}>
               Request an Appointment
             </Button>
           </Empty>
@@ -251,7 +219,7 @@ const PortalAppointmentsPage: React.FC = () => {
       <Modal
         title="Request an Appointment"
         open={modalVisible}
-        onCancel={() => { setModalVisible(false); form.resetFields(); setSlots([]); setSelectedSlot(null); }}
+        onCancel={() => { setModalVisible(false); form.resetFields(); setSlots([]); }}
         onOk={handleSubmit}
         confirmLoading={submitting}
         width={600}
@@ -261,9 +229,7 @@ const PortalAppointmentsPage: React.FC = () => {
           <Form.Item name="providerId" label="Preferred Provider" rules={[{ required: true }]}>
             <Select placeholder="Select a provider">
               {providers.map((p) => (
-                <Select.Option key={p.id} value={p.id}>
-                  {p.fullName}{p.specialty ? ` — ${p.specialty}` : ''}
-                </Select.Option>
+                <Select.Option key={p.id} value={p.id}>{p.name}</Select.Option>
               ))}
             </Select>
           </Form.Item>
@@ -295,30 +261,20 @@ const PortalAppointmentsPage: React.FC = () => {
 
           {loadingSlots && <div style={{ textAlign: 'center', marginBottom: 16 }}><Spin /></div>}
 
-          {!loadingSlots && slots.length > 0 && (
+          {slots.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <Text strong>Available Time Slots:</Text>
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                {selectedSlot ? `Selected: ${selectedSlot}` : 'Click a slot to select'}
-              </Text>
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {slots.map((slot, i) => (
                   <Tag
                     key={i}
                     style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 14 }}
-                    color={selectedSlot === slot.start ? 'green' : 'blue'}
-                    onClick={() => handleSlotSelect(slot.start)}
+                    color="blue"
                   >
-                    {slot.start}
+                    {slot.startTime || slot.time}
                   </Tag>
                 ))}
               </div>
-            </div>
-          )}
-
-          {!loadingSlots && form.getFieldValue('preferredDate') && slots.length === 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <Empty description="No available slots for this date. Please try another date." />
             </div>
           )}
 

@@ -71,16 +71,6 @@ export class BillingController {
     return this.billingService.calculateClaimTotals(id);
   }
 
-  @Post('claims/:id/submit')
-  submitClaim(@Param('id') id: string) {
-    return this.billingService.submitClaim(id);
-  }
-
-  @Get('claims/:id/submission-status')
-  getClaimSubmissionStatus(@Param('id') id: string) {
-    return this.billingService.getClaimSubmissionStatus(id);
-  }
-
   // ─── Invoices ───────────────────────────────────────────────────────
 
   @Post('invoices')

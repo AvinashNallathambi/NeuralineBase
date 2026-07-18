@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   Table,
@@ -10,37 +10,34 @@ import {
   Select,
   Popconfirm,
   message,
-} from "antd";
+} from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   SettingOutlined,
-} from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
-import { useWorkflowStore } from "../../store/dataStore";
-import type { WorkflowTemplate } from "../../types";
-import type { ColumnsType } from "antd/es/table";
+} from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
+import { useWorkflowStore } from '../../store/dataStore';
+import type { WorkflowTemplate } from '../../types';
+import type { ColumnsType } from 'antd/es/table';
 
 const { Title } = Typography;
 const { Search } = Input;
 
 const entityTypeColors: Record<string, string> = {
-  appointment: "blue",
-  encounter: "cyan",
-  prescription: "green",
-  lab_order: "orange",
-  claim: "purple",
+  appointment: 'blue',
+  encounter: 'cyan',
+  prescription: 'green',
+  lab_order: 'orange',
+  claim: 'purple',
 };
 
 const WorkflowListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { templates, loading, fetchTemplates, deleteTemplate } =
-    useWorkflowStore();
-  const [search, setSearch] = useState("");
-  const [entityTypeFilter, setEntityTypeFilter] = useState<
-    string | undefined
-  >();
+  const { templates, loading, fetchTemplates, deleteTemplate } = useWorkflowStore();
+  const [search, setSearch] = useState('');
+  const [entityTypeFilter, setEntityTypeFilter] = useState<string | undefined>();
 
   useEffect(() => {
     fetchTemplates({ entityType: entityTypeFilter, search });
@@ -49,17 +46,17 @@ const WorkflowListPage: React.FC = () => {
   const handleDelete = async (id: string) => {
     try {
       await deleteTemplate(id);
-      message.success("Workflow template deleted");
+      message.success('Workflow template deleted');
     } catch {
-      message.error("Failed to delete workflow template");
+      message.error('Failed to delete workflow template');
     }
   };
 
   const columns: ColumnsType<WorkflowTemplate> = [
     {
-      title: "Name",
-      dataIndex: "name",
-      key: "name",
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
       render: (name: string, record) => (
         <a onClick={() => navigate(`/workflow/${record.id}`)}>
           <SettingOutlined style={{ marginRight: 8 }} />
@@ -68,18 +65,18 @@ const WorkflowListPage: React.FC = () => {
       ),
     },
     {
-      title: "Entity Type",
-      dataIndex: "entityType",
-      key: "entityType",
+      title: 'Entity Type',
+      dataIndex: 'entityType',
+      key: 'entityType',
       render: (type: string) => (
-        <Tag color={entityTypeColors[type] || "default"}>{type}</Tag>
+        <Tag color={entityTypeColors[type] || 'default'}>{type}</Tag>
       ),
     },
     {
-      title: "Steps",
-      dataIndex: "steps",
-      key: "steps",
-      render: (steps: WorkflowTemplate["steps"]) => (
+      title: 'Steps',
+      dataIndex: 'steps',
+      key: 'steps',
+      render: (steps: WorkflowTemplate['steps']) => (
         <Space size={4} wrap>
           {steps
             .sort((a, b) => a.order - b.order)
@@ -92,16 +89,16 @@ const WorkflowListPage: React.FC = () => {
       ),
     },
     {
-      title: "Version",
-      dataIndex: "version",
-      key: "version",
+      title: 'Version',
+      dataIndex: 'version',
+      key: 'version',
       width: 80,
-      align: "center",
+      align: 'center',
     },
     {
-      title: "Status",
-      dataIndex: "isActive",
-      key: "isActive",
+      title: 'Status',
+      dataIndex: 'isActive',
+      key: 'isActive',
       width: 100,
       render: (active: boolean) =>
         active ? (
@@ -111,8 +108,8 @@ const WorkflowListPage: React.FC = () => {
         ),
     },
     {
-      title: "Actions",
-      key: "actions",
+      title: 'Actions',
+      key: 'actions',
       width: 150,
       render: (_, record) => (
         <Space>
@@ -139,9 +136,9 @@ const WorkflowListPage: React.FC = () => {
       <Card>
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
             marginBottom: 16,
           }}
         >
@@ -151,13 +148,13 @@ const WorkflowListPage: React.FC = () => {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => navigate("/workflow/new")}
+            onClick={() => navigate('/workflow/new')}
           >
             New Workflow
           </Button>
         </div>
 
-        <div style={{ marginBottom: 16, display: "flex", gap: 12 }}>
+        <div style={{ marginBottom: 16, display: 'flex', gap: 12 }}>
           <Search
             placeholder="Search workflows..."
             allowClear
@@ -173,11 +170,11 @@ const WorkflowListPage: React.FC = () => {
             value={entityTypeFilter}
             onChange={(value) => setEntityTypeFilter(value)}
             options={[
-              { label: "Appointment", value: "appointment" },
-              { label: "Encounter", value: "encounter" },
-              { label: "Prescription", value: "prescription" },
-              { label: "Lab Order", value: "lab_order" },
-              { label: "Claim", value: "claim" },
+              { label: 'Appointment', value: 'appointment' },
+              { label: 'Encounter', value: 'encounter' },
+              { label: 'Prescription', value: 'prescription' },
+              { label: 'Lab Order', value: 'lab_order' },
+              { label: 'Claim', value: 'claim' },
             ]}
           />
         </div>

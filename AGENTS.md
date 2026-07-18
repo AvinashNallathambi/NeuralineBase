@@ -1,7 +1,6 @@
 # Neuraline EMR - Development Guide
 
 ## Architecture
-
 - **Frontend**: React + Vite + Ant Design (port 5173 default)
 - **Backend**: NestJS + TypeORM + PostgreSQL (port 4001 via Docker, 4000 direct)
 - **AI Services**: Ollama (port 11434) + Whisper (port 8001)
@@ -9,7 +8,6 @@
 ## Quick Start
 
 ### Backend
-
 ```bash
 cd backend
 # Create .env from .env.example with correct DB creds (see Docker Compose)
@@ -17,14 +15,12 @@ npx nest start        # or: npx nest start --watch
 ```
 
 ### Frontend
-
 ```bash
 cd frontend
 npx vite --host
 ```
 
 ### Docker Services
-
 ```bash
 docker compose up -d postgres whisper-service ollama
 # Pull the Ollama model:
@@ -32,39 +28,34 @@ curl -X POST http://localhost:11434/api/pull -d '{"name":"mistral"}'
 ```
 
 ## Database
-
 - Docker PostgreSQL: user=`neuraline`, password=`neuraline_dev`, database=`neuraline`
 - `DB_SYNCHRONIZE=false` by default. Use migrations to manage schema changes.
 - Boolean env vars must be compared as strings (ConfigService returns strings)
 
 ### Schema Migrations
-
 When you modify an entity, generate and run a migration:
 
 ```bash
 cd backend
-# Generate migration from entity changes (use the commonjs ts-node wrapper)
-npx typeorm-ts-node-commonjs migration:generate -d src/config/database.config.ts src/migrations/MigrationName
+# Generate migration from entity changes
+npx typeorm migration:generate -d src/config/database.config.ts src/migrations/MigrationName
 # Run pending migrations
-npx typeorm-ts-node-commonjs migration:run -d src/config/database.config.ts
+npx typeorm migration:run -d src/config/database.config.ts
 # Revert last migration
-npx typeorm-ts-node-commonjs migration:revert -d src/config/database.config.ts
+npx typeorm migration:revert -d src/config/database.config.ts
 ```
 
 To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env` or Docker env, then disable it and create a migration before committing.
 
 ## Backend Modules
-
 - **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Reports, Telemedicine, Users
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
 
 ## Subscriptions Module
-
 The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS billing, payment method management, and dunning:
 
 ### Entities
-
 - **Subscription**: Tenant subscription with plan tier, billing cycle, status (trialing/active/past_due/cancelled/expired), Stripe IDs, trial dates
 - **SubscriptionPlan**: Plan catalog (free/professional/enterprise) with monthly/annual pricing and feature limits
 - **SubscriptionInvoice**: Invoice history with status tracking (paid/open/failed/void/refunded)
@@ -72,13 +63,11 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
 - **SubscriptionPaymentPlan**: Installment payment plans for splitting balances across scheduled payments
 
 ### Providers
-
 - **SubscriptionProvider interface**: Abstraction for subscription billing operations
 - **StripeSubscriptionProvider**: Real Stripe integration (subscriptions, payment methods, SetupIntents, customer portal, invoice retry, dunning)
 - **MockSubscriptionProvider**: In-memory mock for development without Stripe API keys
 
 ### API Endpoints (all under `/api/v1/subscriptions`)
-
 - `GET /plans` / `GET /plans/:tier` — List/get subscription plans
 - `GET /current` — Get current tenant subscription with plan details
 - `POST /change-plan` — Change plan tier and/or billing cycle
@@ -109,7 +98,6 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
 - `POST /webhook` — Stripe webhook handler (invoice.payment_succeeded, invoice.payment_failed, customer.subscription.deleted, customer.subscription.updated)
 
 ### Notification System
-
 - **SubscriptionNotificationService**: Daily cron job checks for:
   - Trial expiration sequence (7/3/0 days before, post-expiration grace)
   - Upcoming renewal reminders (7 days before)
@@ -119,7 +107,6 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
 - Uses NotificationsModule for in-app + email notifications with deduplication
 
 ### Frontend
-
 - **SettingsPage** (`/settings?tab=billing`): Full billing dashboard with:
   - Active subscription card with plan details, features, trial/renewal alerts
   - Payment methods list (card/ACH) with default selection, remove, add
@@ -135,11 +122,9 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
 - **subscriptionService.ts**: Frontend service with all subscription + payment method + payment plan API methods
 
 ## Patient Portal
-
 The patient portal provides a dedicated, patient-facing interface separate from the staff EMR. It has its own authentication system, layout, and AI features.
 
 ### Patient Authentication
-
 - **Separate JWT strategy** (`patient-jwt`): Patients get tokens with `role: 'patient'`
 - **Login endpoint**: `POST /api/v1/patients/auth/login` (requires email, password, tenantId)
 - **Other endpoints**: `/patients/auth/refresh`, `/patients/auth/logout`, `/patients/auth/forgot-password`, `/patients/auth/reset-password`, `/patients/auth/me`, `/patients/auth/:patientId/setup-account`
@@ -149,7 +134,6 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - **Patient entity** extended with: `passwordHash`, `mfaEnabled`, `mfaSecret`, `portalActive`, `lastLoginAt`, `passwordResetToken`, `passwordResetExpiresAt`
 
 ### Patient Portal API (all under `/api/v1/patients/portal`, requires patient JWT)
-
 - `GET /dashboard` — Aggregated summary (appointments, prescriptions, labs, invoices, EOBs, outstanding balance)
 - `GET /appointments` — Patient's appointments
 - `GET /appointments/available-slots` — Available slots for a provider/date
@@ -163,7 +147,6 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - `GET /insurance` — Patient's insurance policies
 
 ### Patient Portal AI (all under `/api/v1/patients/portal/ai`, requires patient JWT)
-
 - `POST /explain-lab-result` — AI explains a lab result in plain language
 - `POST /assess-symptoms` — AI symptom checker with care navigation (self-care / schedule / urgent care / emergency)
 - `POST /check-interactions` — AI medication interaction checker
@@ -171,7 +154,6 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - `POST /visit-questions` — AI generates questions to ask your doctor
 
 ### Secure Messaging Module (`/api/v1/messaging`)
-
 - **Entities**: `Conversation` (patient-provider thread), `Message` (individual messages)
 - **Patient endpoints** (requires patient JWT):
   - `GET /patient/conversations` — List patient's conversations
@@ -186,7 +168,6 @@ The patient portal provides a dedicated, patient-facing interface separate from 
   - `POST /provider/conversations/:id/close` — Close a conversation
 
 ### Frontend Patient Portal
-
 - **Login page**: `/patient/login` (separate from staff login at `/login`)
 - **Portal layout**: `PatientPortalLayout` — dedicated sidebar with patient menu (no admin features)
 - **Route guard**: `PatientRoute` — redirects to `/patient/login` if not authenticated
@@ -203,11 +184,9 @@ The patient portal provides a dedicated, patient-facing interface separate from 
   - `/portal/profile` — View profile information
 
 ### Billing Module
-
 The billing module (`backend/src/modules/billing/`) provides claim lifecycle management, invoicing, and insurance master data:
 
 ### Entities
-
 - **EncounterClaim**: Insurance claims with status workflow (draft → ready_to_bill → submitted → paid/denied/partially_paid/appealed → cancelled)
 - **ClaimLineItem**: Individual service lines (CPT/ICD-10 coded with modifiers, diagnosis pointers, adjudication amounts)
 - **Invoice**: Patient invoices (cash_pay, self_pay, balance_due) with payment tracking
@@ -215,69 +194,19 @@ The billing module (`backend/src/modules/billing/`) provides claim lifecycle man
 - **PatientInsurance**: Patient insurance policies (primary/secondary/tertiary) with subscriber details
 
 ### API Endpoints (all under `/api/v1/billing`)
-
 - `POST/GET /claims` / `GET /claims/:id` / `PATCH /claims/:id` / `DELETE /claims/:id` — Claim CRUD
 - `PATCH /claims/:id/status` — Update claim status (state-machine validated)
 - `POST /claims/:id/calculate` — Calculate claim totals from line items
-- `POST /claims/:id/submit` — Submit a READY_TO_BILL claim to the clearinghouse (Stedi 837 or mock). On success moves to SUBMITTED and stores `metadata.clearinghouseTrackingId`.
-- `GET /claims/:id/submission-status` — Poll the clearinghouse for the latest submission status of a previously submitted claim
 - `POST/GET /invoices` / `GET /invoices/:id` / `PATCH /invoices/:id` / `DELETE /invoices/:id` — Invoice CRUD
 - `PATCH /invoices/:id/status` — Update invoice status
-- `POST /invoices/:id/payment` — Record patient payment (used internally by the payments module)
+- `POST /invoices/:id/payment` — Record patient payment
 - `GET /payers` / `GET /payers/:id` — Insurance payer master
 - `GET /patients/:patientId/insurance` — Patient's active insurance policies
 
-### Claim Submission (Clearinghouse Integration)
-
-The billing module ships with a pluggable claims provider (`ClaimsProvider` interface) that translates an `EncounterClaim` into an X12 837-equivalent JSON payload and submits it to a clearinghouse.
-
-- **Provider selection** (in `billing.module.ts`): if `STEDI_API_KEY` is set, `StediClaimsProvider` is used; otherwise `MockClaimsProvider` returns a fake accepted tracking id for development.
-- **Stedi provider** (`providers/stedi-claims.provider.ts`): POSTs to Stedi's claims API (`/change/medicalnetwork/claims/v2`), builds the subscriber/patient/provider/service-lines payload from the claim + patient insurance, and parses the ack into a tracking id.
-- **Trading partner routing**: each `InsurancePayer` should have `metadata.tradingPartnerId` set (the seeder populates this for common payers). The submit flow resolves it from the payer master, falling back to the patient's `PatientInsurance.payer.metadata.tradingPartnerId`.
-- **Lifecycle**: `DRAFT → READY_TO_BILL` (via `PATCH /claims/:id/status`) → `SUBMITTED` (via `POST /claims/:id/submit`). From there the remittance module's 835 auto-post moves the claim to `PAID` / `DENIED` / `PARTIALLY_PAID` when the ERA arrives.
-- **Status polling**: `GET /claims/:id/submission-status` calls the clearinghouse and persists the result to `metadata.lastStatusPoll`.
-
-### Insurance Payer Auto-Seed
-
-On first boot, `BillingSeedService` seeds 12 common US payers (Medicare, Medicaid, Aetna, BCBS, Cigna, UHC, Humana, Molina, Anthem, Kaiser, TRICARE, Aetna Better Health) with `metadata.tradingPartnerId` and `ediPayerId` for Stedi routing. Payers are stored under a shared sentinel tenant UUID so they're available to all tenants; tenants can add their own payers with their real `tenantId`.
-
-## Payments Module
-
-The payments module (`backend/src/modules/payments/`) provides real patient payment processing for invoices, with a pluggable provider abstraction.
-
-### Entities
-
-- **Payment**: Records a payment attempt against an invoice with status (pending → succeeded/failed/refunded), method (card/ach/cash/check), provider name, provider payment id, and client secret (for Stripe.js).
-
-### Provider Abstraction
-
-- **`PaymentsProvider` interface**: `createPaymentIntent`, `confirmPayment`, `parseWebhook`
-- **`MockPaymentsProvider`**: No network calls — simulates a succeeded intent. Used when `STRIPE_API_KEY` is not set.
-- **`StripePaymentsProvider`**: Uses the Stripe REST API directly via `fetch` (no SDK dependency). Creates PaymentIntents, confirms server-side, and parses webhook events. Activate by setting `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`.
-
-### API Endpoints (all under `/api/v1/payments`, requires JWT except webhook)
-
-- `POST /intent` — Create a payment intent for an invoice (validates amount ≤ balance due, creates Payment record, calls provider). Returns `clientSecret` for Stripe.js.
-- `POST /confirm` — Confirm a pending payment. On success, posts the payment to the invoice via `BillingService.recordPayment` and updates invoice status.
-- `GET /:id` — Get a payment by id
-- `GET /invoice/:invoiceId` — List payments for an invoice
-- `GET /patient/:patientId` — List payments for a patient
-- `POST /webhook` — Stripe webhook endpoint (NOT JWT-guarded). Verifies signature, updates Payment status, posts to invoice on success.
-
-### Integration Flow
-
-1. Patient portal calls `POST /payments/intent` with `{ invoiceId, patientId, amount }`
-2. Backend creates a `Payment` record (pending) + Stripe PaymentIntent, returns `clientSecret`
-3. Frontend (Stripe.js) confirms the card payment using the `clientSecret`
-4. Either: frontend calls `POST /payments/confirm`, OR Stripe sends a webhook to `POST /payments/webhook`
-5. On success, `BillingService.recordPayment` posts the amount to the invoice → invoice becomes `PAID` or `PARTIALLY_PAID`
-
 ## Laboratory Module
-
 The laboratory module (`backend/src/modules/laboratory/`) provides full lab order lifecycle, results, specimens, imaging, and a test panel catalog:
 
 ### Entities
-
 - **LabOrder**: Order with status workflow (draft → ordered → collected → in_progress → resulted → completed/cancelled)
 - **LabTest**: Individual test within an order (LOINC/CPT coded, tracks result status)
 - **LabResult**: Result values with abnormal/critical flags, acknowledgment tracking
@@ -288,11 +217,9 @@ The laboratory module (`backend/src/modules/laboratory/`) provides full lab orde
 - **LabOrderStatusHistory**: Audit trail of status transitions
 
 ### Auto-Seed
-
 On first boot, `LabSeedService` seeds 10 common lab panels (CBC, BMP, CMP, Lipid, HbA1c, Thyroid, Urinalysis, LFT, Coagulation, Iron) and 39 reference ranges with critical thresholds.
 
 ### API Endpoints (all under `/api/v1/laboratory`)
-
 - `GET /stats` — Dashboard statistics (pending, completed today, abnormal, critical unacknowledged)
 - `GET /panels` / `GET /panels/:id` / `POST /panels` — Lab panel catalog
 - `GET /reference-ranges?loincCode=...` — Reference range lookup by LOINC
@@ -309,7 +236,6 @@ On first boot, `LabSeedService` seeds 10 common lab panels (CBC, BMP, CMP, Lipid
 - `POST /imaging/:id/findings` — Submit radiology findings
 
 ### AI Features (Phase 1)
-
 - `POST /orders/:id/summarize` — AI: Generate plain-English summary of lab results (summary, keyFindings, recommendations, riskLevel). Requires Ollama.
 - `GET /ai/triage` — AI: Smart triage of abnormal results with 0-100 urgency scoring. Falls back to rule-based scoring when Ollama unavailable.
 - `POST /ai/query` — Natural language lab query (e.g. "Which patients have high HbA1c?"). AI parses query → structured criteria → DB search → AI summary. Falls back to keyword search when Ollama unavailable.
@@ -317,7 +243,6 @@ On first boot, `LabSeedService` seeds 10 common lab panels (CBC, BMP, CMP, Lipid
 - **Frontend**: "AI Summarize" button on LabOrderDetailPage, "AI Triage" tab on LaboratoryPage, "Ask AI" search bar on LaboratoryPage
 
 ### Frontend Pages
-
 - **LaboratoryPage** (`/laboratory`): Main lab dashboard with 5 tabs:
   - Lab Orders: Searchable order list with expandable test details, row click → detail page
   - Results: Completed orders with abnormal flag highlighting
@@ -334,20 +259,16 @@ On first boot, `LabSeedService` seeds 10 common lab panels (CBC, BMP, CMP, Lipid
 - **laboratoryService.ts**: Frontend service with all lab API methods (orders, results, specimens, imaging, critical results, acknowledgment, patient history, reference ranges)
 
 ## Workflow System
-
 The dynamic workflow module (`backend/src/modules/workflow/`) provides configurable state-machine workflows:
 
 ### Entities
-
 - **WorkflowTemplate**: Stores step definitions, transitions, colors, icons for a workflow type (e.g., appointment)
 - **WorkflowInstance**: Tracks a specific entity's current step, history, and status
 
 ### Auto-Seed
-
 On first boot, `WorkflowSeedService` creates a default appointment workflow with steps: scheduled → confirmed → checked_in → in_progress → completed (plus cancelled/no_show)
 
 ### API Endpoints
-
 - `POST /api/v1/workflow/templates` — Create template (admin)
 - `GET /api/v1/workflow/templates` — List templates
 - `GET /api/v1/workflow/templates/entity/:entityType` — Get active template for entity
@@ -361,36 +282,24 @@ On first boot, `WorkflowSeedService` creates a default appointment workflow with
 - `POST /api/v1/workflow/instances/entity/:entityType/:entityId/cancel` — Cancel workflow
 
 ### Frontend Integration
-
 - **WorkflowBuilderPage** (`/workflow/new`, `/workflow/:id`): Visual step builder (add/remove/reorder steps, configure transitions)
 - **WorkflowListPage** (`/workflow`): List/manage all templates
 - **WorkflowStatusBadge** component: Renders a clickable status tag with step popover; used in AppointmentPage when a workflow template is active
 - **AppointmentPage** auto-loads the active appointment workflow and creates/transitions instances on status changes
 
 ## Authentication
-
 - Dev user: `dr.sarah.chen@neuraline.health` / `Neuraline@2025`
 - JWT token stored in `sessionStorage` under key `neuraline_token`
 - Login endpoint: `POST /api/v1/auth/login`
 - All AI endpoints require JWT Bearer auth
 
 ## AI Pipeline
-
 1. Audio recording (browser MediaRecorder API)
-2. Transcription via **AssemblyAI** (`POST /api/v1/ai/transcribe`) — set `ASSEMBLYAI_API_KEY` in `.env`
+2. Transcription via Whisper service (`POST /api/v1/ai/transcribe`)
 3. SOAP note generation via Ollama/Mistral (`POST /api/v1/ai/generate-soap`)
 4. Medical code suggestions (`POST /api/v1/ai/suggest-codes`)
 
-### AssemblyAI Transcription
-
-- The `POST /api/v1/ai/transcribe` endpoint accepts an audio file upload (`multipart/form-data`, field name `file`) and forwards it to the AssemblyAI REST API.
-- Requires `ASSEMBLYAI_API_KEY` in the backend environment.
-- Returns: `{ text, duration, confidence, words, languageCode, provider: "assemblyai" }`.
-- File size limit: 100 MB.
-- The legacy Whisper service (`WHISPER_SERVICE_URL`) is no longer used by the AI Encounter page but is kept for fallback / local-only deployments.
-
 ## Verification Commands
-
 ```bash
 # Frontend type check
 cd frontend && npx tsc --noEmit
@@ -408,7 +317,6 @@ curl -s http://localhost:4000/api/v1/ai/health -H "Authorization: Bearer $TOKEN"
 ```
 
 ## HIPAA Notes
-
 - All DTOs require class-validator decorators (whitelist + forbidNonWhitelisted)
 - PHI must never be logged (audit interceptor sanitizes emails/SSN/phone)
 - Session tokens use sessionStorage (not localStorage)
@@ -420,9 +328,7 @@ curl -s http://localhost:4000/api/v1/ai/health -H "Authorization: Bearer $TOKEN"
 The following modules implement a comprehensive EOB/ERA/Denial Analysis workflow, closing the gap with competitors like Waystar, Experian Health, and Adonis.
 
 ### Remittance Module (`backend/src/modules/remittance/`)
-
 ERA/EOB data ingestion and payment posting:
-
 - **Entities**: Remittance, RemittanceClaim, RemittanceServiceLine, ClaimAdjustment, EOB, CarcCode, RarcCode
 - **X12 835 Parser**: `x12-parser-835.service.ts` parses raw X12 835 ERA files
 - **Auto-Seed**: `remittance-seed.service.ts` seeds CARC/RARC code master on first boot
@@ -439,9 +345,7 @@ ERA/EOB data ingestion and payment posting:
   - `GET /codes/carc` / `GET /codes/rarc` — CARC/RARC code lookup
 
 ### Denials Module (`backend/src/modules/denials/`)
-
 Denial management, analytics, and AI-powered recovery scoring:
-
 - **Entities**: DenialRecord (with root cause categorization, priority, worklist status)
 - **DenialCategoryEngine**: Maps CARC/RARC codes to 16 root cause categories (eligibility, prior_auth, medical_necessity, coding_error, etc.)
 - **DenialAiService**: AI-powered recovery scoring, NLP analysis of denial text, pattern clustering, worklist prioritization
@@ -461,9 +365,7 @@ Denial management, analytics, and AI-powered recovery scoring:
   - `POST /ai/prioritize` — AI worklist prioritization by expected recovery value
 
 ### Appeals Module (`backend/src/modules/appeals/`)
-
 Appeal management with AI-generated appeal letters:
-
 - **Entities**: Appeal (with status workflow, outcome tracking), AppealStatusHistory
 - **AppealAiService**: Generates formal appeal letters via Ollama/Mistral, predicts appeal success probability
 - **API Endpoints** (all under `/api/v1/appeals`):
@@ -476,9 +378,7 @@ Appeal management with AI-generated appeal letters:
   - `PATCH /:id/status` — Update appeal status/outcome
 
 ### Underpayments Module (`backend/src/modules/underpayments/`)
-
 Underpayment detection and reconciliation:
-
 - **Entities**: PayerContract (contracted fee schedule by CPT), UnderpaymentRecord
 - **Detection Engine**: Compares actual paid amounts against contracted rates, flags variances > $5 and > 2%
 - **API Endpoints** (all under `/api/v1/underpayments`):
@@ -490,9 +390,7 @@ Underpayment detection and reconciliation:
   - `PATCH /:id/status` — Update status (recovered, disputed, written off, false positive)
 
 ### Automation Module (`backend/src/modules/automation/`)
-
 Agentic AI orchestration and predictive denial prevention:
-
 - **RcmAutomationService**: Chains the full pipeline: ERA Import → Payment Posting → Denial Generation → Underpayment Detection → AI Recovery Scoring → Auto-create Appeals
 - **DenialPreventionService**: Pre-submission claim risk assessment using AI + heuristic quick-check
 - **API Endpoints** (all under `/api/v1/automation`):
@@ -500,38 +398,3 @@ Agentic AI orchestration and predictive denial prevention:
   - `GET /pipeline/status` — Pipeline run status
   - `POST /prevention/assess` — AI pre-submission denial risk assessment
   - `POST /prevention/quick-check` — Heuristic quick risk check (no AI needed)
-
-## Telemedicine Module (`backend/src/modules/telemedicine/`)
-
-Real-time video visits with WebRTC signaling, session lifecycle, and AI-powered post-visit documentation.
-
-### Backend
-
-- **Entity**: `TelemedicineSession` with participants, chat, shared files, recording consent/status, AI SOAP note, suggested ICD/CPT codes, encounter/superbill links.
-- **Provider abstraction**: `TelemedicineProvider` interface with a `MockTelemedicineProvider` (Daily.co provider can be added by implementing the interface and setting `ACTIVE_TELEMEDICINE_PROVIDER=daily`).
-- **WebSocket gateway**: `/telemedicine` namespace with JWT auth; handles join/leave, WebRTC offer/answer/ICE, chat, screen-share events, recording-consent flow, and connection-quality updates.
-- **REST endpoints** (`/api/v1/telemedicine`, JWT):
-  - `POST /sessions` — Create a session for an appointment
-  - `GET /sessions` — List sessions with filters
-  - `GET /sessions/:id` — Get session details
-  - `GET /sessions/:id/token` — Get short-lived token to join the video room
-  - `PATCH /sessions/:id/end` — End visit; optionally auto-generates an Encounter and a Superbill
-  - `PATCH /sessions/:id/cancel` — Cancel session
-  - `POST /sessions/:id/intake` — AI pre-visit triage/questions
-  - `GET /sessions/:id/care-plan` — AI post-visit care plan
-  - `GET /analytics` — Session analytics
-- **Patient portal endpoint** (`/api/v1/patients/portal/telemedicine`, patient JWT):
-  - `GET /sessions/:id/token` — Patient token to join their visit
-
-### Frontend
-
-- `VideoRoom` component (React + simple-peer + socket.io-client): 1:1/group-capable WebRTC room with mute, camera toggle, screen share, in-visit chat, and recording-consent UI.
-- Staff `TelemedicinePage`: start/admit visits, waiting room, past visits, post-visit AI summary (SOAP, suggested codes, encounter/superbill links, AI care plan).
-- Patient `PortalVideoVisitPage`: patient joins from the portal appointments page (`/portal/visit/:sessionId`).
-
-## Documentation Index
-
-- `docs/ARCHITECTURE.md` — System architecture overview
-- `docs/EOB-ERA-DENIAL-GAP-ANALYSIS.md` — RCM gap analysis
-- `docs/PATIENT-PORTAL-GAP-ANALYSIS.md` — Patient portal competitor analysis
-- `docs/FREE-TRIAL-ARCHITECTURE.md` — 15-day free trial provisioning architecture (Docker-based isolated instances, trial lifecycle, auto-expiry, conversion path)

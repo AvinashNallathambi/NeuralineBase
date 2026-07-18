@@ -203,7 +203,7 @@ const LandingPage: React.FC = () => {
             <a href="#features" style={{ color: '#1a2b3c', fontWeight: 500, textDecoration: 'none' }}>
               Features
             </a>
-            <a href="/pricing" style={{ color: '#1a2b3c', fontWeight: 500, textDecoration: 'none' }}>
+            <a href="#pricing" style={{ color: '#1a2b3c', fontWeight: 500, textDecoration: 'none' }}>
               Pricing
             </a>
             <a href="#how-it-works" style={{ color: '#1a2b3c', fontWeight: 500, textDecoration: 'none' }}>
