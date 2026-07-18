@@ -221,4 +221,54 @@ export class CreateSuperbillDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  posCode?: string;
+
+  @IsString()
+  @IsOptional()
+  facilityName?: string;
+
+  @IsString()
+  @IsOptional()
+  facilityNPI?: string;
+
+  @IsString()
+  @IsOptional()
+  providerTaxId?: string;
+
+  @IsString()
+  @IsOptional()
+  feeSchedule?: string;
+
+  @IsString()
+  @IsOptional()
+  referralNumber?: string;
+
+  @IsString()
+  @IsOptional()
+  claimFrequency?: string;
+
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  admissionDate?: Date;
+
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  dischargeDate?: Date;
+
+  @IsBoolean()
+  @IsOptional()
+  isEmploymentRelated?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isAutoAccident?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isOtherAccident?: boolean;
 }

@@ -20,6 +20,9 @@ export enum SuperbillStatus {
   PROCESSED = 'processed',
   PAID = 'paid',
   REJECTED = 'rejected',
+  RESUBMITTED = 'resubmitted',
+  VOIDED = 'voided',
+  CORRECTED = 'corrected',
 }
 
 @Entity('superbills')
@@ -142,6 +145,27 @@ export class Superbill {
 
   @Column({ nullable: true })
   referralNumber: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  feeSchedule: string;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  claimFrequency: string;
+
+  @Column({ type: 'date', nullable: true })
+  admissionDate: Date;
+
+  @Column({ type: 'date', nullable: true })
+  dischargeDate: Date;
+
+  @Column({ type: 'boolean', default: false })
+  isEmploymentRelated: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isAutoAccident: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  isOtherAccident: boolean;
 
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   balance: number;
