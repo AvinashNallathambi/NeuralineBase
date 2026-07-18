@@ -18,6 +18,7 @@ import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { LaboratoryService } from '../laboratory/laboratory.service';
 import { BillingService } from '../billing/billing.service';
 import { RemittanceService } from '../remittance/remittance.service';
+import { ProvidersService } from '../providers/providers.service';
 
 interface AuthenticatedPatientRequest {
   user: {
@@ -39,7 +40,23 @@ export class PatientPortalController {
     private readonly laboratoryService: LaboratoryService,
     private readonly billingService: BillingService,
     private readonly remittanceService: RemittanceService,
+    private readonly providersService: ProvidersService,
   ) {}
+
+  // ─── Providers ───────────────────────────────────────────────────
+
+  @Get('providers')
+  @ApiOperation({ summary: 'List active providers for appointment booking' })
+  async getProviders(@Request() req: AuthenticatedPatientRequest) {
+    const providers = await this.providersService.findAll(req.user.tenantId);
+    return providers.map((p) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      fullName: `${p.firstName} ${p.lastName}`,
+      specialty: p.specialization,
+    }));
+  }
 
   // ─── Appointments ────────────────────────────────────────────────
 

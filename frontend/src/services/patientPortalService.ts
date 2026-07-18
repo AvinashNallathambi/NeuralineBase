@@ -1,11 +1,24 @@
 import { api } from './api';
 import type { PatientDashboard } from './patientAuthService';
 
+export interface PortalProvider {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  specialty: string | null;
+}
+
 class PatientPortalService {
   private baseUrl = '/patients/portal';
 
   async getDashboard(): Promise<PatientDashboard> {
     const response = await api.get(`${this.baseUrl}/dashboard`);
+    return response.data;
+  }
+
+  async getProviders(): Promise<PortalProvider[]> {
+    const response = await api.get(`${this.baseUrl}/providers`);
     return response.data;
   }
 
@@ -75,6 +88,11 @@ class PatientPortalService {
 
   async getInsurance(): Promise<any[]> {
     const response = await api.get(`${this.baseUrl}/insurance`);
+    return response.data;
+  }
+
+  async getTelemedicineToken(sessionId: string): Promise<{ token: string; roomUrl: string; roomId: string }> {
+    const response = await api.get(`/patients/portal/telemedicine/sessions/${sessionId}/token`);
     return response.data;
   }
 }

@@ -1,4 +1,4 @@
-import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import type { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import type { DataSourceOptions } from 'typeorm';

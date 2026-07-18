@@ -1,5 +1,21 @@
-import { Controller, Post, Body, Get, UseGuards, Logger, Request, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  UseGuards,
+  Logger,
+  Request,
+  ForbiddenException,
+  HttpException,
+  HttpStatus,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AiService } from './ai.service';
+import { AssemblyAiTranscriptionService } from './assemblyai-transcription.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IntegrationsService } from '../integrations/integrations.service';
 
@@ -54,6 +70,7 @@ export class AiController {
 
   constructor(
     private readonly aiService: AiService,
+    private readonly assemblyAiTranscriptionService: AssemblyAiTranscriptionService,
     private readonly integrationsService: IntegrationsService,
   ) {}
 
@@ -184,11 +201,40 @@ Rules:
   }
 
   @Post('transcribe')
-  async transcribe(@Body() dto: { audioUrl?: string }) {
-    // This is a proxy endpoint — in production it would forward to the Whisper service
-    // For local dev, we return a mock or call the whisper service
-    this.logger.debug('Transcription requested — proxy to whisper service');
-    return { text: 'Transcription service available at /api/v1/ai/transcribe', note: 'Upload audio to Whisper service at port 8001' };
+  @UseInterceptors(FileInterceptor('file'))
+  async transcribe(@UploadedFile() file?: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Audio file is required');
+    }
+
+    if (!file.mimetype.startsWith('audio/')) {
+      throw new BadRequestException('Uploaded file must be an audio file');
+    }
+
+    // Limit uploaded audio to 100 MB to prevent abuse
+    const MAX_SIZE_BYTES = 100 * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      throw new BadRequestException('Audio file exceeds 100 MB limit');
+    }
+
+    this.logger.debug(
+      `Transcription requested [mime=${file.mimetype}, size=${file.size} bytes] — forwarding to AssemblyAI`,
+    );
+
+    const result = await this.assemblyAiTranscriptionService.transcribeAudioBuffer(
+      file.buffer,
+      file.mimetype,
+    );
+
+    return {
+      text: result.text,
+      duration: result.duration,
+      confidence: result.confidence,
+      words: result.words,
+      utterances: result.utterances,
+      languageCode: result.languageCode,
+      provider: 'assemblyai',
+    };
   }
 
   @Post('review-medications')

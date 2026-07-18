@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EncounterClaim, ClaimStatus } from './entities/encounter-claim.entity';
@@ -10,9 +10,17 @@ import { CreateEncounterClaimDto, CreateClaimLineItemDto } from './dto/create-en
 import { UpdateEncounterClaimDto } from './dto/update-encounter-claim.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import {
+  ClaimsProvider,
+  ClaimSubmissionRequest,
+  ClaimLineItemSubmission,
+  CLAIMS_PROVIDER,
+} from './providers/claims-provider.interface';
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     @InjectRepository(EncounterClaim)
     private claimRepository: Repository<EncounterClaim>,
@@ -24,6 +32,8 @@ export class BillingService {
     private payerRepository: Repository<InsurancePayer>,
     @InjectRepository(PatientInsurance)
     private patientInsuranceRepository: Repository<PatientInsurance>,
+    @Inject(CLAIMS_PROVIDER)
+    private claimsProvider: ClaimsProvider,
   ) {}
 
   // ─── Encounter Claims ─────────────────────────────────────────────
@@ -242,6 +252,206 @@ export class BillingService {
       copayApplied,
       coinsuranceApplied,
       adjustmentAmount,
+    };
+  }
+
+  // ─── Claim Submission (Clearinghouse) ────────────────────────────────
+
+  /**
+   * Submit a READY_TO_BILL claim to the configured clearinghouse (Stedi or mock).
+   * On success the claim is moved to SUBMITTED, submissionDate is set, and the
+   * clearinghouse tracking id is stored in metadata for later status polling.
+   */
+  async submitClaim(id: string): Promise<{
+    accepted: boolean;
+    clearinghouseTrackingId: string;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    claim: EncounterClaim;
+  }> {
+    const claim = await this.findOneClaim(id);
+
+    if (claim.status !== ClaimStatus.READY_TO_BILL) {
+      throw new BadRequestException(
+        `Claim must be in READY_TO_BILL status to submit (current: ${claim.status})`,
+      );
+    }
+
+    if (!claim.lineItems || (claim.lineItems as any[]).length === 0) {
+      throw new BadRequestException('Cannot submit a claim with no line items');
+    }
+
+    // Resolve trading partner id + subscriber details
+    const { tradingPartnerId, subscriberName, subscriberDob, subscriberRelation } =
+      await this.resolveInsuranceDetails(claim);
+
+    const lineItems = (claim.lineItems as any[]).map((item) =>
+      this.toLineItemSubmission(item),
+    );
+
+    const request: ClaimSubmissionRequest = {
+      claimId: claim.id,
+      claimNumber: claim.claimNumber,
+      tenantId: claim.tenantId,
+      patientId: claim.patientId,
+      patientName: claim.patientName,
+      patientDob: null,
+      providerId: claim.providerId,
+      providerName: claim.providerName,
+      providerNpi: claim.providerNPI,
+      insurancePayerId: claim.insurancePayerId,
+      insurancePayerName: claim.insurancePayerName,
+      tradingPartnerId,
+      policyNumber: claim.policyNumber,
+      groupNumber: claim.groupNumber,
+      subscriberName,
+      subscriberDob,
+      subscriberRelation,
+      serviceDate: claim.serviceDate,
+      lineItems,
+      totalBilled: Number(claim.totalBilled),
+    };
+
+    this.logger.log(`Submitting claim ${claim.claimNumber} via ${this.claimsProvider.name}`);
+    const response = await this.claimsProvider.submit(request);
+
+    if (response.accepted) {
+      claim.status = ClaimStatus.SUBMITTED;
+      claim.submissionDate = new Date();
+      claim.metadata = {
+        ...claim.metadata,
+        clearinghouseTrackingId: response.clearinghouseTrackingId,
+        payerClaimId: response.payerClaimId ?? null,
+        submissionStatus: response.status,
+        submittedVia: this.claimsProvider.name,
+        submittedAt: new Date().toISOString(),
+      };
+      await this.claimRepository.save(claim);
+      this.logger.log(
+        `Claim ${claim.claimNumber} submitted → tracking ${response.clearinghouseTrackingId}`,
+      );
+    } else {
+      claim.metadata = {
+        ...claim.metadata,
+        lastSubmissionError: {
+          code: response.errorCode,
+          message: response.errorMessage,
+          at: new Date().toISOString(),
+        },
+      };
+      await this.claimRepository.save(claim);
+      this.logger.warn(
+        `Claim ${claim.claimNumber} submission rejected: ${response.errorCode} ${response.errorMessage}`,
+      );
+    }
+
+    return {
+      accepted: response.accepted,
+      clearinghouseTrackingId: response.clearinghouseTrackingId,
+      status: response.status,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+      claim,
+    };
+  }
+
+  /**
+   * Poll the clearinghouse for the latest status of a previously submitted claim.
+   */
+  async getClaimSubmissionStatus(id: string): Promise<{
+    clearinghouseTrackingId: string | null;
+    status: string;
+    payerClaimId?: string | null;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+  }> {
+    const claim = await this.findOneClaim(id);
+    const trackingId = claim.metadata?.clearinghouseTrackingId as string | undefined;
+
+    if (!trackingId) {
+      throw new BadRequestException(
+        'Claim has no clearinghouse tracking id — has it been submitted?',
+      );
+    }
+
+    const response = await this.claimsProvider.getStatus(trackingId);
+
+    // Persist the latest status back onto the claim metadata
+    claim.metadata = {
+      ...claim.metadata,
+      lastStatusPoll: {
+        status: response.status,
+        payerClaimId: response.payerClaimId ?? null,
+        errorCode: response.errorCode,
+        errorMessage: response.errorMessage,
+        polledAt: new Date().toISOString(),
+      },
+    };
+    await this.claimRepository.save(claim);
+
+    return {
+      clearinghouseTrackingId: response.clearinghouseTrackingId,
+      status: response.status,
+      payerClaimId: response.payerClaimId,
+      errorCode: response.errorCode,
+      errorMessage: response.errorMessage,
+    };
+  }
+
+  private async resolveInsuranceDetails(claim: EncounterClaim): Promise<{
+    tradingPartnerId: string | null;
+    subscriberName: string | null;
+    subscriberDob: string | null;
+    subscriberRelation: string | null;
+  }> {
+    let tradingPartnerId: string | null = null;
+    let subscriberName: string | null = null;
+    let subscriberDob: string | null = null;
+    let subscriberRelation: string | null = null;
+
+    // 1. Look up the payer master for the trading partner id
+    if (claim.insurancePayerId) {
+      const payer = await this.payerRepository.findOne({
+        where: { id: claim.insurancePayerId },
+      });
+      if (payer?.metadata?.tradingPartnerId) {
+        tradingPartnerId = payer.metadata.tradingPartnerId as string;
+      }
+    }
+
+    // 2. Look up the patient's primary insurance for subscriber details
+    const patientInsurance = await this.patientInsuranceRepository.findOne({
+      where: { patientId: claim.patientId, insurancePayerId: claim.insurancePayerId ?? undefined },
+      order: { priority: 'ASC' },
+    });
+
+    if (patientInsurance) {
+      subscriberName = patientInsurance.subscriberName;
+      subscriberDob = patientInsurance.subscriberDob
+        ? patientInsurance.subscriberDob.toISOString().slice(0, 10)
+        : null;
+      subscriberRelation = patientInsurance.subscriberRelation;
+      // Fall back to patient insurance policy/group if claim doesn't have them
+      if (!tradingPartnerId && patientInsurance.payer?.metadata?.tradingPartnerId) {
+        tradingPartnerId = patientInsurance.payer.metadata.tradingPartnerId as string;
+      }
+    }
+
+    return { tradingPartnerId, subscriberName, subscriberDob, subscriberRelation };
+  }
+
+  private toLineItemSubmission(item: any): ClaimLineItemSubmission {
+    return {
+      codeType: item.codeType,
+      code: item.code,
+      description: item.description,
+      modifiers: item.modifiers || [],
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unitPrice),
+      totalCharge: Number(item.totalCharge),
+      serviceDate: item.serviceDate ?? null,
+      diagnosisPointer: item.diagnosisPointer || [],
     };
   }
 
