@@ -251,13 +251,13 @@ export class Encounter {
   @Column({ name: 'signed_at', type: 'timestamptz', nullable: true })
   signedAt!: Date | null;
 
-  @Column({ name: 'signed_by', type: 'uuid', nullable: true })
+  @Column({ name: 'signed_by', type: 'varchar', length: 100, nullable: true })
   signedBy!: string | null;
 
   @Column({ name: 'locked_at', type: 'timestamptz', nullable: true })
   lockedAt!: Date | null;
 
-  @Column({ name: 'locked_by', type: 'uuid', nullable: true })
+  @Column({ name: 'locked_by', type: 'varchar', length: 100, nullable: true })
   lockedBy!: string | null;
 
   @Column({ name: 'is_locked', type: 'boolean', default: false })

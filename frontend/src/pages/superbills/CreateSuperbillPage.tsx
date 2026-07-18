@@ -517,7 +517,7 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
                   optionFilterProp="children"
                 >
                   {users
-                    .filter((u) => u.role === "doctor" || u.role === "admin")
+                    .filter((u) => u.role === "doctor" || u.role === "admin" || u.role === "tenant_admin" || u.role === "super_admin")
                     .map((provider) => (
                       <Option key={provider.id} value={provider.id}>
                         {provider.firstName} {provider.lastName} (

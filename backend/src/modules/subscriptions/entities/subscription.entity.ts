@@ -84,6 +84,15 @@ export class Subscription {
   @Column({ name: 'stripe_subscription_id', type: 'varchar', length: 100, nullable: true })
   stripeSubscriptionId!: string | null;
 
+  /** Stripe default payment method ID (for quick access) */
+  @Column({
+    name: 'stripe_payment_method_id',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  stripePaymentMethodId!: string | null;
+
   @Column({ name: 'provider', type: 'varchar', length: 50, default: 'mock' })
   provider!: string; // stripe | mock
 

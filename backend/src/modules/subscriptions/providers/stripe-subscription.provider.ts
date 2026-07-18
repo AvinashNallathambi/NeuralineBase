@@ -9,6 +9,20 @@ import {
   ChangePlanRequest,
   ChangePlanResponse,
   SubscriptionWebhookEvent,
+  PaymentMethodDetails,
+  GetPaymentMethodRequest,
+  CreateSetupIntentRequest,
+  CreateSetupIntentResponse,
+  AttachPaymentMethodRequest,
+  AttachPaymentMethodResponse,
+  DetachPaymentMethodRequest,
+  DetachPaymentMethodResponse,
+  SetDefaultPaymentMethodRequest,
+  SetDefaultPaymentMethodResponse,
+  CreateCustomerPortalSessionRequest,
+  CreateCustomerPortalSessionResponse,
+  RetryInvoiceRequest,
+  RetryInvoiceResponse,
 } from './subscription-provider.interface';
 
 /**
@@ -224,6 +238,304 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
         : undefined,
       trialEnd: obj.trial_end ? new Date(obj.trial_end * 1000) : null,
       rawEvent: event,
+    };
+  }
+
+  // ── Payment Method Management (Phase 1, 3) ────────────────────────
+
+  async getPaymentMethods(request: GetPaymentMethodRequest): Promise<PaymentMethodDetails[]> {
+    const response = await fetch(
+      `${this.baseUrl}/payment_methods?customer=${request.stripeCustomerId}&type=card`,
+      { headers: { Authorization: `Bearer ${this.apiKey}` } },
+    );
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      this.logger.error(`Stripe getPaymentMethods failed: ${JSON.stringify(json)}`);
+      throw new BadRequestException(
+        `Stripe error: ${json.error?.message ?? response.statusText}`,
+      );
+    }
+
+    // Also get the customer's default payment method ID
+    const customer = await this.getCustomer(request.stripeCustomerId);
+    const defaultPmId = customer.invoice_settings?.default_payment_method ?? null;
+
+    const methods: PaymentMethodDetails[] = [];
+    for (const pm of json.data ?? []) {
+      methods.push(this.mapPaymentMethod(pm, pm.id === defaultPmId));
+    }
+
+    // Also fetch US bank account payment methods
+    const bankResp = await fetch(
+      `${this.baseUrl}/payment_methods?customer=${request.stripeCustomerId}&type=us_bank_account`,
+      { headers: { Authorization: `Bearer ${this.apiKey}` } },
+    );
+    const bankJson = (await bankResp.json()) as Record<string, any>;
+    if (bankResp.ok) {
+      for (const pm of bankJson.data ?? []) {
+        methods.push(this.mapPaymentMethod(pm, pm.id === defaultPmId));
+      }
+    }
+
+    return methods;
+  }
+
+  async createSetupIntent(request: CreateSetupIntentRequest): Promise<CreateSetupIntentResponse> {
+    const params = new URLSearchParams();
+    params.append('customer', request.stripeCustomerId);
+    params.append('usage', 'off_session');
+
+    const types = request.paymentMethodTypes ?? ['card'];
+    for (const t of types) {
+      params.append('payment_method_types[]', t);
+    }
+
+    if (request.metadata) {
+      for (const [key, val] of Object.entries(request.metadata)) {
+        params.append(`metadata[${key}]`, String(val));
+      }
+    }
+
+    const response = await fetch(`${this.baseUrl}/setup_intents`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      this.logger.error(`Stripe createSetupIntent failed: ${JSON.stringify(json)}`);
+      throw new BadRequestException(
+        `Stripe error: ${json.error?.message ?? response.statusText}`,
+      );
+    }
+
+    return {
+      clientSecret: json.client_secret,
+      setupIntentId: json.id,
+      rawResponse: json,
+    };
+  }
+
+  async attachPaymentMethod(
+    request: AttachPaymentMethodRequest,
+  ): Promise<AttachPaymentMethodResponse> {
+    // 1. Attach the payment method to the customer
+    const attachParams = new URLSearchParams();
+    attachParams.append('customer', request.stripeCustomerId);
+
+    const attachResp = await fetch(
+      `${this.baseUrl}/payment_methods/${request.stripePaymentMethodId}/attach`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: attachParams.toString(),
+      },
+    );
+
+    const pmJson = (await attachResp.json()) as Record<string, any>;
+    if (!attachResp.ok) {
+      this.logger.error(`Stripe attach failed: ${JSON.stringify(pmJson)}`);
+      throw new BadRequestException(
+        `Stripe error: ${pmJson.error?.message ?? attachResp.statusText}`,
+      );
+    }
+
+    // 2. Set as default if requested
+    if (request.setAsDefault) {
+      await this.setDefaultPaymentMethod({
+        stripeCustomerId: request.stripeCustomerId,
+        stripePaymentMethodId: request.stripePaymentMethodId,
+        stripeSubscriptionId: request.stripeSubscriptionId,
+      });
+    }
+
+    const paymentMethod = this.mapPaymentMethod(pmJson, request.setAsDefault ?? false);
+
+    return {
+      success: true,
+      paymentMethod,
+      rawResponse: pmJson,
+    };
+  }
+
+  async detachPaymentMethod(
+    request: DetachPaymentMethodRequest,
+  ): Promise<DetachPaymentMethodResponse> {
+    const response = await fetch(
+      `${this.baseUrl}/payment_methods/${request.stripePaymentMethodId}/detach`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      },
+    );
+
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      this.logger.error(`Stripe detach failed: ${JSON.stringify(json)}`);
+      throw new BadRequestException(
+        `Stripe error: ${json.error?.message ?? response.statusText}`,
+      );
+    }
+
+    return { success: true, rawResponse: json };
+  }
+
+  async setDefaultPaymentMethod(
+    request: SetDefaultPaymentMethodRequest,
+  ): Promise<SetDefaultPaymentMethodResponse> {
+    // 1. Update customer's invoice_settings.default_payment_method
+    const custParams = new URLSearchParams();
+    custParams.append('invoice_settings[default_payment_method]', request.stripePaymentMethodId);
+
+    const custResp = await fetch(`${this.baseUrl}/customers/${request.stripeCustomerId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: custParams.toString(),
+    });
+
+    const custJson = (await custResp.json()) as Record<string, any>;
+    if (!custResp.ok) {
+      this.logger.error(`Stripe setDefault (customer) failed: ${JSON.stringify(custJson)}`);
+      throw new BadRequestException(
+        `Stripe error: ${custJson.error?.message ?? custResp.statusText}`,
+      );
+    }
+
+    // 2. Update subscription's default payment method if provided
+    if (request.stripeSubscriptionId) {
+      const subParams = new URLSearchParams();
+      subParams.append('default_payment_method', request.stripePaymentMethodId);
+
+      const subResp = await fetch(
+        `${this.baseUrl}/subscriptions/${request.stripeSubscriptionId}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: subParams.toString(),
+        },
+      );
+
+      const subJson = (await subResp.json()) as Record<string, any>;
+      if (!subResp.ok) {
+        this.logger.error(`Stripe setDefault (subscription) failed: ${JSON.stringify(subJson)}`);
+        // Don't throw — customer default was set successfully
+      }
+    }
+
+    return { success: true, rawResponse: custJson };
+  }
+
+  // ── Customer Portal (Phase 4) ─────────────────────────────────────
+
+  async createCustomerPortalSession(
+    request: CreateCustomerPortalSessionRequest,
+  ): Promise<CreateCustomerPortalSessionResponse> {
+    const params = new URLSearchParams();
+    params.append('customer', request.stripeCustomerId);
+    params.append('return_url', request.returnUrl);
+
+    const response = await fetch(`${this.baseUrl}/billing_portal/sessions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      this.logger.error(`Stripe portal session failed: ${JSON.stringify(json)}`);
+      throw new BadRequestException(
+        `Stripe error: ${json.error?.message ?? response.statusText}`,
+      );
+    }
+
+    return { url: json.url, rawResponse: json };
+  }
+
+  // ── Retry Invoice / Dunning (Phase 2) ─────────────────────────────
+
+  async retryInvoice(request: RetryInvoiceRequest): Promise<RetryInvoiceResponse> {
+    // Pay the invoice with the specified payment method
+    const params = new URLSearchParams();
+    params.append('payment_method', request.stripePaymentMethodId);
+    params.append('paid_out_of_band', 'true');
+
+    const response = await fetch(`${this.baseUrl}/invoices/${request.stripeInvoiceId}/pay`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      this.logger.error(`Stripe retry invoice failed: ${JSON.stringify(json)}`);
+      return { success: false, status: json.error?.message ?? 'failed', rawResponse: json };
+    }
+
+    return { success: true, status: json.status ?? 'paid', rawResponse: json };
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────
+
+  private async getCustomer(customerId: string): Promise<Record<string, any>> {
+    const response = await fetch(`${this.baseUrl}/customers/${customerId}`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    });
+    const json = (await response.json()) as Record<string, any>;
+    if (!response.ok) {
+      throw new BadRequestException(
+        `Stripe get customer error: ${json.error?.message ?? response.statusText}`,
+      );
+    }
+    return json;
+  }
+
+  private mapPaymentMethod(pm: Record<string, any>, isDefault: boolean): PaymentMethodDetails {
+    const type = pm.type ?? 'card';
+    const card = pm.card;
+    const bank = pm.us_bank_account;
+
+    // Detect HSA/FSA: Stripe doesn't have a direct flag, but funding=prepaid
+    // + healthcare category metadata can indicate HSA/FSA
+    const isHsaFsa = card?.funding === 'prepaid' && pm.metadata?.hsa_fsa === 'true';
+
+    return {
+      stripePaymentMethodId: pm.id,
+      type,
+      cardBrand: card?.brand ?? null,
+      cardLast4: card?.last4 ?? null,
+      cardExpMonth: card?.exp_month ?? null,
+      cardExpYear: card?.exp_year ?? null,
+      cardFunding: card?.funding ?? null,
+      bankName: bank?.bank_name ?? null,
+      bankLast4: bank?.last4 ?? null,
+      bankAccountType: bank?.account_type ?? null,
+      billingName: pm.billing_details?.name ?? null,
+      billingAddress: pm.billing_details?.address ?? null,
+      isDefault,
+      isHsaFsa,
+      metadata: pm.metadata ?? {},
     };
   }
 

@@ -31,7 +31,7 @@ export class User {
   lastName!: string;
 
   @Column({ type: 'varchar', length: 50, default: 'doctor' })
-  role!: string; // admin | doctor | nurse | receptionist | billing_staff
+  role!: string; // super_admin | tenant_admin | admin (legacy) | doctor | nurse | receptionist | billing_staff
 
   @Column({ name: 'phone', type: 'varchar', length: 50, nullable: true })
   phone!: string | null;

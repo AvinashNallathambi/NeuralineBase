@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Card,
   Tabs,
@@ -19,6 +19,10 @@ import {
   Alert,
   Divider,
   Progress,
+  Select,
+  Input,
+  message,
+  Modal,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -36,6 +40,8 @@ import {
   ManOutlined,
   WomanOutlined,
   InboxOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -44,6 +50,9 @@ import { mockPatients, mockAppointments, mockClaims } from '../../data/mockData'
 import { usePatientStore, useAppointmentStore, useBillingStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 import ProblemListSection from '../../components/patients/ProblemListSection';
+import EditPatientModal from '../../components/patients/EditPatientModal';
+import { patientService } from '../../services/patientService';
+import type { EncounterVitals } from '../../services/encounterService';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -88,12 +97,35 @@ const PatientDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [vitalsHistory, setVitalsHistory] = useState<Array<EncounterVitals & { encounterId: string; encounterDate: string }>>([]);
+  const [vitalsLoading, setVitalsLoading] = useState(false);
+  const [documents, setDocuments] = useState<Array<{ id: string; name: string; type: string; size: string; date: string; documentType?: string }>>([]);
+  const [uploading, setUploading] = useState(false);
 
   // Fetch patients and appointments on mount
   React.useEffect(() => {
     fetchPatients();
     fetchAppointments();
   }, [fetchPatients, fetchAppointments]);
+
+  // Fetch vitals from encounters
+  const fetchVitals = useCallback(async () => {
+    if (!id) return;
+    setVitalsLoading(true);
+    try {
+      const data = await patientService.getVitals(id);
+      setVitalsHistory(data);
+    } catch {
+      // silent – vitals may not exist yet
+    } finally {
+      setVitalsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchVitals();
+  }, [fetchVitals]);
 
   const patient = useMemo(() => patients.find((p) => p.id === id), [id, patients]);
 
@@ -129,21 +161,6 @@ const PatientDetailPage: React.FC = () => {
 
   const statusColor = patient.status === 'active' ? 'green' : patient.status === 'inactive' ? 'default' : 'red';
   const genderIcon = patient.gender === 'female' ? <WomanOutlined /> : patient.gender === 'male' ? <ManOutlined /> : <UserOutlined />;
-
-  // ── Mock vitals history for chart display ──
-  const vitalsHistory = [
-    { date: '2024-08-01', systolic: 142, diastolic: 88, hr: 78, temp: 98.4, spo2: 97 },
-    { date: '2024-09-15', systolic: 140, diastolic: 85, hr: 76, temp: 98.6, spo2: 98 },
-    { date: '2024-10-10', systolic: 138, diastolic: 82, hr: 76, temp: 98.4, spo2: 98 },
-    { date: '2024-11-01', systolic: 136, diastolic: 80, hr: 74, temp: 98.2, spo2: 99 },
-  ];
-
-  // ── Mock documents ──
-  const documents = [
-    { id: 'doc-1', name: 'Insurance Card - Front.pdf', type: 'PDF', size: '245 KB', date: '2024-01-15' },
-    { id: 'doc-2', name: 'Lab Report - HbA1c.pdf', type: 'PDF', size: '128 KB', date: '2024-11-01' },
-    { id: 'doc-3', name: 'Referral Letter - Cardiology.pdf', type: 'PDF', size: '89 KB', date: '2024-10-20' },
-  ];
 
   // ── Tab: Overview ──
   const OverviewTab = () => (
@@ -525,87 +542,174 @@ const PatientDetailPage: React.FC = () => {
   );
 
   // ── Tab: Documents ──
-  const DocumentsTab = () => (
-    <Row gutter={[24, 24]}>
-      <Col xs={24}>
-        <Card title="Upload Documents">
-          <Dragger
-            name="file"
-            multiple
-            action=""
-            onChange={() => {}}
-            beforeUpload={() => false}
-          >
-            <p className="ant-upload-drag-icon">
-              <InboxOutlined />
-            </p>
-            <p className="ant-upload-text">Click or drag files to upload</p>
-            <p className="ant-upload-hint">
-              Support PDF, JPEG, PNG. Medical records, insurance cards, lab results, etc.
-            </p>
-          </Dragger>
-        </Card>
-      </Col>
-      <Col xs={24}>
-        <Card title="Documents">
-          <List
-            dataSource={documents}
-            renderItem={(doc) => (
-              <List.Item
-                actions={[
-                  <Button type="link" key="download">
-                    Download
-                  </Button>,
-                  <Button type="link" danger key="delete">
-                    Delete
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  avatar={<FileTextOutlined style={{ fontSize: 24, color: '#0D7C8A' }} />}
-                  title={doc.name}
-                  description={`${doc.type} - ${doc.size} - Uploaded ${dayjs(doc.date).format('MM/DD/YYYY')}`}
-                />
-              </List.Item>
+  const DocumentsTab = () => {
+    const handleUpload = async (file: File) => {
+      if (!patient) return;
+      setUploading(true);
+      try {
+        const result = await patientService.uploadDocument(
+          patient.id,
+          file,
+          'other',
+        );
+        setDocuments((prev) => [
+          {
+            id: result.id,
+            name: result.fileName,
+            type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
+            size: `${(file.size / 1024).toFixed(0)} KB`,
+            date: new Date().toISOString(),
+            documentType: result.documentType,
+          },
+          ...prev,
+        ]);
+        message.success(`${file.name} uploaded successfully`);
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } };
+        message.error(error?.response?.data?.message || 'Failed to upload document');
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    const handleDelete = (docId: string) => {
+      Modal.confirm({
+        title: 'Delete Document',
+        content: 'Are you sure you want to delete this document?',
+        okText: 'Delete',
+        okType: 'danger',
+        onOk: () => {
+          setDocuments((prev) => prev.filter((d) => d.id !== docId));
+          message.success('Document deleted');
+        },
+      });
+    };
+
+    return (
+      <Row gutter={[24, 24]}>
+        <Col xs={24}>
+          <Card title="Upload Documents">
+            <Dragger
+              name="file"
+              multiple
+              accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+              showUploadList={false}
+              beforeUpload={(file) => {
+                handleUpload(file);
+                return false;
+              }}
+              disabled={uploading}
+            >
+              <p className="ant-upload-drag-icon">
+                <InboxOutlined />
+              </p>
+              <p className="ant-upload-text">
+                {uploading ? 'Uploading...' : 'Click or drag files to upload'}
+              </p>
+              <p className="ant-upload-hint">
+                Support PDF, JPEG, PNG, DOC. Medical records, insurance cards, lab results, etc.
+              </p>
+            </Dragger>
+          </Card>
+        </Col>
+        <Col xs={24}>
+          <Card title={`Documents (${documents.length})`}>
+            {documents.length === 0 ? (
+              <Empty description="No documents uploaded yet" />
+            ) : (
+              <List
+                dataSource={documents}
+                renderItem={(doc) => (
+                  <List.Item
+                    actions={[
+                      <Button type="link" key="download" icon={<DownloadOutlined />}>
+                        Download
+                      </Button>,
+                      <Button
+                        type="link"
+                        danger
+                        key="delete"
+                        icon={<DeleteOutlined />}
+                        onClick={() => handleDelete(doc.id)}
+                      >
+                        Delete
+                      </Button>,
+                    ]}
+                  >
+                    <List.Item.Meta
+                      avatar={<FileTextOutlined style={{ fontSize: 24, color: '#0D7C8A' }} />}
+                      title={doc.name}
+                      description={`${doc.type} - ${doc.size} - Uploaded ${dayjs(doc.date).format('MM/DD/YYYY')}`}
+                    />
+                  </List.Item>
+                )}
+              />
             )}
-          />
-        </Card>
-      </Col>
-    </Row>
-  );
+          </Card>
+        </Col>
+      </Row>
+    );
+  };
 
   // ── Tab: Vitals ──
   const VitalsTab = () => {
-    const latest = vitalsHistory[vitalsHistory.length - 1];
+    const latest = vitalsHistory[0];
+    const parseBP = (bp?: string): { systolic: number; diastolic: number } | null => {
+      if (!bp) return null;
+      const parts = bp.split('/');
+      if (parts.length !== 2) return null;
+      const s = parseInt(parts[0], 10);
+      const d = parseInt(parts[1], 10);
+      return isNaN(s) || isNaN(d) ? null : { systolic: s, diastolic: d };
+    };
+
+    if (vitalsLoading) {
+      return <Card loading={vitalsLoading} />;
+    }
+
+    if (!latest) {
+      return (
+        <Card>
+          <Empty description="No vitals recorded yet. Vitals are captured during encounters.">
+            <Button type="primary" onClick={() => navigate('/clinical/new')}>
+              Start New Encounter
+            </Button>
+          </Empty>
+        </Card>
+      );
+    }
+
+    const bp = parseBP(latest.bloodPressure);
+
     return (
       <Row gutter={[24, 24]}>
         {/* Latest Vitals */}
         <Col xs={24}>
-          <Card title="Latest Vitals" extra={<Text type="secondary">{dayjs(latest.date).format('MMMM D, YYYY')}</Text>}>
+          <Card title="Latest Vitals" extra={<Text type="secondary">{dayjs(latest.encounterDate).format('MMMM D, YYYY')}</Text>}>
             <Row gutter={[16, 16]}>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Blood Pressure" value={`${latest.systolic}/${latest.diastolic}`} suffix="mmHg" />
+                <Statistic title="Blood Pressure" value={latest.bloodPressure || '—'} suffix={latest.bloodPressure ? 'mmHg' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Heart Rate" value={latest.hr} suffix="bpm" />
+                <Statistic title="Heart Rate" value={latest.heartRate || '—'} suffix={latest.heartRate ? 'bpm' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Temperature" value={latest.temp} suffix="°F" precision={1} />
+                <Statistic title="Temperature" value={latest.temperature || '—'} suffix={latest.temperature ? '°F' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="SpO₂" value={latest.spo2} suffix="%" />
+                <Statistic title="SpO₂" value={latest.oxygenSaturation || '—'} suffix={latest.oxygenSaturation ? '%' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Respiratory Rate" value={16} suffix="/min" />
+                <Statistic title="Respiratory Rate" value={latest.respiratoryRate || '—'} suffix={latest.respiratoryRate ? '/min' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Weight" value={198} suffix="lbs" />
+                <Statistic title="Weight" value={latest.weight || '—'} suffix={latest.weight ? latest.weightUnit || 'lbs' : ''} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="BMI" value={28.4} precision={1} />
+                <Statistic title="BMI" value={latest.bmi || '—'} />
               </Col>
               <Col xs={12} sm={12} md={6}>
-                <Statistic title="Pain Score" value={2} suffix="/10" />
+                <Statistic title="Pain Score" value={latest.painScore !== undefined ? latest.painScore : '—'} suffix={latest.painScore !== undefined ? '/10' : ''} />
               </Col>
             </Row>
           </Card>
@@ -616,33 +720,43 @@ const PatientDetailPage: React.FC = () => {
           <Card title="Vitals History">
             <Table
               dataSource={vitalsHistory}
-              rowKey="date"
+              rowKey="encounterId"
               pagination={false}
               size="small"
               columns={[
                 {
                   title: 'Date',
-                  dataIndex: 'date',
+                  dataIndex: 'encounterDate',
                   render: (d: string) => dayjs(d).format('MM/DD/YYYY'),
                 },
                 {
                   title: 'BP (mmHg)',
-                  render: (_: unknown, r: typeof vitalsHistory[0]) => `${r.systolic}/${r.diastolic}`,
+                  dataIndex: 'bloodPressure',
+                  render: (bp: string) => bp || '—',
                 },
                 {
                   title: 'HR (bpm)',
-                  dataIndex: 'hr',
+                  dataIndex: 'heartRate',
+                  render: (v: string) => v || '—',
                 },
                 {
                   title: 'Temp (°F)',
-                  dataIndex: 'temp',
+                  dataIndex: 'temperature',
+                  render: (v: string) => v || '—',
                 },
                 {
                   title: 'SpO2 (%)',
-                  dataIndex: 'spo2',
-                  render: (v: number) => (
-                    <span style={{ color: v < 95 ? '#ff4d4f' : '#52c41a' }}>{v}%</span>
-                  ),
+                  dataIndex: 'oxygenSaturation',
+                  render: (v: string) => {
+                    if (!v) return '—';
+                    const num = parseFloat(v);
+                    return <span style={{ color: !isNaN(num) && num < 95 ? '#ff4d4f' : '#52c41a' }}>{v}%</span>;
+                  },
+                },
+                {
+                  title: 'Weight',
+                  dataIndex: 'weight',
+                  render: (v: string, r: any) => v ? `${v} ${r.weightUnit || 'lbs'}` : '—',
                 },
               ]}
             />
@@ -650,26 +764,34 @@ const PatientDetailPage: React.FC = () => {
         </Col>
 
         {/* BP Trend visual */}
-        <Col xs={24}>
-          <Card title="Blood Pressure Trend">
-            <Space direction="vertical" style={{ width: '100%' }} size={8}>
-              {vitalsHistory.map((v) => (
-                <div key={v.date} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Text style={{ width: 90, flexShrink: 0 }}>
-                    {dayjs(v.date).format('MMM YYYY')}
-                  </Text>
-                  <Progress
-                    percent={Math.round((v.systolic / 180) * 100)}
-                    size="small"
-                    format={() => `${v.systolic}/${v.diastolic}`}
-                    strokeColor={v.systolic > 140 ? '#ff4d4f' : v.systolic > 130 ? '#faad14' : '#52c41a'}
-                    style={{ flex: 1 }}
-                  />
-                </div>
-              ))}
-            </Space>
-          </Card>
-        </Col>
+        {vitalsHistory.filter((v) => v.bloodPressure).length > 0 && (
+          <Col xs={24}>
+            <Card title="Blood Pressure Trend">
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                {vitalsHistory
+                  .filter((v) => v.bloodPressure)
+                  .map((v) => {
+                    const parsed = parseBP(v.bloodPressure);
+                    if (!parsed) return null;
+                    return (
+                      <div key={v.encounterId} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <Text style={{ width: 90, flexShrink: 0 }}>
+                          {dayjs(v.encounterDate).format('MMM YYYY')}
+                        </Text>
+                        <Progress
+                          percent={Math.round((parsed.systolic / 180) * 100)}
+                          size="small"
+                          format={() => `${parsed.systolic}/${parsed.diastolic}`}
+                          strokeColor={parsed.systolic > 140 ? '#ff4d4f' : parsed.systolic > 130 ? '#faad14' : '#52c41a'}
+                          style={{ flex: 1 }}
+                        />
+                      </div>
+                    );
+                  })}
+              </Space>
+            </Card>
+          </Col>
+        )}
       </Row>
     );
   };
@@ -870,7 +992,11 @@ const PatientDetailPage: React.FC = () => {
                 </Space>
               </Col>
               <Col>
-                <Button type="primary" icon={<EditOutlined />}>
+                <Button
+                  type="primary"
+                  icon={<EditOutlined />}
+                  onClick={() => setEditModalOpen(true)}
+                >
                   Edit Patient
                 </Button>
               </Col>
@@ -909,6 +1035,17 @@ const PatientDetailPage: React.FC = () => {
         items={tabItems}
         size="large"
         style={{ marginBottom: 24 }}
+      />
+
+      {/* Edit Patient Modal */}
+      <EditPatientModal
+        open={editModalOpen}
+        patient={patient}
+        onClose={() => setEditModalOpen(false)}
+        onSuccess={() => {
+          fetchPatients();
+          fetchVitals();
+        }}
       />
     </div>
   );

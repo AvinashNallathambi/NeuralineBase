@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { getEffectiveRoles } from '../../users/role-permissions';
 
 interface AuthenticatedRequest {
   user?: {
@@ -38,7 +39,9 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('No user context found');
     }
 
-    const hasRole = requiredRoles.some((role) => user.role === role);
+    // Use role inheritance so super_admin satisfies @Roles('admin') etc.
+    const effectiveRoles = new Set(getEffectiveRoles(user.role));
+    const hasRole = requiredRoles.some((role) => effectiveRoles.has(role));
 
     if (!hasRole) {
       throw new ForbiddenException(

@@ -33,11 +33,15 @@ function lazyWithRetry<T extends ComponentType<unknown>>(
 
 // Lazy-loaded page components with auto-retry on chunk load failure
 const LandingPage = lazyWithRetry(() => import("../pages/landing/LandingPage"));
+const PricingPage = lazyWithRetry(() => import("../pages/landing/PricingPage"));
 const DashboardPage = lazyWithRetry(
   () => import("../pages/dashboard/DashboardPage"),
 );
 const PatientListPage = lazyWithRetry(
   () => import("../pages/patients/PatientListPage"),
+);
+const PatientGroupsPage = lazyWithRetry(
+  () => import("../pages/patients/PatientGroupsPage"),
 );
 const PatientDetailPage = lazyWithRetry(
   () => import("../pages/patients/PatientDetailPage"),
@@ -103,6 +107,9 @@ const ReportsPage = lazyWithRetry(() => import("../pages/reports/ReportsPage"));
 const SettingsPage = lazyWithRetry(
   () => import("../pages/settings/SettingsPage"),
 );
+const AdminTrialsPage = lazyWithRetry(
+  () => import("../pages/admin/AdminTrialsPage"),
+);
 const PatientPortalPage = lazyWithRetry(
   () => import("../pages/portal/PatientPortalPage"),
 );
@@ -153,6 +160,16 @@ const router = createBrowserRouter([
     element: (
       <LazyPage>
         <LandingPage />
+      </LazyPage>
+    ),
+  },
+
+  // Public pricing page
+  {
+    path: "/pricing",
+    element: (
+      <LazyPage>
+        <PricingPage />
       </LazyPage>
     ),
   },
@@ -226,6 +243,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PatientDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/patient-groups",
+        element: (
+          <LazyPage>
+            <PatientGroupsPage />
           </LazyPage>
         ),
       },
@@ -482,6 +507,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <SettingsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/admin/trials",
+        element: (
+          <LazyPage>
+            <AdminTrialsPage />
           </LazyPage>
         ),
       },

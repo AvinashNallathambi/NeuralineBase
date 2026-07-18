@@ -33,14 +33,63 @@ export const PERMISSION_MODULES = [
   { key: 'settings', label: 'Settings & Admin', icon: 'SettingOutlined' },
   { key: 'audit', label: 'Audit Log', icon: 'AuditOutlined' },
   { key: 'ai', label: 'AI Tools', icon: 'RobotOutlined' },
+  { key: 'trials', label: 'Trial Management', icon: 'RocketOutlined' },
 ] as const;
 
 // ─── Role definitions with permission sets ──────────────────────────
 export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
+    key: 'super_admin',
+    label: 'Super Administrator',
+    description:
+      'NeuralineBase staff. Full system access across all tenants including trial management and platform administration',
+    color: 'magenta',
+    permissions: [
+      'patients:manage',
+      'appointments:manage',
+      'clinical:manage',
+      'prescriptions:manage',
+      'laboratory:manage',
+      'billing:manage',
+      'remittance:manage',
+      'denials:manage',
+      'messaging:manage',
+      'providers:manage',
+      'reports:manage',
+      'settings:manage',
+      'audit:manage',
+      'ai:manage',
+      'trials:manage',
+    ],
+  },
+  {
+    key: 'tenant_admin',
+    label: 'Tenant Administrator',
+    description:
+      'Administrator scoped to a single tenant. Full access within their organization but cannot manage trials or platform-wide settings',
+    color: 'red',
+    permissions: [
+      'patients:manage',
+      'appointments:manage',
+      'clinical:manage',
+      'prescriptions:manage',
+      'laboratory:manage',
+      'billing:manage',
+      'remittance:manage',
+      'denials:manage',
+      'messaging:manage',
+      'providers:manage',
+      'reports:manage',
+      'settings:manage',
+      'audit:manage',
+      'ai:manage',
+    ],
+  },
+  {
     key: 'admin',
-    label: 'Administrator',
-    description: 'Full system access including user management and configuration',
+    label: 'Administrator (legacy)',
+    description:
+      'Legacy administrator role. Prefer tenant_admin for new per-tenant admins and super_admin for NeuralineBase staff',
     color: 'red',
     permissions: [
       'patients:manage',
@@ -132,6 +181,21 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
 
 export function getRoleDefinition(role: string): RoleDefinition | undefined {
   return ROLE_DEFINITIONS.find((r) => r.key === role);
+}
+
+/**
+ * Roles that a given role is allowed to act as (inheritance).
+ * `super_admin` can do anything `tenant_admin` or `admin` can do.
+ * `tenant_admin` can do anything `admin` can do.
+ */
+const ROLE_INHERITANCE: Record<string, string[]> = {
+  super_admin: ['super_admin', 'tenant_admin', 'admin'],
+  tenant_admin: ['tenant_admin', 'admin'],
+  admin: ['admin'],
+};
+
+export function getEffectiveRoles(role: string): string[] {
+  return ROLE_INHERITANCE[role] ?? [role];
 }
 
 export function hasPermission(userRole: string, permission: string): boolean {

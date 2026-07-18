@@ -12,8 +12,12 @@ import { PatientAuthService } from './patient-auth.service';
 import { PatientAiService } from './patient-ai.service';
 import { PatientJwtStrategy } from './patient-jwt.strategy';
 import { PatientJwtAuthGuard } from './patient-jwt-auth.guard';
+import { PatientGroupsController } from './patient-groups.controller';
+import { PatientGroupsService } from './patient-groups.service';
+import { PatientGroupAiService } from './patient-groups-ai.service';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem } from './entities/patient-problem.entity';
+import { PatientGroup, PatientGroupAuditLog } from './entities/patient-group.entity';
 import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
 import { InsurancePayer } from '../billing/entities/insurance-payer.entity';
 import { AppointmentsModule } from '../appointments/appointments.module';
@@ -25,7 +29,7 @@ import { AiModule } from '../ai/ai.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Patient, PatientProblem, PatientInsurance, InsurancePayer]),
+    TypeOrmModule.forFeature([Patient, PatientProblem, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -44,8 +48,8 @@ import { AiModule } from '../ai/ai.module';
     RemittanceModule,
     AiModule,
   ],
-  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController],
-  providers: [PatientsService, PatientAuthService, PatientAiService, PatientJwtStrategy, PatientJwtAuthGuard],
-  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard],
+  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientGroupsController],
+  providers: [PatientsService, PatientAuthService, PatientAiService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService],
+  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService],
 })
 export class PatientsModule {}

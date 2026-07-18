@@ -32,6 +32,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore, useAuthStore } from '../store';
@@ -64,6 +65,7 @@ const menuItems = [
     label: 'Patients',
     children: [
       { key: 'patients', icon: <TeamOutlined />, label: 'Patient List' },
+      { key: 'patient-groups', icon: <ApartmentOutlined />, label: 'Patient Groups' },
       { key: 'clinical', icon: <FileTextOutlined />, label: 'Clinical' },
       { key: 'prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
       { key: 'laboratory', icon: <ExperimentOutlined />, label: 'Laboratory' },
@@ -88,6 +90,14 @@ const menuItems = [
   { key: 'reports', icon: <BarChartOutlined />, label: 'Reports' },
   { key: 'workflow', icon: <ApartmentOutlined />, label: 'Workflows' },
   { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
+  {
+    key: 'admin',
+    icon: <ToolOutlined />,
+    label: 'Admin',
+    children: [
+      { key: 'admin/trials', icon: <TeamOutlined />, label: 'Trial Requests' },
+    ],
+  },
 ];
 
 const MainLayout: React.FC = () => {
@@ -230,7 +240,7 @@ const MainLayout: React.FC = () => {
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={menuItems}
+          items={user?.role === 'super_admin' ? menuItems : menuItems.filter((item) => item.key !== 'admin')}
           onClick={handleMenuClick}
           style={{
             borderRight: 0,

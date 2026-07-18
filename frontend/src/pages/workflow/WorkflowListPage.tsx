@@ -132,7 +132,7 @@ const WorkflowListPage: React.FC = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
+    <div>
       <Card>
         <div
           style={{
