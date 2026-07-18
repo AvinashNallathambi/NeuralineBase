@@ -105,12 +105,43 @@ export interface PatientInsurance {
   subscriberName: string;
   subscriberRelation: 'self' | 'spouse' | 'child' | 'other';
   subscriberDob?: string;
+  subscriberSsn?: string;
+  authorizationNumber?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
   copayAmount?: number;
   deductibleAmount?: number;
   coinsurancePercentage?: number;
   status: string;
+  metadata?: Record<string, unknown>;
+  cardFrontImage?: string | null;
+  cardBackImage?: string | null;
   payer: InsurancePayer;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface CreatePatientInsuranceDto {
+  patientId: string;
+  insurancePayerId: string;
+  priority?: 'primary' | 'secondary' | 'tertiary';
+  policyNumber: string;
+  groupNumber?: string;
+  subscriberName: string;
+  subscriberRelation?: 'self' | 'spouse' | 'child' | 'other';
+  subscriberDob?: string;
+  subscriberSsn?: string;
+  authorizationNumber?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  copayAmount?: number;
+  deductibleAmount?: number;
+  coinsurancePercentage?: number;
+  status?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdatePatientInsuranceDto extends Partial<CreatePatientInsuranceDto> {}
 
 class BillingService {
   private baseUrl = '/billing';
@@ -234,6 +265,139 @@ class BillingService {
 
   async findPatientInsurances(patientId: string): Promise<PatientInsurance[]> {
     const response = await api.get(`${this.baseUrl}/patients/${patientId}/insurance`);
+    return response.data;
+  }
+
+  async createPatientInsurance(
+    patientId: string,
+    dto: CreatePatientInsuranceDto,
+  ): Promise<PatientInsurance> {
+    const response = await api.post(`${this.baseUrl}/patients/${patientId}/insurance`, dto);
+    return response.data;
+  }
+
+  async updatePatientInsurance(
+    patientId: string,
+    id: string,
+    dto: UpdatePatientInsuranceDto,
+  ): Promise<PatientInsurance> {
+    const response = await api.patch(`${this.baseUrl}/patients/${patientId}/insurance/${id}`, dto);
+    return response.data;
+  }
+
+  async deletePatientInsurance(patientId: string, id: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/patients/${patientId}/insurance/${id}`);
+  }
+
+  async updateInsurancePriority(
+    patientId: string,
+    id: string,
+    priority: 'primary' | 'secondary' | 'tertiary',
+  ): Promise<PatientInsurance> {
+    const response = await api.patch(
+      `${this.baseUrl}/patients/${patientId}/insurance/${id}/priority`,
+      { priority },
+    );
+    return response.data;
+  }
+
+  // ─── Insurance Card Scan (AI OCR) ──────────────────────────────
+
+  async scanInsuranceCard(
+    patientId: string,
+    frontImage: File,
+    backImage?: File,
+  ): Promise<{
+    extractedData: Partial<CreatePatientInsuranceDto>;
+    confidence: Record<string, number>;
+    matchedPayerId?: string;
+    matchedPayerName?: string;
+    warnings: string[];
+  }> {
+    const formData = new FormData();
+    formData.append('frontImage', frontImage);
+    if (backImage) formData.append('backImage', backImage);
+    const response = await api.post(
+      `${this.baseUrl}/patients/${patientId}/insurance/card-scan`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    return response.data;
+  }
+
+  // ─── COB Order Detection (AI) ──────────────────────────────────
+
+  async suggestCobOrder(
+    patientId: string,
+    patientContext?: { age?: number; employmentStatus?: string; hasEsrD?: boolean },
+  ): Promise<{
+    suggestedOrder: Array<{ insuranceId: string; priority: string; payerName: string; reason: string }>;
+    confidence: number;
+    rules: string[];
+  }> {
+    const response = await api.post(
+      `${this.baseUrl}/patients/${patientId}/insurance/suggest-cob-order`,
+      patientContext || {},
+    );
+    return response.data;
+  }
+
+  async applyCobOrder(
+    patientId: string,
+    order: Array<{ insuranceId: string; priority: string }>,
+  ): Promise<void> {
+    await api.post(`${this.baseUrl}/patients/${patientId}/insurance/apply-cob-order`, { order });
+  }
+
+  // ─── Coverage Gap Detection ────────────────────────────────────
+
+  async scanCoverageGaps(daysAhead?: number): Promise<Array<{
+    patientId: string;
+    patientName: string;
+    appointmentId: string;
+    appointmentDate: string;
+    gapType: string;
+    severity: string;
+    details: string;
+    recommendedAction: string;
+  }>> {
+    const response = await api.post(`${this.baseUrl}/coverage-gaps/scan`, { daysAhead });
+    return response.data;
+  }
+
+  async checkPatientCoverageGaps(patientId: string): Promise<Array<{
+    patientId: string;
+    patientName: string;
+    appointmentId: string;
+    appointmentDate: string;
+    gapType: string;
+    severity: string;
+    details: string;
+    recommendedAction: string;
+  }>> {
+    const response = await api.get(`${this.baseUrl}/patients/${patientId}/coverage-gaps`);
+    return response.data;
+  }
+
+  // ─── AI Secondary Claim Generation ──────────────────────────────
+
+  async analyzeSecondaryClaim(claimId: string): Promise<{
+    shouldGenerateSecondary: boolean;
+    reason: string;
+    secondaryInsuranceId?: string;
+    secondaryPayerName?: string;
+    remainingBalance?: number;
+    primaryPaidAmount?: number;
+    estimatedSecondaryPayment?: number;
+    claimFrequency: string;
+    notes: string[];
+  }> {
+    const response = await api.post(`${this.baseUrl}/claims/${claimId}/analyze-secondary`);
+    return response.data;
+  }
+
+  async generateSecondaryClaim(claimId: string): Promise<EncounterClaim> {
+    const response = await api.post(`${this.baseUrl}/claims/${claimId}/generate-secondary`);
     return response.data;
   }
 }

@@ -125,15 +125,17 @@ export class AiService {
         this.openaiApiKey = this.configService.get<string>('OPENROUTER_API_KEY', '');
         this.defaultModel = this.configService.get<string>(
           'OPENROUTER_MODEL',
-          'openai/gpt-oss-120b:free',
-        );
-        // Free fallback models on OpenRouter (tried in order on 429)
-        this.fallbackModels = [
-          'openai/gpt-oss-120b:free',
-          'meta-llama/llama-3.3-70b-instruct:free',
-          'openai/gpt-oss-20b:free',
-          'qwen/qwen3-next-80b-a3b-instruct:free',
           'nvidia/nemotron-3-super-120b-a12b:free',
+        );
+        // Free fallback models on OpenRouter (tried in order on 429/404).
+        // Nemotron reliably returns JSON with response_format; the others are
+        // backups for when it is rate-limited.
+        this.fallbackModels = [
+          'nvidia/nemotron-3-super-120b-a12b:free',
+          'meta-llama/llama-3.3-70b-instruct:free',
+          'qwen/qwen3-next-80b-a3b-instruct:free',
+          'openai/gpt-oss-20b:free',
+          'google/gemini-2.0-flash-exp:free',
         ].filter((m) => m !== this.defaultModel);
         break;
       case 'groq':
@@ -176,6 +178,17 @@ export class AiService {
     this.logger.log(`AI provider: ${this.provider}, model: ${this.defaultModel}`);
     if (this.fallbackModels.length > 0) {
       this.logger.log(`Fallback models: ${this.fallbackModels.join(', ')}`);
+    }
+
+    // Warn at startup if a cloud provider is selected but its API key is missing
+    if (
+      (this.provider === 'openrouter' || this.provider === 'groq' || this.provider === 'openai') &&
+      !this.openaiApiKey
+    ) {
+      this.logger.warn(
+        `${this.provider.toUpperCase()}_API_KEY is not set — AI calls will fail with 401. ` +
+          `Set the key in backend/.env or switch AI_PROVIDER to "ollama" for local inference.`,
+      );
     }
   }
 
@@ -225,31 +238,287 @@ export class AiService {
       raw = await this.openaiGenerateStructured(jsonPrompt, options);
     }
 
-    // Parse JSON from response (handles raw JSON, markdown-wrapped, and text with embedded JSON)
+    // Parse JSON from response (handles raw JSON, markdown-wrapped, reasoning
+    // models that emit <think> tags, and text with embedded JSON)
     try {
+      // Strip reasoning/thinking blocks that some models (Nemotron, DeepSeek-R1,
+      // etc.) emit before the actual answer.
+      const cleaned = raw
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+        .trim();
+
       // First try: extract from markdown code blocks
-      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[1].trim()) as T;
       }
 
-      // Second try: extract the outermost JSON object from the text
-      // (models sometimes add text before/after the JSON)
-      const trimmed = raw.trim();
-      const firstBrace = trimmed.indexOf('{');
-      const lastBrace = trimmed.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-        const jsonStr = trimmed.substring(firstBrace, lastBrace + 1);
+      // Second try: use a balanced-brace scanner to find the first valid JSON
+      // object in the text. This is more robust than indexOf('{')/lastIndexOf('}')
+      // because it skips braces inside strings and finds a syntactically valid
+      // object even when the model emits reasoning text with stray braces.
+      const jsonStr = this.extractFirstJsonObject(cleaned);
+      if (jsonStr) {
         return JSON.parse(jsonStr) as T;
       }
 
       // Third try: parse the whole thing as JSON
-      return JSON.parse(trimmed) as T;
+      return JSON.parse(cleaned) as T;
     } catch (err: any) {
       this.logger.error(`Failed to parse AI response as JSON: ${err.message}`);
       this.logger.debug(`Raw response (first 500 chars): ${raw.slice(0, 500)}`);
       throw new Error('AI returned invalid JSON. Please try again.');
     }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // visionGenerateStructured() — JSON output from text + image inputs
+  // Supports Ollama (llava) and OpenAI-compatible vision models (GPT-4o, etc.)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  async visionGenerateStructured<T = unknown>(
+    prompt: string,
+    images: string[], // base64-encoded image data (without data: prefix)
+    options?: GenerateOptions,
+  ): Promise<T> {
+    let raw: string;
+
+    if (this.provider === 'ollama') {
+      raw = await this.ollamaVisionChat(prompt, images, options);
+    } else {
+      raw = await this.openaiVisionChat(prompt, images, options, true);
+    }
+
+    // Reuse the same JSON parsing logic
+    try {
+      const cleaned = raw
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+        .trim();
+
+      const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[1].trim()) as T;
+      }
+
+      const jsonStr = this.extractFirstJsonObject(cleaned);
+      if (jsonStr) {
+        return JSON.parse(jsonStr) as T;
+      }
+
+      return JSON.parse(cleaned) as T;
+    } catch (err: any) {
+      this.logger.error(`Failed to parse vision AI response as JSON: ${err.message}`);
+      this.logger.debug(`Raw response (first 500 chars): ${raw.slice(0, 500)}`);
+      throw new Error('AI vision returned invalid JSON. Please try again.');
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Ollama vision (llava, llava-llama3, etc.)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  private async ollamaVisionChat(
+    prompt: string,
+    images: string[],
+    options?: GenerateOptions,
+  ): Promise<string> {
+    const model = options?.model || this.configService.get<string>('OLLAMA_VISION_MODEL', 'llava');
+    const url = `${this.ollamaBaseUrl}/api/chat`;
+
+    this.logger.debug(`Calling Ollama vision chat [model=${model}, images=${images.length}]`);
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+              images,
+            },
+          ],
+          stream: false,
+          format: 'json',
+          options: {
+            temperature: options?.temperature ?? 0.1,
+            num_predict: options?.maxTokens ?? 4096,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        this.logger.error(`Ollama vision returned ${res.status}: ${text.slice(0, 200)}`);
+        throw new Error(`Ollama vision failed (${res.status}). Ensure a vision model like 'llava' is pulled: ollama pull llava`);
+      }
+
+      const data = (await res.json()) as OllamaChatResponse;
+      return data.message.content.trim();
+    } catch (err: any) {
+      this.logger.error(`Ollama vision call failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // OpenAI-compatible vision (GPT-4o, Claude, Gemini via OpenRouter, etc.)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  private async openaiVisionChat(
+    prompt: string,
+    images: string[],
+    options?: GenerateOptions,
+    structured = false,
+  ): Promise<string> {
+    // Build multimodal content array
+    const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      { type: 'text', text: prompt },
+    ];
+    for (const img of images) {
+      content.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${img}` },
+      });
+    }
+
+    // Use vision model if configured, otherwise default
+    const visionModel = this.configService.get<string>(
+      this.provider === 'openrouter' ? 'OPENROUTER_VISION_MODEL' : 'OPENAI_VISION_MODEL',
+      this.defaultModel,
+    );
+
+    const body: OpenAiChatRequest = {
+      model: visionModel,
+      messages: [{ role: 'user', content: JSON.stringify(content) }] as any,
+      stream: false,
+      temperature: options?.temperature ?? 0.1,
+      max_tokens: options?.maxTokens ?? 4096,
+      ...(structured && { response_format: { type: 'json_object' as const } }),
+    };
+
+    // For OpenAI-compatible APIs, content needs to be an array, not a string
+    // We need to override the message content type
+    (body as any).messages = [{ role: 'user', content }];
+
+    // Use openaiFetch but we need to handle the content array
+    // openaiFetch expects OpenAiChatRequest which has string content,
+    // but the actual API supports array content for vision
+    const url = `${this.openaiBaseUrl}/chat/completions`;
+    const modelsToTry = [visionModel, ...this.fallbackModels];
+    let lastError = '';
+
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const model = modelsToTry[i];
+      const requestBody = { ...body, model };
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.openaiApiKey}`,
+            ...(this.provider === 'openrouter' && {
+              'HTTP-Referer': 'https://neuraline.health',
+              'X-Title': 'Neuraline EMR',
+            }),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          lastError = `${res.status}: ${text.slice(0, 300)}`;
+          const retryable = [429, 404, 502, 503].includes(res.status);
+          if (retryable && i < modelsToTry.length - 1) continue;
+          throw new Error(`Vision AI error: ${lastError}`);
+        }
+
+        const data = (await res.json()) as OpenAiChatResponse;
+        if (!data.choices?.[0]?.message?.content) {
+          lastError = 'Empty response';
+          if (i < modelsToTry.length - 1) continue;
+          throw new Error('Vision AI returned empty response');
+        }
+
+        return data.choices[0].message.content.trim();
+      } catch (err: any) {
+        lastError = err.message;
+        if (i < modelsToTry.length - 1) continue;
+        throw err;
+      }
+    }
+
+    throw new Error(`Vision AI failed: ${lastError}`);
+  }
+
+  /**
+   * Scan text for the first syntactically valid JSON object (balanced braces,
+   * respecting string literals and escape sequences). Returns the JSON string
+   * or null if no valid object is found.
+   */
+  private extractFirstJsonObject(text: string): string | null {
+    const start = text.indexOf('{');
+    if (start === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (ch === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) {
+          const candidate = text.substring(start, i + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch {
+            // Not valid JSON yet — keep scanning for the next balanced object
+            break;
+          }
+        }
+      }
+    }
+
+    // Fallback: try the simple indexOf/lastIndexOf approach
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      const candidate = text.substring(firstBrace, lastBrace + 1);
+      try {
+        JSON.parse(candidate);
+        return candidate;
+      } catch {
+        // Still invalid — give up
+      }
+    }
+
+    return null;
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -409,7 +678,7 @@ export class AiService {
           format: 'json',
           options: {
             temperature: options?.temperature ?? 0.1,
-            num_predict: options?.maxTokens ?? 1024,
+            num_predict: options?.maxTokens ?? 4096,
           },
         } as OllamaGenerateRequest),
       });
@@ -611,7 +880,10 @@ export class AiService {
       messages: [{ role: 'user', content: jsonPrompt }],
       stream: false,
       temperature: options?.temperature ?? 0.1,
-      max_tokens: options?.maxTokens ?? 1024,
+      // Structured JSON responses need more room than plain text — 1024 tokens
+      // is frequently truncated mid-JSON, causing parse failures. 4096 is a
+      // safe default that all providers support.
+      max_tokens: options?.maxTokens ?? 4096,
       response_format: { type: 'json_object' },
     };
 

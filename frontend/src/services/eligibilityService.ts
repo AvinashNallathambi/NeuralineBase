@@ -74,6 +74,21 @@ class EligibilityService {
     const response = await api.post(`${this.baseUrl}/batch`, { patientIds });
     return response.data;
   }
+
+  // ─── AI Eligibility Alerts ─────────────────────────────────────
+
+  async generateAlerts(verificationId: string): Promise<{
+    alerts: Array<{ severity: 'info' | 'warning' | 'critical'; category: string; message: string; action: string }>;
+    summary: string;
+  }> {
+    const response = await api.post(`/eligibility/ai/alerts/${verificationId}`);
+    return response.data;
+  }
+
+  async generateSummary(verificationId: string): Promise<{ summary: string }> {
+    const response = await api.post(`/eligibility/ai/summary/${verificationId}`);
+    return response.data;
+  }
 }
 
 export const eligibilityService = new EligibilityService();

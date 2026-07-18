@@ -10,7 +10,11 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PatientJwtAuthGuard } from './patient-jwt-auth.guard';
 import { AppointmentsService } from '../appointments/appointments.service';
@@ -18,6 +22,9 @@ import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { LaboratoryService } from '../laboratory/laboratory.service';
 import { BillingService } from '../billing/billing.service';
 import { RemittanceService } from '../remittance/remittance.service';
+import { InsuranceCardScanService } from '../billing/insurance-card-scan.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType, NotificationPriority } from '../notifications/entities/notification.entity';
 
 interface AuthenticatedPatientRequest {
   user: {
@@ -39,6 +46,8 @@ export class PatientPortalController {
     private readonly laboratoryService: LaboratoryService,
     private readonly billingService: BillingService,
     private readonly remittanceService: RemittanceService,
+    private readonly cardScanService: InsuranceCardScanService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ─── Appointments ────────────────────────────────────────────────
@@ -190,6 +199,60 @@ export class PatientPortalController {
   @ApiOperation({ summary: 'Get patient insurance policies' })
   async getInsurance(@Request() req: AuthenticatedPatientRequest) {
     return this.billingService.findPatientInsurances(req.user.id);
+  }
+
+  @Post('insurance/card-scan')
+  @ApiOperation({ summary: 'Scan insurance card with AI OCR — patient self-service' })
+  @UseInterceptors(FileFieldsInterceptor(
+    [
+      { name: 'frontImage', maxCount: 1 },
+      { name: 'backImage', maxCount: 1 },
+    ],
+    { limits: { fileSize: 10 * 1024 * 1024 } },
+  ))
+  async scanInsuranceCard(
+    @Request() req: AuthenticatedPatientRequest,
+    @UploadedFiles() files: { frontImage?: Express.Multer.File[]; backImage?: Express.Multer.File[] },
+  ) {
+    if (!files.frontImage || files.frontImage.length === 0) {
+      throw new BadRequestException('Front image of insurance card is required');
+    }
+    const frontImage = files.frontImage[0];
+    const backImage = files.backImage?.[0];
+
+    return this.cardScanService.scanCard(
+      req.user.tenantId,
+      frontImage.buffer,
+      backImage?.buffer,
+    );
+  }
+
+  @Post('insurance/request-update')
+  @ApiOperation({ summary: 'Request insurance update — patient submits card scan for staff review' })
+  @HttpCode(HttpStatus.OK)
+  async requestInsuranceUpdate(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: { extractedData: any; confidence: Record<string, number>; matchedPayerId?: string; notes?: string },
+  ) {
+    // Create a notification for staff to review the patient's insurance update request
+    await this.notificationsService.notify({
+      tenantId: req.user.tenantId,
+      type: NotificationType.GENERAL,
+      title: `Insurance Update Request from Patient`,
+      message: `Patient has submitted an insurance card scan for review.\n\nExtracted data: ${JSON.stringify(body.extractedData, null, 2)}\n\nPatient notes: ${body.notes || 'None'}\n\nConfidence scores: ${JSON.stringify(body.confidence)}`,
+      priority: NotificationPriority.HIGH,
+      actionUrl: `/patients/${req.user.id}`,
+      actionLabel: 'Review Patient',
+      metadata: {
+        type: 'insurance_update_request',
+        patientId: req.user.id,
+        extractedData: body.extractedData,
+        confidence: body.confidence,
+        matchedPayerId: body.matchedPayerId,
+      },
+    });
+
+    return { status: 'submitted', message: 'Your insurance update request has been submitted for staff review.' };
   }
 
   // ─── Dashboard Summary ───────────────────────────────────────────

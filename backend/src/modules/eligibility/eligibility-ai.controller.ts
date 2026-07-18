@@ -175,4 +175,22 @@ export class EligibilityAiController {
     const letter = await this.eligibilityAiService.generatePriorAuthRequest(verification, procedure, clinicalNotes);
     return { letter };
   }
+
+  @Post('alerts/:id')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Generate actionable eligibility alerts (coverage, auth, referral, financial, expiry)' })
+  @ApiParam({ name: 'id', type: String, description: 'Verification UUID' })
+  @ApiResponse({ status: 200, description: 'Structured alerts with severity, category, message, and recommended action' })
+  @ApiResponse({ status: 404, description: 'Verification not found' })
+  async generateAlerts(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{
+    alerts: Array<{ severity: 'info' | 'warning' | 'critical'; category: string; message: string; action: string }>;
+    summary: string;
+  }> {
+    const verification = await this.eligibilityService.findOne(req.tenantId, id);
+    return this.eligibilityAiService.generateEligibilityAlerts(verification);
+  }
 }

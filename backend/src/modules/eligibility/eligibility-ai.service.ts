@@ -144,6 +144,183 @@ Write a 3–5 sentence summary that a front-desk staff member can read in under 
   }
 
   /**
+   * Generate structured action alerts from an eligibility verification.
+   * Returns actionable items for front-desk staff and providers.
+   */
+  async generateEligibilityAlerts(verification: any): Promise<{
+    alerts: Array<{
+      severity: 'info' | 'warning' | 'critical';
+      category: string;
+      message: string;
+      action: string;
+    }>;
+    summary: string;
+  }> {
+    const prompt = `You are a medical insurance eligibility expert. Analyze the following eligibility verification and generate actionable alerts for clinical and front-desk staff.
+
+Verification Data:
+${JSON.stringify(verification, null, 2)}
+
+Return JSON with this structure:
+{
+  "alerts": [
+    {
+      "severity": "info|warning|critical",
+      "category": "coverage|financial|authorization|referral|expiry|cob",
+      "message": "Clear, specific message about the issue",
+      "action": "What staff should do about it"
+    }
+  ],
+  "summary": "One-line summary of overall coverage status"
+}
+
+Generate alerts for:
+- Coverage status (active/inactive/terminated) — critical if inactive
+- Prior authorization requirements — warning if required, include CPT codes if known
+- Referral requirements — warning if required
+- Policy expiration approaching (within 30 days) — warning
+- High deductible remaining — info with amount
+- Copay due today — info with amount
+- Coinsurance percentage — info
+- Out-of-pocket max status — info
+- COB issues if multiple policies — warning
+- Network status — warning if out of network
+- Missing or incomplete verification data — warning
+
+Only include alerts that are relevant to the verification data. Do not fabricate issues.
+Severity guidelines:
+- critical: blocks service (inactive coverage, terminated policy)
+- warning: requires action before or during visit (auth needed, referral needed, expiring soon)
+- info: informational (copay amount, deductible status)`;
+
+    try {
+      const result = await this.aiService.generateStructured<{
+        alerts: Array<{ severity: string; category: string; message: string; action: string }>;
+        summary: string;
+      }>(prompt, { temperature: 0.1, maxTokens: 2048 });
+
+      // Validate and normalize severity
+      const validSeverities = ['info', 'warning', 'critical'];
+      const alerts = (result.alerts || []).map((a) => ({
+        severity: validSeverities.includes(a.severity) ? (a.severity as 'info' | 'warning' | 'critical') : 'info',
+        category: a.category || 'general',
+        message: a.message || '',
+        action: a.action || '',
+      }));
+
+      return {
+        alerts,
+        summary: result.summary || 'Eligibility verification analyzed.',
+      };
+    } catch (err: any) {
+      this.logger.error(`generateEligibilityAlerts failed: ${err.message}`);
+
+      // Fallback: rule-based alerts
+      return this.ruleBasedAlerts(verification);
+    }
+  }
+
+  /**
+   * Rule-based fallback for eligibility alerts when AI is unavailable.
+   */
+  private ruleBasedAlerts(verification: any): {
+    alerts: Array<{ severity: 'info' | 'warning' | 'critical'; category: string; message: string; action: string }>;
+    summary: string;
+  } {
+    const alerts: Array<{ severity: 'info' | 'warning' | 'critical'; category: string; message: string; action: string }> = [];
+
+    // Coverage status
+    if (verification.coverageStatus === 'inactive' || verification.coverageStatus === 'terminated') {
+      alerts.push({
+        severity: 'critical',
+        category: 'coverage',
+        message: `Coverage is ${verification.coverageStatus}. Patient cannot be billed to insurance.`,
+        action: 'Inform patient and discuss self-pay options or alternative coverage.',
+      });
+    } else if (verification.coverageStatus === 'active') {
+      alerts.push({
+        severity: 'info',
+        category: 'coverage',
+        message: 'Coverage is active.',
+        action: 'Proceed with normal check-in.',
+      });
+    }
+
+    // Authorization
+    if (verification.authorizationRequired) {
+      alerts.push({
+        severity: 'warning',
+        category: 'authorization',
+        message: 'Prior authorization is required for this visit.',
+        action: 'Verify auth number is on file before the appointment. If not, start auth process immediately.',
+      });
+    }
+
+    // Referral
+    if (verification.referralRequired) {
+      alerts.push({
+        severity: 'warning',
+        category: 'referral',
+        message: 'Referral from PCP is required.',
+        action: 'Confirm referral is on file. If not, contact patient\'s PCP office.',
+      });
+    }
+
+    // Copay
+    if (verification.copayAmount != null && verification.copayAmount > 0) {
+      alerts.push({
+        severity: 'info',
+        category: 'financial',
+        message: `Patient copay: $${verification.copayAmount}`,
+        action: `Collect $${verification.copayAmount} at check-in.`,
+      });
+    }
+
+    // Deductible
+    if (verification.deductibleRemaining != null && verification.deductibleRemaining > 0) {
+      const severity = verification.deductibleRemaining > 1000 ? 'warning' : 'info';
+      alerts.push({
+        severity,
+        category: 'financial',
+        message: `Deductible remaining: $${verification.deductibleRemaining}`,
+        action: severity === 'warning'
+          ? 'High deductible — discuss payment plan options with patient.'
+          : 'Inform patient of remaining deductible.',
+      });
+    }
+
+    // Expiration
+    if (verification.expirationDate) {
+      const expDate = new Date(verification.expirationDate);
+      const now = new Date();
+      const daysUntilExpiry = Math.floor((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntilExpiry < 0) {
+        alerts.push({
+          severity: 'critical',
+          category: 'expiry',
+          message: `Policy expired ${Math.abs(daysUntilExpiry)} days ago.`,
+          action: 'Request updated insurance information from patient.',
+        });
+      } else if (daysUntilExpiry <= 30) {
+        alerts.push({
+          severity: 'warning',
+          category: 'expiry',
+          message: `Policy expires in ${daysUntilExpiry} days.`,
+          action: 'Remind patient to update insurance before expiration.',
+        });
+      }
+    }
+
+    const summary = alerts.some((a) => a.severity === 'critical')
+      ? 'CRITICAL: Coverage issues detected — review before appointment.'
+      : alerts.some((a) => a.severity === 'warning')
+        ? 'Action required before visit — see warnings.'
+        : 'Coverage active — proceed with normal check-in.';
+
+    return { alerts, summary };
+  }
+
+  /**
    * Estimate patient financial responsibility for a set of CPT procedure codes.
    */
   async estimatePatientResponsibility(verification: any, procedureCodes: string[]): Promise<object> {

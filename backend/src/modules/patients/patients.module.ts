@@ -26,6 +26,7 @@ import { LaboratoryModule } from '../laboratory/laboratory.module';
 import { BillingModule } from '../billing/billing.module';
 import { RemittanceModule } from '../remittance/remittance.module';
 import { AiModule } from '../ai/ai.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { AiModule } from '../ai/ai.module';
     BillingModule,
     RemittanceModule,
     AiModule,
+    NotificationsModule,
   ],
   controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientGroupsController],
   providers: [PatientsService, PatientAuthService, PatientAiService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService],

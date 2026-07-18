@@ -11,6 +11,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { DecimalTransformer } from '../../../common/transformers/decimal.transformer';
+import { PatientInsurance } from './patient-insurance.entity';
 
 export enum ClaimStatus {
   DRAFT = 'draft',
@@ -60,6 +61,10 @@ export class EncounterClaim {
   @Column({ name: 'insurance_payer_id', type: 'uuid', nullable: true })
   insurancePayerId!: string | null;
 
+  @Column({ name: 'patient_insurance_id', type: 'uuid', nullable: true })
+  @Index()
+  patientInsuranceId!: string | null;
+
   @Column({ name: 'insurance_payer_name', type: 'varchar', length: 255, nullable: true })
   insurancePayerName!: string | null;
 
@@ -68,6 +73,9 @@ export class EncounterClaim {
 
   @Column({ name: 'group_number', type: 'varchar', length: 50, nullable: true })
   groupNumber!: string | null;
+
+  @Column({ name: 'claim_frequency', type: 'varchar', length: 10, default: '1' })
+  claimFrequency!: string; // 1=original, 7=replacement, 8=void
 
   @Column({ name: 'service_date', type: 'date' })
   serviceDate!: Date;
@@ -120,6 +128,10 @@ export class EncounterClaim {
     eager: true,
   })
   lineItems!: unknown[];
+
+  @ManyToOne(() => PatientInsurance, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'patient_insurance_id' })
+  patientInsurance?: PatientInsurance;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

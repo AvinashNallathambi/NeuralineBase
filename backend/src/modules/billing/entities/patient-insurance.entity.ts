@@ -93,6 +93,15 @@ export class PatientInsurance {
   @Column({ name: 'status', type: 'varchar', length: 20, default: 'active' })
   status!: string;
 
+  @Column({ name: 'card_front_image', type: 'text', nullable: true })
+  cardFrontImage!: string | null;
+
+  @Column({ name: 'card_back_image', type: 'text', nullable: true })
+  cardBackImage!: string | null;
+
+  @Column({ name: 'card_extracted_confidence', type: 'jsonb', nullable: true })
+  cardExtractedConfidence!: Record<string, number> | null;
+
   @Column({ name: 'metadata', type: 'jsonb', default: {} })
   metadata!: Record<string, unknown>;
 

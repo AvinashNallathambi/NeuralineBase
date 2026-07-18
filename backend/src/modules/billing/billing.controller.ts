@@ -9,20 +9,41 @@ import {
   Query,
   UseGuards,
   Request,
+  UseInterceptors,
+  UploadedFiles,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { BillingService } from './billing.service';
+import { InsuranceCardScanService } from './insurance-card-scan.service';
+import { CobService } from './cob.service';
+import { CoverageGapDetectorService } from './coverage-gap-detector.service';
+import { SecondaryClaimService } from './secondary-claim.service';
 import { CreateEncounterClaimDto } from './dto/create-encounter-claim.dto';
 import { UpdateEncounterClaimDto } from './dto/update-encounter-claim.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { CreatePatientInsuranceDto } from './dto/create-patient-insurance.dto';
+import { UpdatePatientInsuranceDto } from './dto/update-patient-insurance.dto';
 import { ClaimStatus } from './entities/encounter-claim.entity';
 import { InvoiceStatus } from './entities/invoice.entity';
+import { InsurancePriority } from './entities/patient-insurance.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+interface AuthenticatedRequest extends Request {
+  user: { id: string; email: string; tenantId: string; role: string };
+}
 
 @Controller('billing')
 @UseGuards(JwtAuthGuard)
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly cardScanService: InsuranceCardScanService,
+    private readonly cobService: CobService,
+    private readonly coverageGapDetector: CoverageGapDetectorService,
+    private readonly secondaryClaimService: SecondaryClaimService,
+  ) {}
 
   // ─── Encounter Claims ─────────────────────────────────────────────
 
@@ -133,10 +154,141 @@ export class BillingController {
     return this.billingService.findOnePayer(id);
   }
 
+  @Post('payers')
+  createPayer(@Body() body: any, @Request() req: AuthenticatedRequest) {
+    return this.billingService.createPayer(req.user.tenantId, body);
+  }
+
+  @Patch('payers/:id')
+  updatePayer(@Param('id') id: string, @Body() body: any, @Request() req: AuthenticatedRequest) {
+    return this.billingService.updatePayer(req.user.tenantId, id, body);
+  }
+
   // ─── Patient Insurance ──────────────────────────────────────────────
 
   @Get('patients/:patientId/insurance')
   findPatientInsurances(@Param('patientId') patientId: string) {
     return this.billingService.findPatientInsurances(patientId);
+  }
+
+  @Post('patients/:patientId/insurance')
+  createPatientInsurance(
+    @Param('patientId') patientId: string,
+    @Body() dto: CreatePatientInsuranceDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.billingService.createPatientInsurance(req.user.tenantId, {
+      ...dto,
+      patientId,
+    });
+  }
+
+  @Patch('patients/:patientId/insurance/:id')
+  updatePatientInsurance(
+    @Param('id') id: string,
+    @Body() dto: UpdatePatientInsuranceDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.billingService.updatePatientInsurance(req.user.tenantId, id, dto);
+  }
+
+  @Delete('patients/:patientId/insurance/:id')
+  deletePatientInsurance(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.billingService.deletePatientInsurance(req.user.tenantId, id);
+  }
+
+  @Patch('patients/:patientId/insurance/:id/priority')
+  updateInsurancePriority(
+    @Param('id') id: string,
+    @Body('priority') priority: InsurancePriority,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.billingService.updateInsurancePriority(req.user.tenantId, id, priority);
+  }
+
+  // ─── AI Insurance Card Scan ────────────────────────────────────────
+
+  @Post('patients/:patientId/insurance/card-scan')
+  @UseInterceptors(FileFieldsInterceptor(
+    [
+      { name: 'frontImage', maxCount: 1 },
+      { name: 'backImage', maxCount: 1 },
+    ],
+    { limits: { fileSize: 10 * 1024 * 1024 } },
+  ))
+  async scanInsuranceCard(
+    @Param('patientId') patientId: string,
+    @UploadedFiles() files: { frontImage?: Express.Multer.File[]; backImage?: Express.Multer.File[] },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    if (!files.frontImage || files.frontImage.length === 0) {
+      throw new BadRequestException('Front image of insurance card is required');
+    }
+    const frontImage = files.frontImage[0];
+    const backImage = files.backImage?.[0];
+
+    return this.cardScanService.scanCard(
+      req.user.tenantId,
+      frontImage.buffer,
+      backImage?.buffer,
+    );
+  }
+
+  // ─── AI COB Order Detection ────────────────────────────────────────
+
+  @Post('patients/:patientId/insurance/suggest-cob-order')
+  suggestCobOrder(
+    @Param('patientId') patientId: string,
+    @Body() body: { age?: number; employmentStatus?: string; hasEsrD?: boolean; esrdCoordinationStartDate?: string },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.cobService.suggestCobOrder(req.user.tenantId, patientId, body);
+  }
+
+  @Post('patients/:patientId/insurance/apply-cob-order')
+  applyCobOrder(
+    @Param('patientId') patientId: string,
+    @Body() body: { order: Array<{ insuranceId: string; priority: string }> },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.cobService.applyCobOrder(req.user.tenantId, patientId, body.order);
+  }
+
+  // ─── Coverage Gap Detection ────────────────────────────────────────
+
+  @Post('coverage-gaps/scan')
+  scanCoverageGaps(
+    @Body('daysAhead') daysAhead?: number,
+  ) {
+    return this.coverageGapDetector.scanCoverageGaps(daysAhead || 7);
+  }
+
+  @Get('patients/:patientId/coverage-gaps')
+  checkPatientCoverageGaps(
+    @Param('patientId') patientId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.coverageGapDetector.checkPatientOnDemand(patientId, req.user.tenantId);
+  }
+
+  // ─── AI Secondary Claim Auto-Generation ─────────────────────────────
+
+  @Post('claims/:id/analyze-secondary')
+  analyzeForSecondaryClaim(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.secondaryClaimService.analyzeForSecondaryClaim(req.user.tenantId, id);
+  }
+
+  @Post('claims/:id/generate-secondary')
+  generateSecondaryClaim(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.secondaryClaimService.generateSecondaryClaim(req.user.tenantId, id);
   }
 }

@@ -51,6 +51,7 @@ import { usePatientStore, useAppointmentStore, useBillingStore } from '../../sto
 import type { ColumnsType } from 'antd/es/table';
 import ProblemListSection from '../../components/patients/ProblemListSection';
 import EditPatientModal from '../../components/patients/EditPatientModal';
+import { PatientInsuranceManager } from '../../components/patients/PatientInsuranceManager';
 import { patientService } from '../../services/patientService';
 import type { EncounterVitals } from '../../services/encounterService';
 
@@ -257,53 +258,15 @@ const PatientDetailPage: React.FC = () => {
             <Text type="secondary">No emergency contact on file</Text>
           )}
         </Card>
+      </Col>
 
-        {/* Insurance */}
-        <Card
-          title={
-            <Space>
-              <HeartOutlined />
-              <span>Insurance ({patient.insurance?.length || 0})</span>
-            </Space>
-          }
-          size="small"
-        >
-          {!patient.insurance || patient.insurance.length === 0 ? (
-            <Text type="secondary">No insurance on file</Text>
-          ) : (
-            patient.insurance.map((ins) => (
-              <div
-                key={ins.id}
-                style={{
-                  padding: '12px 0',
-                  borderBottom: '1px solid #f0f0f0',
-                }}
-              >
-                <Space
-                  style={{
-                    width: '100%',
-                    justifyContent: 'space-between',
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text strong>{ins.provider}</Text>
-                  {ins.isPrimary && <Tag color="blue">Primary</Tag>}
-                </Space>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Policy: {ins.policyNumber} | Group: {ins.groupNumber}
-                  </Text>
-                </div>
-                <div>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Effective: {dayjs(ins.effectiveDate).format('MM/DD/YYYY')} -{' '}
-                    {dayjs(ins.expirationDate).format('MM/DD/YYYY')}
-                  </Text>
-                </div>
-              </div>
-            ))
-          )}
-        </Card>
+      {/* Insurance — full CRUD with multi-policy support */}
+      <Col xs={24}>
+        <PatientInsuranceManager
+          patientId={patient.id}
+          patientName={`${patient.lastName}, ${patient.firstName}`}
+          patientDob={patient.dateOfBirth}
+        />
       </Col>
 
       {/* Quick Stats Row */}
