@@ -58,6 +58,12 @@ const mapBackendAppointment = (raw: any): Appointment => {
     meetingLink: raw.location?.meetingLink || undefined,
     reminders: raw.remindersEnabled ?? true,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : raw.createdAt?.toISOString?.() || new Date().toISOString(),
+    // Group appointment fields — map through so the Appointment Details drawer
+    // can render the assigned provider and group participants for group sessions.
+    isGroup: raw.isGroup ?? false,
+    groupId: raw.groupId ?? null,
+    maxParticipants: raw.maxParticipants ?? null,
+    groupParticipants: Array.isArray(raw.groupParticipants) ? raw.groupParticipants : null,
   };
 };
 

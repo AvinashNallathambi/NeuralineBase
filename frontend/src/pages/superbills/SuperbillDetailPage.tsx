@@ -34,7 +34,8 @@ const { Title, Text } = Typography;
 const SuperbillDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { superbills, updateSuperbill, submitSuperbill, fetchSuperbills } = useSuperbillStore();
+  const { superbills, updateSuperbill, submitSuperbill, fetchSuperbills } =
+    useSuperbillStore();
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(superbills.length === 0);
 
@@ -141,7 +142,7 @@ const SuperbillDetailPage: React.FC = () => {
       title: "Charge",
       dataIndex: "charge",
       key: "charge",
-      render: (charge: number) => `$${charge.toFixed(2)}`,
+      render: (charge: number | string) => `$${Number(charge || 0).toFixed(2)}`,
     },
     {
       title: "DX Pointer",
@@ -167,7 +168,7 @@ const SuperbillDetailPage: React.FC = () => {
       title: "Amount",
       dataIndex: "amount",
       key: "amount",
-      render: (amount: number) => `$${amount.toFixed(2)}`,
+      render: (amount: number | string) => `$${Number(amount || 0).toFixed(2)}`,
     },
     {
       title: "Taxable",
@@ -186,6 +187,7 @@ const SuperbillDetailPage: React.FC = () => {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              marginBottom: "2%",
             }}
           >
             <Space>
@@ -342,17 +344,21 @@ const SuperbillDetailPage: React.FC = () => {
           <Divider orientation="left">Financial Summary</Divider>
           <Descriptions bordered column={1} size="small">
             <Descriptions.Item label="Total Amount">
-              <Text strong>${superbill.totalAmount.toFixed(2)}</Text>
+              <Text strong>
+                ${Number(superbill.totalAmount || 0).toFixed(2)}
+              </Text>
             </Descriptions.Item>
             <Descriptions.Item label="Insurance Payment">
               <Text strong>
                 {superbill.insurancePayment
-                  ? `$${superbill.insurancePayment.toFixed(2)}`
+                  ? `$${Number(superbill.insurancePayment).toFixed(2)}`
                   : "-"}
               </Text>
             </Descriptions.Item>
             <Descriptions.Item label="Patient Responsibility">
-              <Text strong>${superbill.patientResponsibility.toFixed(2)}</Text>
+              <Text strong>
+                ${Number(superbill.patientResponsibility || 0).toFixed(2)}
+              </Text>
             </Descriptions.Item>
           </Descriptions>
 
@@ -366,12 +372,18 @@ const SuperbillDetailPage: React.FC = () => {
           <Divider orientation="left">AI Analysis</Divider>
           <Row gutter={16}>
             <Col span={12}>
-              <AiScrubPanel 
-                superbillId={superbill.id} 
-                clinicalNotes={superbill.notes} 
-                onFixSuggestion={superbill.status === "draft" ? (field, suggestion) => {
-                  message.info(`Please go to Edit page to apply fix for ${field}: ${suggestion}`);
-                } : undefined}
+              <AiScrubPanel
+                superbillId={superbill.id}
+                clinicalNotes={superbill.notes}
+                onFixSuggestion={
+                  superbill.status === "draft"
+                    ? (field, suggestion) => {
+                        message.info(
+                          `Please go to Edit page to apply fix for ${field}: ${suggestion}`,
+                        );
+                      }
+                    : undefined
+                }
               />
             </Col>
             <Col span={12}>

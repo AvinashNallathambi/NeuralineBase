@@ -31,7 +31,8 @@ const { RangePicker } = DatePicker;
 
 const SuperbillListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { superbills, loading, fetchSuperbills, deleteSuperbill } = useSuperbillStore();
+  const { superbills, loading, fetchSuperbills, deleteSuperbill } =
+    useSuperbillStore();
   const [searchText, setSearchText] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(
@@ -45,7 +46,9 @@ const SuperbillListPage: React.FC = () => {
   const filteredSuperbills = superbills.filter((superbill) => {
     const matchesSearch =
       superbill.patientName?.toLowerCase().includes(searchText.toLowerCase()) ||
-      superbill.providerName?.toLowerCase().includes(searchText.toLowerCase()) ||
+      superbill.providerName
+        ?.toLowerCase()
+        .includes(searchText.toLowerCase()) ||
       superbill.insurance?.provider
         ?.toLowerCase()
         .includes(searchText.toLowerCase());
@@ -126,8 +129,8 @@ const SuperbillListPage: React.FC = () => {
       title: "Total Amount",
       dataIndex: "totalAmount",
       key: "totalAmount",
-      render: (amount: number) => `$${amount.toFixed(2)}`,
-      sorter: (a: Superbill, b: Superbill) => a.totalAmount - b.totalAmount,
+      render: (amount: number | string) => `$${Number(amount || 0).toFixed(2)}`,
+      sorter: (a: Superbill, b: Superbill) => Number(a.totalAmount) - Number(b.totalAmount),
     },
     {
       title: "Status",

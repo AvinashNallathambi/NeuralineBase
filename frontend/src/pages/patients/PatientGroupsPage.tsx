@@ -28,6 +28,7 @@ import {
   Badge,
   Avatar,
   Alert,
+  ColorPicker,
 } from 'antd';
 import {
   PlusOutlined,
@@ -1036,8 +1037,12 @@ const PatientGroupsPage: React.FC = () => {
           </Row>
           <Row gutter={16}>
             <Col span={12}>
-              <Form.Item name="color" label="Color Tag">
-                <Input placeholder="#1890ff" />
+              <Form.Item
+                name="color"
+                label="Color Tag"
+                getValueFromEvent={(color) => color?.toHexString?.() ?? ''}
+              >
+                <ColorPicker showText format="hex" />
               </Form.Item>
             </Col>
             <Col span={12}>

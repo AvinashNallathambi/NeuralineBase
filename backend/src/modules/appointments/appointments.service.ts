@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere, Between } from 'typeorm';
 import { Appointment } from './entities/appointment.entity';
 import { Patient } from '../patients/entities/patient.entity';
+import { User } from '../users/entities/user.entity';
 import { ProviderAvailability } from './entities/provider-availability.entity';
 import { ProviderAvailabilityOverride } from './entities/provider-availability-override.entity';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -51,6 +52,8 @@ export class AppointmentsService {
     private readonly overrideRepository: Repository<ProviderAvailabilityOverride>,
     @InjectRepository(Patient)
     private readonly patientRepository: Repository<Patient>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
     private readonly workflowService: WorkflowService,
   ) {}
 
@@ -153,6 +156,33 @@ export class AppointmentsService {
         where: { id: appointment.patientId, tenantId },
       });
       appointment.patientName = patient ? `${patient.firstName} ${patient.lastName}` : null;
+    }
+
+    // Resolve providerName from the Users table (Settings → Users & Roles) when
+    // it is missing or stored as a raw UUID fallback. This ensures group
+    // appointments (which are created without a provider name) display the
+    // assigned provider correctly in the Appointment Details view.
+    if ((!appointment.providerName || appointment.providerName === appointment.providerId) && appointment.providerId) {
+      const user = await this.userRepository.findOne({
+        where: { id: appointment.providerId, tenantId },
+      });
+      if (user) {
+        appointment.providerName = `${user.firstName} ${user.lastName}`.trim() || user.email;
+      }
+    }
+
+    // For group appointments, resolve participant names from the Patients
+    // table so the details view can render them instead of placeholder text.
+    if (appointment.isGroup && appointment.groupParticipants && appointment.groupParticipants.length > 0) {
+      const participantIds = appointment.groupParticipants.map((p) => p.patientId);
+      const patientRecords = await this.patientRepository.find({
+        where: participantIds.map((pid) => ({ id: pid, tenantId })) as FindOptionsWhere<Patient>[],
+      });
+      const nameById = new Map(patientRecords.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+      appointment.groupParticipants = appointment.groupParticipants.map((p) => ({
+        ...p,
+        patientName: nameById.get(p.patientId) || p.patientName,
+      }));
     }
 
     return appointment;
@@ -681,6 +711,27 @@ export class AppointmentsService {
   ): Promise<Appointment> {
     const groupId = crypto.randomUUID();
 
+    // Resolve the provider's display name from the Users table so the
+    // Appointment Details view can show the assigned provider for group sessions.
+    let providerName: string | null = null;
+    if (dto.providerId) {
+      const user = await this.userRepository.findOne({
+        where: { id: dto.providerId, tenantId },
+      });
+      if (user) {
+        providerName = `${user.firstName} ${user.lastName}`.trim() || user.email;
+      }
+    }
+
+    // Resolve patient names up-front so groupParticipants are populated with
+    // real names instead of placeholder text.
+    const patientRecords = dto.patientIds.length > 0
+      ? await this.patientRepository.find({
+          where: dto.patientIds.map((pid) => ({ id: pid, tenantId })) as FindOptionsWhere<Patient>[],
+        })
+      : [];
+    const patientNameById = new Map(patientRecords.map((p) => [p.id, `${p.firstName} ${p.lastName}`]));
+
     // Create individual appointments for each patient
     const appointments: Appointment[] = [];
     const groupParticipants: { patientId: string; patientName: string; attended: boolean; notes?: string }[] = [];
@@ -689,6 +740,8 @@ export class AppointmentsService {
       const appointment = this.appointmentRepository.create({
         patientId,
         providerId: dto.providerId,
+        providerName,
+        patientName: patientNameById.get(patientId) || null,
         appointmentType: dto.appointmentType,
         startTime: new Date(dto.startTime),
         endTime: new Date(dto.endTime),
@@ -706,10 +759,9 @@ export class AppointmentsService {
       const saved = await this.appointmentRepository.save(appointment);
       appointments.push(saved);
 
-      // Note: In a real implementation, you'd fetch patient names from the patients service
       groupParticipants.push({
         patientId,
-        patientName: `Patient ${patientId}`,
+        patientName: patientNameById.get(patientId) || `Patient ${patientId}`,
         attended: false,
       });
     }

@@ -14,7 +14,7 @@ export class UnifiedSearchDto {
   patientId?: string;
 
   @ApiPropertyOptional({ name: 'provider_id' })
-  @IsUUID()
+  @IsString()
   @IsOptional()
   providerId?: string;
 

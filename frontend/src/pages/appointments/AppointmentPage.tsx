@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -24,6 +24,8 @@ import {
   message,
   Popconfirm,
   Avatar,
+  List,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -50,6 +52,8 @@ import { useAppointmentStore } from '../../store/dataStore';
 import { workflowService } from '../../services/workflowService';
 import { patientService, type Patient } from '../../services/patientService';
 import { providerAvailabilityService } from '../../services/providerAvailabilityService';
+import { patientGroupService, type PatientGroup } from '../../services/patientGroupService';
+import { userService, type StaffUser } from '../../services/userService';
 import WorkflowStatusBadge from '../../components/workflow/WorkflowStatusBadge';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -142,16 +146,16 @@ const AppointmentPage: React.FC = () => {
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
   const [maxParticipants, setMaxParticipants] = useState(15);
 
-  // Extract unique providers from appointments
-  const uniqueProviders = useMemo(() => {
-    const providerMap = new Map<string, { id: string; name: string }>();
-    appointments.forEach((appt) => {
-      if (appt.providerId && appt.providerName && !providerMap.has(appt.providerId)) {
-        providerMap.set(appt.providerId, { id: appt.providerId, name: appt.providerName });
-      }
-    });
-    return Array.from(providerMap.values());
-  }, [appointments]);
+  // Patient groups (for Group Session dropdown) — fetched dynamically so newly
+  // created groups appear immediately.
+  const [patientGroups, setPatientGroups] = useState<PatientGroup[]>([]);
+  const [patientGroupsLoading, setPatientGroupsLoading] = useState(false);
+  const [selectedPatientGroupId, setSelectedPatientGroupId] = useState<string | undefined>();
+
+  // Staff users from Settings → Users & Roles — drives the Provider dropdown so
+  // any user/role added in Settings reflects here immediately.
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
+  const [staffUsersLoading, setStaffUsersLoading] = useState(false);
 
   // Extract unique statuses from appointments
   const uniqueStatuses = useMemo(() => {
@@ -251,6 +255,80 @@ const AppointmentPage: React.FC = () => {
     fetchPatients();
   }, []);
 
+  // Load staff users (Settings → Users & Roles) on mount — drives the Provider dropdown.
+  React.useEffect(() => {
+    const fetchStaffUsers = async () => {
+      setStaffUsersLoading(true);
+      try {
+        const users = await userService.getAll();
+        // Only active users who can deliver care should be assignable as providers.
+        setStaffUsers(users.filter((u) => u.isActive));
+      } catch (error) {
+        console.error('Failed to fetch staff users:', error);
+      } finally {
+        setStaffUsersLoading(false);
+      }
+    };
+    fetchStaffUsers();
+  }, []);
+
+  // Fetch the latest patient groups from the backend. Called on mount and every
+  // time the New Appointment drawer opens so newly-created groups appear.
+  const refreshPatientGroups = useCallback(async () => {
+    setPatientGroupsLoading(true);
+    try {
+      const result = await patientGroupService.findAll({ page: 1, limit: 100, status: 'active' });
+      setPatientGroups(result.data);
+    } catch (error) {
+      console.error('Failed to fetch patient groups:', error);
+    } finally {
+      setPatientGroupsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    refreshPatientGroups();
+  }, [refreshPatientGroups]);
+
+  // Providers derived from Settings → Users & Roles (with a fallback to any
+  // providers seen on existing appointments so the dropdown is never empty).
+  const providerOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    staffUsers.forEach((u) => {
+      map.set(u.id, { id: u.id, name: `${u.firstName} ${u.lastName}`.trim() || u.email });
+    });
+    // Fallback: include providers referenced by existing appointments that are
+    // not in the staff users list (e.g. legacy data).
+    appointments.forEach((appt) => {
+      if (appt.providerId && appt.providerName && !map.has(appt.providerId)) {
+        map.set(appt.providerId, { id: appt.providerId, name: appt.providerName });
+      }
+    });
+    return Array.from(map.values());
+  }, [staffUsers, appointments]);
+
+  // When a patient group is selected, fetch its members and populate the
+  // selectedPatients list so the group can be scheduled as a group session.
+  const handlePatientGroupSelect = useCallback(async (groupId: string) => {
+    setSelectedPatientGroupId(groupId);
+    if (!groupId) {
+      setSelectedPatients([]);
+      return;
+    }
+    try {
+      // Fetch all members (paginate if necessary)
+      const result = await patientGroupService.getMembers(groupId, { page: 1, limit: 500 });
+      const ids = result.data.map((m) => m.id);
+      setSelectedPatients(ids);
+      if (result.total > 0) {
+        message.success(`Loaded ${result.total} patient(s) from group`);
+      }
+    } catch (error) {
+      console.error('Failed to fetch group members:', error);
+      message.error('Failed to load group members');
+    }
+  }, []);
+
   // ── Filtered appointments ──
   const filtered = useMemo(() => {
     return appointments.filter((a) => {
@@ -322,7 +400,7 @@ const AppointmentPage: React.FC = () => {
       } else {
         // Create individual appointment
         const patient = patients.find((p) => p.id === values.patientId);
-        const provider = uniqueProviders.find((p) => p.id === values.providerId);
+        const provider = providerOptions.find((p) => p.id === values.providerId);
         const apptDate = values.date as dayjs.Dayjs;
         const timeRange = values.timeRange as [dayjs.Dayjs, dayjs.Dayjs];
 
@@ -378,6 +456,16 @@ const AppointmentPage: React.FC = () => {
       timeRange: [startTime, endTime],
     });
 
+    openNewAppointmentDrawer();
+  };
+
+  // Open the New Appointment drawer, refreshing patient groups so any group
+  // created elsewhere (e.g. on the Patient Groups page) shows up immediately.
+  const openNewAppointmentDrawer = () => {
+    refreshPatientGroups();
+    setSelectedPatientGroupId(undefined);
+    setSelectedPatients([]);
+    setIsGroupAppointment(false);
     setDrawerOpen(true);
   };
 
@@ -1187,7 +1275,7 @@ const AppointmentPage: React.FC = () => {
               { label: 'List', value: 'list', icon: <UnorderedListOutlined /> },
             ]}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setDrawerOpen(true)}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openNewAppointmentDrawer}>
             New Appointment
           </Button>
         </Space>
@@ -1205,7 +1293,7 @@ const AppointmentPage: React.FC = () => {
             </Space>
             <Space wrap>
               <Select placeholder="Provider" allowClear style={{ minWidth: 180 }} value={providerFilter} onChange={setProviderFilter}
-                options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
+                options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
               />
               <Select placeholder="Status" allowClear style={{ minWidth: 130 }} value={statusFilter} onChange={setStatusFilter}
                 options={uniqueStatuses.map((status) => ({
@@ -1224,7 +1312,7 @@ const AppointmentPage: React.FC = () => {
           <Row gutter={[16, 16]} align="middle">
             <Col xs={24} sm={12} md={6}>
               <Select placeholder="Provider" allowClear style={{ width: '100%' }} value={providerFilter} onChange={setProviderFilter}
-                options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
+                options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
               />
             </Col>
             <Col xs={12} sm={6} md={4}>
@@ -1310,27 +1398,50 @@ const AppointmentPage: React.FC = () => {
               />
             </Form.Item>
           ) : (
-            <Form.Item label="Patients" rules={[{ required: true, message: 'Select at least 2 patients' }]}>
-              <Select
-                mode="multiple"
-                showSearch
-                placeholder="Search and select patients..."
-                optionFilterProp="label"
-                loading={patientsLoading}
-                value={selectedPatients}
-                onChange={setSelectedPatients}
-                options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
-                maxTagCount={3}
-              />
-              <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
-                {selectedPatients.length} patient(s) selected (min: 2, max: {maxParticipants})
-              </div>
-            </Form.Item>
+            <>
+              <Form.Item label="Patient Group" extra="Select a saved group to auto-populate patients, or pick patients manually below.">
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="Select a patient group (optional)..."
+                  optionFilterProp="label"
+                  loading={patientGroupsLoading}
+                  value={selectedPatientGroupId}
+                  onChange={handlePatientGroupSelect}
+                  options={patientGroups.map((g) => ({
+                    label: `${g.name}${g.memberCount ? ` (${g.memberCount})` : ''}`,
+                    value: g.id,
+                  }))}
+                  notFoundContent={patientGroupsLoading ? 'Loading…' : 'No patient groups found. Create one on the Patient Groups page.'}
+                />
+              </Form.Item>
+              <Form.Item label="Patients" rules={[{ required: true, message: 'Select at least 2 patients' }]}>
+                <Select
+                  mode="multiple"
+                  showSearch
+                  placeholder="Search and select patients..."
+                  optionFilterProp="label"
+                  loading={patientsLoading}
+                  value={selectedPatients}
+                  onChange={setSelectedPatients}
+                  options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+                  maxTagCount={3}
+                />
+                <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
+                  {selectedPatients.length} patient(s) selected (min: 2, max: {maxParticipants})
+                </div>
+              </Form.Item>
+            </>
           )}
 
           <Form.Item name="providerId" label="Provider" rules={[{ required: true, message: 'Select a provider' }]}>
-            <Select placeholder="Select provider"
-              options={uniqueProviders.map((p) => ({ label: p.name, value: p.id }))}
+            <Select
+              placeholder="Select provider"
+              showSearch
+              optionFilterProp="label"
+              loading={staffUsersLoading}
+              options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
+              notFoundContent={staffUsersLoading ? 'Loading…' : 'No providers found. Add users in Settings → Users & Roles.'}
             />
           </Form.Item>
           <Form.Item name="type" label="Appointment Type" rules={[{ required: true, message: 'Select type' }]}>
@@ -1460,7 +1571,10 @@ const AppointmentPage: React.FC = () => {
   </Descriptions.Item>
 
   <Descriptions.Item label="Provider">
-    <Text>{selectedAppointment.providerName}</Text>
+    <Space>
+      <Avatar size={24} icon={<UserOutlined />} style={{ backgroundColor: '#0D7C8A' }} />
+      <Text>{selectedAppointment.providerName || selectedAppointment.providerId || '—'}</Text>
+    </Space>
   </Descriptions.Item>
 
   <Descriptions.Item label="Date">
@@ -1546,6 +1660,43 @@ const AppointmentPage: React.FC = () => {
     </Descriptions.Item>
   )}
 </Descriptions>
+
+            {/* Group participants — shown for group sessions so assigned
+                providers and participants are visible in the details view. */}
+            {selectedAppointment.isGroup && (
+              <div style={{ marginTop: 16 }}>
+                <Space style={{ marginBottom: 8 }}>
+                  <TeamOutlined style={{ color: '#0D7C8A' }} />
+                  <Text strong>Group Session Participants</Text>
+                  {selectedAppointment.maxParticipants && (
+                    <Tag color="magenta">Max: {selectedAppointment.maxParticipants}</Tag>
+                  )}
+                </Space>
+                {selectedAppointment.groupParticipants && selectedAppointment.groupParticipants.length > 0 ? (
+                  <List
+                    size="small"
+                    bordered
+                    dataSource={selectedAppointment.groupParticipants}
+                    renderItem={(p) => (
+                      <List.Item>
+                        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                          <Space>
+                            <Avatar size={24} icon={<UserOutlined />} style={{ backgroundColor: '#08979c' }} />
+                            <Text>{p.patientName || p.patientId}</Text>
+                          </Space>
+                          <Tag color={p.attended ? 'green' : 'default'}>
+                            {p.attended ? 'Attended' : 'Pending'}
+                          </Tag>
+                        </Space>
+                      </List.Item>
+                    )}
+                  />
+                ) : (
+                  <Empty description="No participants loaded for this group session." />
+                )}
+              </div>
+            )}
+
             {/* Reason for Visit */}
             <div style={{ marginTop: 24 }}>
               <Text strong>Reason for Visit</Text>
