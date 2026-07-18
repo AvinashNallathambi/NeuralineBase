@@ -5,6 +5,7 @@ import { Superbill, SuperbillStatus } from './entities/superbill.entity';
 import { SuperbillDiagnosis } from './entities/superbill-diagnosis.entity';
 import { SuperbillProcedure } from './entities/superbill-procedure.entity';
 import { SuperbillCharge } from './entities/superbill-charge.entity';
+import { SuperbillPayment, SuperbillPaymentType } from './entities/superbill-payment.entity';
 import { CreateSuperbillDto } from './dto/create-superbill.dto';
 import { UpdateSuperbillDto } from './dto/update-superbill.dto';
 
@@ -19,6 +20,8 @@ export class SuperbillsService {
     private procedureRepository: Repository<SuperbillProcedure>,
     @InjectRepository(SuperbillCharge)
     private chargeRepository: Repository<SuperbillCharge>,
+    @InjectRepository(SuperbillPayment)
+    private paymentRepository: Repository<SuperbillPayment>,
   ) {}
 
   async create(createSuperbillDto: CreateSuperbillDto): Promise<Superbill> {
@@ -28,7 +31,14 @@ export class SuperbillsService {
       submissionDate: createSuperbillDto.submissionDate
         ? new Date(createSuperbillDto.submissionDate)
         : undefined,
+      admissionDate: createSuperbillDto.admissionDate
+        ? new Date(createSuperbillDto.admissionDate)
+        : undefined,
+      dischargeDate: createSuperbillDto.dischargeDate
+        ? new Date(createSuperbillDto.dischargeDate)
+        : undefined,
       status: createSuperbillDto.status || SuperbillStatus.DRAFT,
+      balance: createSuperbillDto.totalAmount,
     });
 
     const savedSuperbill = await this.superbillRepository.save(superbill);
@@ -114,13 +124,9 @@ export class SuperbillsService {
     const superbill = await this.findOne(id);
 
     // Prevent modification of submitted superbills
-    if (
-      superbill.status === SuperbillStatus.SUBMITTED ||
-      superbill.status === SuperbillStatus.PROCESSED ||
-      superbill.status === SuperbillStatus.PAID
-    ) {
+    if (superbill.status !== SuperbillStatus.DRAFT) {
       throw new BadRequestException(
-        'Cannot modify superbill that has been submitted',
+        'Cannot modify superbill that is not in draft status',
       );
     }
 
@@ -132,6 +138,14 @@ export class SuperbillsService {
 
     if (updateSuperbillDto.submissionDate) {
       superbill.submissionDate = new Date(updateSuperbillDto.submissionDate);
+    }
+
+    if (updateSuperbillDto.admissionDate) {
+      superbill.admissionDate = new Date(updateSuperbillDto.admissionDate);
+    }
+
+    if (updateSuperbillDto.dischargeDate) {
+      superbill.dischargeDate = new Date(updateSuperbillDto.dischargeDate);
     }
 
     const savedSuperbill = await this.superbillRepository.save(superbill);
@@ -180,20 +194,18 @@ export class SuperbillsService {
       savedSuperbill.charges = await this.chargeRepository.save(charges);
     }
 
+    await this.recalculateBalance(savedSuperbill.id);
+
     return this.findOne(savedSuperbill.id);
   }
 
   async remove(id: string): Promise<void> {
     const superbill = await this.findOne(id);
 
-    // Prevent deletion of submitted superbills
-    if (
-      superbill.status === SuperbillStatus.SUBMITTED ||
-      superbill.status === SuperbillStatus.PROCESSED ||
-      superbill.status === SuperbillStatus.PAID
-    ) {
+    // Prevent deletion of non-draft superbills
+    if (superbill.status !== SuperbillStatus.DRAFT) {
       throw new BadRequestException(
-        'Cannot delete superbill that has been submitted',
+        'Cannot delete superbill that is not in draft status',
       );
     }
 
@@ -211,6 +223,66 @@ export class SuperbillsService {
 
     superbill.status = SuperbillStatus.SUBMITTED;
     superbill.submissionDate = new Date();
+
+    return this.superbillRepository.save(superbill);
+  }
+
+  async resubmit(id: string): Promise<Superbill> {
+    const superbill = await this.findOne(id);
+
+    const allowedStatuses = [
+      SuperbillStatus.SUBMITTED,
+      SuperbillStatus.PROCESSED,
+      SuperbillStatus.REJECTED,
+      SuperbillStatus.RESUBMITTED,
+      SuperbillStatus.CORRECTED,
+    ];
+
+    if (!allowedStatuses.includes(superbill.status)) {
+      throw new BadRequestException(
+        'Only submitted, processed, rejected, resubmitted, or corrected superbills can be resubmitted',
+      );
+    }
+
+    superbill.status = SuperbillStatus.RESUBMITTED;
+    superbill.submissionDate = new Date();
+
+    return this.superbillRepository.save(superbill);
+  }
+
+  async markVoid(id: string): Promise<Superbill> {
+    const superbill = await this.findOne(id);
+
+    if (superbill.status === SuperbillStatus.DRAFT) {
+      throw new BadRequestException('Cannot void a draft superbill');
+    }
+
+    if (superbill.status === SuperbillStatus.VOIDED) {
+      throw new BadRequestException('Superbill is already voided');
+    }
+
+    superbill.status = SuperbillStatus.VOIDED;
+
+    return this.superbillRepository.save(superbill);
+  }
+
+  async correctedClaim(id: string): Promise<Superbill> {
+    const superbill = await this.findOne(id);
+
+    const allowedStatuses = [
+      SuperbillStatus.SUBMITTED,
+      SuperbillStatus.PROCESSED,
+      SuperbillStatus.REJECTED,
+      SuperbillStatus.RESUBMITTED,
+    ];
+
+    if (!allowedStatuses.includes(superbill.status)) {
+      throw new BadRequestException(
+        'Only submitted, processed, rejected, or resubmitted superbills can be corrected',
+      );
+    }
+
+    superbill.status = SuperbillStatus.CORRECTED;
 
     return this.superbillRepository.save(superbill);
   }
@@ -244,11 +316,63 @@ export class SuperbillsService {
     superbill.insurancePayment = insurancePayment;
 
     await this.superbillRepository.save(superbill);
+    await this.recalculateBalance(superbill.id);
 
     return {
       totalAmount,
       patientResponsibility,
       insurancePayment,
     };
+  }
+
+  async addPayment(
+    superbillId: string,
+    type: SuperbillPaymentType,
+    amount: number,
+    date?: Date,
+    note?: string,
+    source?: string,
+  ): Promise<Superbill> {
+    const superbill = await this.findOne(superbillId);
+
+    if (superbill.status === SuperbillStatus.DRAFT) {
+      throw new BadRequestException('Cannot apply payments to a draft superbill');
+    }
+
+    const payment = this.paymentRepository.create({
+      superbillId,
+      type,
+      amount,
+      date: date ? new Date(date) : new Date(),
+      note,
+      source,
+    });
+
+    await this.paymentRepository.save(payment);
+    await this.recalculateBalance(superbillId);
+
+    return this.findOne(superbillId);
+  }
+
+  async recalculateBalance(superbillId: string): Promise<number> {
+    const superbill = await this.findOne(superbillId);
+    const payments = await this.paymentRepository.find({
+      where: { superbillId },
+    });
+
+    const totalPaid = payments
+      .filter((p) => p.type === SuperbillPaymentType.COPAY || p.type === SuperbillPaymentType.INSURANCE_PAYMENT)
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const totalAdjustments = payments
+      .filter((p) => p.type === SuperbillPaymentType.WRITE_OFF || p.type === SuperbillPaymentType.ADJUSTMENT)
+      .reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const balance = Math.max(0, superbill.totalAmount - totalPaid - totalAdjustments);
+
+    superbill.balance = balance;
+    await this.superbillRepository.save(superbill);
+
+    return balance;
   }
 }
