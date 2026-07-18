@@ -18,6 +18,7 @@ import {
   message,
   Tooltip,
   Divider,
+  Alert,
 } from 'antd';
 import {
   PlusOutlined,
@@ -833,23 +834,13 @@ const PatientListPage: React.FC = () => {
           <Divider orientation="left" plain>
             Insurance Information
           </Divider>
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="insuranceProvider" label="Provider">
-                <Input placeholder="Insurance provider" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="policyNumber" label="Policy Number">
-                <Input placeholder="Policy #" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="groupNumber" label="Group Number">
-                <Input placeholder="Group #" />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Alert
+            type="info"
+            message="Insurance can be added after patient creation"
+            description="After creating the patient, open their detail page to add primary, secondary, and tertiary insurance policies with AI card scanning support."
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
         </Form>
       </Drawer>
     </div>

@@ -184,24 +184,76 @@ The patient portal provides a dedicated, patient-facing interface separate from 
   - `/portal/profile` — View profile information
 
 ### Billing Module
-The billing module (`backend/src/modules/billing/`) provides claim lifecycle management, invoicing, and insurance master data:
+The billing module (`backend/src/modules/billing/`) provides claim lifecycle management, invoicing, insurance master data, AI card scanning, COB detection, coverage gap detection, and secondary claim auto-generation:
 
 ### Entities
-- **EncounterClaim**: Insurance claims with status workflow (draft → ready_to_bill → submitted → paid/denied/partially_paid/appealed → cancelled)
+- **EncounterClaim**: Insurance claims with status workflow (draft → ready_to_bill → submitted → paid/denied/partially_paid/appealed → cancelled). Now includes `patientInsuranceId` FK to PatientInsurance and `claimFrequency` field (1=original, 7=replacement/secondary, 8=void)
 - **ClaimLineItem**: Individual service lines (CPT/ICD-10 coded with modifiers, diagnosis pointers, adjudication amounts)
 - **Invoice**: Patient invoices (cash_pay, self_pay, balance_due) with payment tracking
 - **InsurancePayer**: Insurance company master data with EDI submission URLs
-- **PatientInsurance**: Patient insurance policies (primary/secondary/tertiary) with subscriber details
+- **PatientInsurance**: Patient insurance policies (primary/secondary/tertiary) with subscriber details, financial fields (copay, deductible, coinsurance), and card image storage (`cardFrontImage`, `cardBackImage`, `cardExtractedConfidence`)
+
+### Services
+- **BillingService**: Core claim/invoice/payer/insurance CRUD operations
+- **InsuranceCardScanService**: AI-powered insurance card OCR using vision LLM (Ollama llava or OpenAI-compatible vision models). Extracts policy number, group number, subscriber info, copay, deductible, coinsurance with confidence scores. Auto-matches extracted payer name to InsurancePayer master data.
+- **CobService**: AI-powered Coordination of Benefits order detection. Applies CMS MSP (Medicare Secondary Payer) rules to suggest correct primary/secondary/tertiary ordering. Falls back to rule-based COB when AI unavailable.
+- **CoverageGapDetectorService**: Daily scheduler that scans patients with upcoming appointments for insurance gaps (no insurance, expired policy, expiring soon, no recent verification). Creates notifications for staff.
+- **SecondaryClaimService**: AI-powered secondary claim auto-generation. Analyzes paid primary claims, calculates remaining balance, estimates secondary payment, and generates secondary claim with COB indicators (claim frequency code 7).
 
 ### API Endpoints (all under `/api/v1/billing`)
 - `POST/GET /claims` / `GET /claims/:id` / `PATCH /claims/:id` / `DELETE /claims/:id` — Claim CRUD
 - `PATCH /claims/:id/status` — Update claim status (state-machine validated)
 - `POST /claims/:id/calculate` — Calculate claim totals from line items
+- `POST /claims/:id/analyze-secondary` — AI: Analyze paid primary claim for secondary claim opportunity
+- `POST /claims/:id/generate-secondary` — AI: Auto-generate secondary claim from paid primary claim
 - `POST/GET /invoices` / `GET /invoices/:id` / `PATCH /invoices/:id` / `DELETE /invoices/:id` — Invoice CRUD
 - `PATCH /invoices/:id/status` — Update invoice status
 - `POST /invoices/:id/payment` — Record patient payment
 - `GET /payers` / `GET /payers/:id` — Insurance payer master
+- `POST /payers` — Create insurance payer
+- `PATCH /payers/:id` — Update insurance payer
 - `GET /patients/:patientId/insurance` — Patient's active insurance policies
+- `POST /patients/:patientId/insurance` — Create patient insurance policy (auto-assigns priority if not specified)
+- `PATCH /patients/:patientId/insurance/:id` — Update patient insurance policy
+- `DELETE /patients/:patientId/insurance/:id` — Soft-delete patient insurance policy
+- `PATCH /patients/:patientId/insurance/:id/priority` — Update insurance priority (swaps with existing if promoting to primary)
+- `POST /patients/:patientId/insurance/card-scan` — AI: Scan insurance card images (front/back) with vision LLM OCR
+- `POST /patients/:patientId/insurance/suggest-cob-order` — AI: Suggest COB order based on CMS MSP rules
+- `POST /patients/:patientId/insurance/apply-cob-order` — Apply COB order suggestion
+- `POST /coverage-gaps/scan` — Trigger coverage gap scan for upcoming appointments
+- `GET /patients/:patientId/coverage-gaps` — On-demand coverage gap check for a patient
+
+### Patient Portal Insurance Endpoints (under `/api/v1/patients/portal`, requires patient JWT)
+- `GET /insurance` — Get patient's insurance policies
+- `POST /insurance/card-scan` — Patient self-service: scan insurance card with AI OCR
+- `POST /insurance/request-update` — Patient submits scanned insurance data for staff review
+
+### Eligibility AI Endpoints (under `/api/v1/eligibility/ai`, requires staff JWT)
+- `POST /alerts/:id` — Generate actionable eligibility alerts (coverage, auth, referral, financial, expiry) with severity levels
+- `POST /summary/:id` — Generate plain-English eligibility summary
+- `POST /parse-271/:id` — Parse raw X12 271 response with AI
+- `POST /estimate-responsibility/:id` — Estimate patient financial responsibility
+- `POST /denial-risk/:id` — Assess claim denial risk
+- `POST /prior-auth/:id` — Draft prior authorization request letter
+
+### Frontend Insurance Management
+- **PatientInsuranceManager** component (`frontend/src/components/patients/PatientInsuranceManager.tsx`): Full multi-policy insurance CRUD with:
+  - Primary/secondary/tertiary priority selector with up/down arrows
+  - Payer dropdown from InsurancePayer master data
+  - Subscriber information (name, DOB, relation, SSN)
+  - Coverage dates (effective/expiration)
+  - Financial details (copay, deductible, coinsurance)
+  - AI insurance card scanning (front/back upload with auto-extraction)
+  - Confidence indicators and warnings for low-confidence extracted fields
+  - Integrated into PatientDetailPage
+- **billingService.ts**: Frontend service with all insurance CRUD, card scan, COB order, coverage gap, and secondary claim methods
+- **eligibilityService.ts**: Frontend service with eligibility alerts and summary methods
+
+### AI Vision Configuration
+- **Ollama**: Set `OLLAMA_VISION_MODEL` env var (default: `llava`). Pull with `ollama pull llava`
+- **OpenRouter**: Set `OPENROUTER_VISION_MODEL` env var (e.g., `google/gemini-2.0-flash-exp:free`)
+- **OpenAI**: Set `OPENAI_VISION_MODEL` env var (e.g., `gpt-4o`)
+- The `AiService.visionGenerateStructured()` method supports both Ollama and OpenAI-compatible vision APIs
 
 ## Laboratory Module
 The laboratory module (`backend/src/modules/laboratory/`) provides full lab order lifecycle, results, specimens, imaging, and a test panel catalog:

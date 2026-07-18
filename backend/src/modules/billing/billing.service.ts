@@ -10,6 +10,9 @@ import { CreateEncounterClaimDto, CreateClaimLineItemDto } from './dto/create-en
 import { UpdateEncounterClaimDto } from './dto/update-encounter-claim.dto';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { CreatePatientInsuranceDto } from './dto/create-patient-insurance.dto';
+import { UpdatePatientInsuranceDto } from './dto/update-patient-insurance.dto';
+import { InsurancePriority, InsuranceRelation } from './entities/patient-insurance.entity';
 
 @Injectable()
 export class BillingService {
@@ -451,6 +454,185 @@ export class BillingService {
       relations: ['payer'],
       order: { priority: 'ASC' },
     });
+  }
+
+  async createPatientInsurance(
+    tenantId: string,
+    dto: CreatePatientInsuranceDto,
+  ): Promise<PatientInsurance> {
+    // Validate payer exists
+    const payer = await this.payerRepository.findOne({
+      where: { id: dto.insurancePayerId },
+    });
+    if (!payer) {
+      throw new NotFoundException(`Insurance payer ${dto.insurancePayerId} not found`);
+    }
+
+    // If priority not specified, auto-assign based on existing policies
+    let priority = dto.priority;
+    if (!priority) {
+      const existing = await this.patientInsuranceRepository.find({
+        where: { patientId: dto.patientId, tenantId, status: 'active' },
+        order: { priority: 'ASC' },
+      });
+      const existingPriorities = existing.map((e) => e.priority);
+      if (!existingPriorities.includes(InsurancePriority.PRIMARY)) {
+        priority = InsurancePriority.PRIMARY;
+      } else if (!existingPriorities.includes(InsurancePriority.SECONDARY)) {
+        priority = InsurancePriority.SECONDARY;
+      } else if (!existingPriorities.includes(InsurancePriority.TERTIARY)) {
+        priority = InsurancePriority.TERTIARY;
+      } else {
+        throw new BadRequestException(
+          'Patient already has primary, secondary, and tertiary insurance. Remove one before adding another.',
+        );
+      }
+    }
+
+    // Enforce only one primary
+    if (priority === InsurancePriority.PRIMARY) {
+      const existingPrimary = await this.patientInsuranceRepository.findOne({
+        where: { patientId: dto.patientId, tenantId, priority: InsurancePriority.PRIMARY, status: 'active' },
+      });
+      if (existingPrimary) {
+        throw new BadRequestException(
+          'Patient already has a primary insurance policy. Update or remove it first, or set this as secondary/tertiary.',
+        );
+      }
+    }
+
+    const insurance = this.patientInsuranceRepository.create({
+      tenantId,
+      patientId: dto.patientId,
+      insurancePayerId: dto.insurancePayerId,
+      priority: priority ?? InsurancePriority.PRIMARY,
+      policyNumber: dto.policyNumber,
+      groupNumber: dto.groupNumber ?? null,
+      subscriberName: dto.subscriberName,
+      subscriberRelation: dto.subscriberRelation ?? InsuranceRelation.SELF,
+      subscriberDob: dto.subscriberDob ? new Date(dto.subscriberDob) : null,
+      subscriberSsn: dto.subscriberSsn ?? null,
+      authorizationNumber: dto.authorizationNumber ?? null,
+      effectiveDate: dto.effectiveDate ? new Date(dto.effectiveDate) : null,
+      expirationDate: dto.expirationDate ? new Date(dto.expirationDate) : null,
+      copayAmount: dto.copayAmount ?? null,
+      deductibleAmount: dto.deductibleAmount ?? null,
+      coinsurancePercentage: dto.coinsurancePercentage ?? null,
+      status: dto.status ?? 'active',
+      metadata: dto.metadata ?? {},
+    });
+
+    return this.patientInsuranceRepository.save(insurance);
+  }
+
+  async updatePatientInsurance(
+    tenantId: string,
+    id: string,
+    dto: UpdatePatientInsuranceDto,
+  ): Promise<PatientInsurance> {
+    const insurance = await this.patientInsuranceRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (!insurance) {
+      throw new NotFoundException(`Patient insurance ${id} not found`);
+    }
+
+    // If changing priority to primary, ensure no other primary exists
+    if (dto.priority === InsurancePriority.PRIMARY && insurance.priority !== InsurancePriority.PRIMARY) {
+      const existingPrimary = await this.patientInsuranceRepository.findOne({
+        where: { patientId: insurance.patientId, tenantId, priority: InsurancePriority.PRIMARY, status: 'active' },
+      });
+      if (existingPrimary && existingPrimary.id !== id) {
+        throw new BadRequestException(
+          'Patient already has a primary insurance policy. Demote it first.',
+        );
+      }
+    }
+
+    Object.assign(insurance, dto);
+
+    if (dto.subscriberDob) {
+      insurance.subscriberDob = new Date(dto.subscriberDob);
+    }
+    if (dto.effectiveDate) {
+      insurance.effectiveDate = new Date(dto.effectiveDate);
+    }
+    if (dto.expirationDate) {
+      insurance.expirationDate = new Date(dto.expirationDate);
+    }
+
+    return this.patientInsuranceRepository.save(insurance);
+  }
+
+  async deletePatientInsurance(tenantId: string, id: string): Promise<void> {
+    const insurance = await this.patientInsuranceRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (!insurance) {
+      throw new NotFoundException(`Patient insurance ${id} not found`);
+    }
+    await this.patientInsuranceRepository.softRemove(insurance);
+  }
+
+  async updateInsurancePriority(
+    tenantId: string,
+    id: string,
+    priority: InsurancePriority,
+  ): Promise<PatientInsurance> {
+    const insurance = await this.patientInsuranceRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (!insurance) {
+      throw new NotFoundException(`Patient insurance ${id} not found`);
+    }
+
+    // If promoting to primary, demote existing primary
+    if (priority === InsurancePriority.PRIMARY) {
+      const existingPrimary = await this.patientInsuranceRepository.findOne({
+        where: { patientId: insurance.patientId, tenantId, priority: InsurancePriority.PRIMARY, status: 'active' },
+      });
+      if (existingPrimary && existingPrimary.id !== id) {
+        // Swap: demote the old primary to the current insurance's old priority
+        existingPrimary.priority = insurance.priority;
+        await this.patientInsuranceRepository.save(existingPrimary);
+      }
+    }
+
+    insurance.priority = priority;
+    return this.patientInsuranceRepository.save(insurance);
+  }
+
+  async createPayer(
+    tenantId: string,
+    data: { payerId: string; name: string; payerType?: string; phone?: string; email?: string; website?: string; electronicClaimUrl?: string; address?: Record<string, unknown> },
+  ): Promise<InsurancePayer> {
+    const payer = this.payerRepository.create({
+      tenantId,
+      payerId: data.payerId,
+      name: data.name,
+      payerType: data.payerType ?? 'commercial',
+      phone: data.phone ?? null,
+      email: data.email ?? null,
+      website: data.website ?? null,
+      electronicClaimUrl: data.electronicClaimUrl ?? null,
+      address: (data.address as any) ?? {},
+      status: 'active',
+      metadata: {},
+    });
+    return this.payerRepository.save(payer);
+  }
+
+  async updatePayer(
+    tenantId: string,
+    id: string,
+    data: Partial<{ name: string; payerType: string; phone: string; email: string; website: string; electronicClaimUrl: string; address: Record<string, unknown>; status: string }>,
+  ): Promise<InsurancePayer> {
+    const payer = await this.payerRepository.findOne({ where: { id, tenantId } });
+    if (!payer) {
+      throw new NotFoundException(`Insurance payer ${id} not found`);
+    }
+    Object.assign(payer, data);
+    return this.payerRepository.save(payer);
   }
 
   // ─── Utilities ──────────────────────────────────────────────────────
