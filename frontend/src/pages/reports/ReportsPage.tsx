@@ -603,7 +603,7 @@ const ReportsPage: React.FC = () => {
       {/* Header */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
-          <Title level={2} style={{ margin: 0 }}>
+          <Title level={4} style={{ margin: 0 }}>
             <BarChartOutlined style={{ marginRight: 12, color: '#0D7C8A' }} />
             Reports & Analytics
           </Title>

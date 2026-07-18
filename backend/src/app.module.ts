@@ -28,9 +28,13 @@ import { MedicationsModule } from './modules/medications/medications.module';
 import { PharmaciesModule } from './modules/pharmacies/pharmacies.module';
 import { ProvidersModule } from './modules/providers/providers.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { TrialsModule } from './modules/trials/trials.module';
+import { CommonModule } from './common/common.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
+import { TenantWipeService } from './common/services/tenant-wipe.service';
 import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
 
 @Module({
@@ -75,6 +79,9 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     // HIPAA: Audit log entity registration
     TypeOrmModule.forFeature([HipaaAuditLog]),
 
+    // Global common services (TenantWipeService, EncryptionService, etc.)
+    CommonModule,
+
     // Redis / Bull queue
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -115,13 +122,16 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     PharmaciesModule,
     ProvidersModule,
     MessagingModule,
+    SubscriptionsModule,
+    TrialsModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules
     EncryptionService,
     HipaaAuditService,
     PasswordPolicyService,
+    TenantWipeService,
   ],
-  exports: [EncryptionService, HipaaAuditService, PasswordPolicyService],
+  exports: [EncryptionService, HipaaAuditService, PasswordPolicyService, TenantWipeService],
 })
 export class AppModule {}

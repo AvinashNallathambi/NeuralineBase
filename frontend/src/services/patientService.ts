@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { PatientProblem } from './icdService';
+import { encounterService, type EncounterVitals } from './encounterService';
 
 export interface Patient {
   id: string;
@@ -152,6 +153,34 @@ class PatientService {
 
   async deleteProblem(patientId: string, problemId: string): Promise<void> {
     await api.delete(`${this.baseUrl}/${patientId}/problems/${problemId}`);
+  }
+
+  async getVitals(patientId: string): Promise<Array<EncounterVitals & { encounterId: string; encounterDate: string }>> {
+    const encounters = await encounterService.findByPatient(patientId);
+    return (encounters as any[])
+      .filter((e) => e.vitals && Object.keys(e.vitals).length > 0)
+      .map((e) => ({
+        ...e.vitals,
+        encounterId: e.id,
+        encounterDate: e.startTime,
+      }))
+      .sort((a, b) => new Date(b.encounterDate).getTime() - new Date(a.encounterDate).getTime());
+  }
+
+  async uploadDocument(
+    patientId: string,
+    file: File,
+    documentType: string,
+    description?: string,
+  ): Promise<{ id: string; fileName: string; documentType: string; url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentType);
+    if (description) formData.append('description', description);
+    const response = await api.post(`${this.baseUrl}/${patientId}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
   }
 }
 

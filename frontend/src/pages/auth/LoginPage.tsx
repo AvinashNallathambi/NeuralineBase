@@ -25,28 +25,56 @@ import { mockUser, mockTenant } from "../../data/mockData";
 
 const { Title, Text, Paragraph } = Typography;
 
-// RSA Encryption helper using Web Crypto API
-async function encryptPassword(password: string): Promise<string> {
-  try {
-    // In production, fetch the public key from the backend
-    // For now, using a hardcoded public key (this should be replaced with dynamic key fetching)
+// HIPAA / PCI: encrypt the password with RSA-OAEP before sending over the
+// network. The backend decrypts with its private key, then verifies the
+// bcrypt hash. This keeps the password encrypted in transit even when TLS
+// terminates inside a load balancer or shared infrastructure.
 
-    // Simple base64 encoding for demo (replace with proper RSA in production)
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+async function fetchPublicKey(): Promise<string> {
+  const res = await fetch('/api/v1/auth/public-key');
+  if (!res.ok) throw new Error('Unable to fetch login public key');
+  const data = await res.json();
+  return data.publicKey as string;
+}
 
-    // Add a prefix to identify encrypted data
-    return `ENC:${hashHex}`;
-  } catch (error) {
-    console.error("Encryption error:", error);
-    // Fallback to base64 if encryption fails
-    return btoa(password);
+function pemToArrayBuffer(pem: string): ArrayBuffer {
+  const b64 = pem
+    .replace(/-----BEGIN PUBLIC KEY-----/, '')
+    .replace(/-----END PUBLIC KEY-----/, '')
+    .replace(/\s/g, '');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
+  return bytes.buffer;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+async function encryptPassword(password: string, publicKeyPem: string): Promise<string> {
+  const keyData = pemToArrayBuffer(publicKeyPem);
+  const publicKey = await window.crypto.subtle.importKey(
+    'spki',
+    keyData,
+    { name: 'RSA-OAEP', hash: 'SHA-256' },
+    false,
+    ['encrypt'],
+  );
+  const encoded = new TextEncoder().encode(password);
+  const encrypted = await window.crypto.subtle.encrypt(
+    { name: 'RSA-OAEP' },
+    publicKey,
+    encoded,
+  );
+  return arrayBufferToBase64(encrypted);
 }
 
 const LoginPage: React.FC = () => {
@@ -64,8 +92,9 @@ const LoginPage: React.FC = () => {
   }) => {
     setLoading(true);
     try {
-      // Encrypt password before sending
-      const encryptedPassword = await encryptPassword(values.password);
+      // Encrypt the password with the backend's RSA public key before sending
+      const publicKeyPem = await fetchPublicKey();
+      const encryptedPassword = await encryptPassword(values.password, publicKeyPem);
 
       // Call the real backend login endpoint
       const res = await fetch("/api/v1/auth/login", {
@@ -73,7 +102,7 @@ const LoginPage: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: values.email,
-          password: encryptedPassword,
+          encryptedPassword,
         }),
       });
 

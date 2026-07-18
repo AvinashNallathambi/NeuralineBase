@@ -169,7 +169,7 @@ const AuthLayout: React.FC = () => {
         <div
           style={{
             width: '100%',
-            maxWidth: 420,
+            // maxWidth: 420,
           }}
         >
           <Outlet />

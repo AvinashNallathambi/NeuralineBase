@@ -12,6 +12,10 @@ import {
   SubscriptionStatus,
 } from './entities/subscription.entity';
 import { SubscriptionPlan } from './entities/subscription-plan.entity';
+import {
+  SubscriptionPaymentMethod,
+  PaymentMethodType,
+} from './entities/payment-method.entity';
 
 const GRACE_PERIOD_DAYS = 14; // Healthcare context: 14-day grace period
 
@@ -35,6 +39,8 @@ export class SubscriptionNotificationService {
     private subscriptionRepository: Repository<Subscription>,
     @InjectRepository(SubscriptionPlan)
     private planRepository: Repository<SubscriptionPlan>,
+    @InjectRepository(SubscriptionPaymentMethod)
+    private paymentMethodRepository: Repository<SubscriptionPaymentMethod>,
     private notificationsService: NotificationsService,
   ) {}
 
@@ -52,6 +58,7 @@ export class SubscriptionNotificationService {
     await this.checkUpcomingRenewals();
     await this.checkFailedPayments();
     await this.checkExpiredSubscriptions();
+    await this.checkCardExpirations();
 
     this.logger.log('Daily subscription notification check complete.');
   }
@@ -357,6 +364,113 @@ export class SubscriptionNotificationService {
     }
   }
 
+  // ── Card Expiry Notifications (Phase 2) ────────────────────────────
+
+  /**
+   * Checks all card payment methods for upcoming or past expiry.
+   * Sends notifications:
+   * - 60 days before expiry: Early notice
+   * - 30 days before expiry: Urgent update
+   * - Expired: Critical alert
+   */
+  private async checkCardExpirations(): Promise<void> {
+    const cardMethods = await this.paymentMethodRepository.find({
+      where: { type: PaymentMethodType.CARD },
+    });
+
+    const now = new Date();
+
+    for (const pm of cardMethods) {
+      if (!pm.cardExpMonth || !pm.cardExpYear) continue;
+
+      // Card expires at the end of the expiry month
+      const expDate = new Date(pm.cardExpYear, pm.cardExpMonth, 1);
+      expDate.setMonth(expDate.getMonth() + 1, 0); // Last day of expiry month
+
+      const daysUntilExpiry = Math.ceil(
+        (expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const tenantEmail = await this.getTenantEmailByTenantId(pm.tenantId);
+
+      // Expired
+      if (daysUntilExpiry < 0) {
+        await this.sendIfNotAlreadySent(
+          { id: `pm-expired-${pm.id}` } as Subscription,
+          NotificationType.PAYMENT_FAILED,
+          168, // 7 days dedup
+          () =>
+            this.notificationsService.notify({
+              tenantId: pm.tenantId,
+              type: NotificationType.PAYMENT_FAILED,
+              title: 'Your payment card has expired',
+              message: `Your ${pm.cardBrand} card ending in ${pm.cardLast4} has expired. Please update your payment method to avoid service interruption.`,
+              priority: NotificationPriority.URGENT,
+              actionUrl: '/settings?tab=billing',
+              actionLabel: 'Update Payment Method',
+              sendEmail: !!tenantEmail,
+              emailTo: tenantEmail ?? undefined,
+              metadata: { cardLast4: pm.cardLast4, cardBrand: pm.cardBrand, expired: true },
+            }),
+        );
+      }
+      // 30 days before expiry
+      else if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
+        await this.sendIfNotAlreadySent(
+          { id: `pm-expiring-30-${pm.id}` } as Subscription,
+          NotificationType.RENEWAL_UPCOMING,
+          168,
+          () =>
+            this.notificationsService.notify({
+              tenantId: pm.tenantId,
+              type: NotificationType.RENEWAL_UPCOMING,
+              title: `Your card expires in ${daysUntilExpiry} days`,
+              message: `Your ${pm.cardBrand} card ending in ${pm.cardLast4} will expire on ${pm.cardExpMonth}/${pm.cardExpYear}. Please update your payment method before it expires to avoid any billing interruption.`,
+              priority: NotificationPriority.HIGH,
+              actionUrl: '/settings?tab=billing',
+              actionLabel: 'Update Payment Method',
+              sendEmail: !!tenantEmail,
+              emailTo: tenantEmail ?? undefined,
+              metadata: {
+                cardLast4: pm.cardLast4,
+                cardBrand: pm.cardBrand,
+                expMonth: pm.cardExpMonth,
+                expYear: pm.cardExpYear,
+                daysUntilExpiry,
+              },
+            }),
+        );
+      }
+      // 60 days before expiry
+      else if (daysUntilExpiry <= 60 && daysUntilExpiry > 30) {
+        await this.sendIfNotAlreadySent(
+          { id: `pm-expiring-60-${pm.id}` } as Subscription,
+          NotificationType.RENEWAL_UPCOMING,
+          168,
+          () =>
+            this.notificationsService.notify({
+              tenantId: pm.tenantId,
+              type: NotificationType.RENEWAL_UPCOMING,
+              title: 'Your card expires soon',
+              message: `Your ${pm.cardBrand} card ending in ${pm.cardLast4} will expire on ${pm.cardExpMonth}/${pm.cardExpYear}. Consider updating your payment method at your convenience.`,
+              priority: NotificationPriority.MEDIUM,
+              actionUrl: '/settings?tab=billing',
+              actionLabel: 'Update Payment Method',
+              sendEmail: !!tenantEmail,
+              emailTo: tenantEmail ?? undefined,
+              metadata: {
+                cardLast4: pm.cardLast4,
+                cardBrand: pm.cardBrand,
+                expMonth: pm.cardExpMonth,
+                expYear: pm.cardExpYear,
+                daysUntilExpiry,
+              },
+            }),
+        );
+      }
+    }
+  }
+
   // ── Webhook-Triggered Notifications (event-driven) ─────────────────
 
   /**
@@ -477,6 +591,15 @@ export class SubscriptionNotificationService {
     // In production this would look up the tenant admin's email from the DB.
     // For now, check metadata or return null (mock mode).
     return (sub.metadata?.tenantEmail as string) ?? null;
+  }
+
+  private async getTenantEmailByTenantId(tenantId: string): Promise<string | null> {
+    const sub = await this.subscriptionRepository.findOne({
+      where: { tenantId },
+      order: { createdAt: 'DESC' },
+    });
+    if (!sub) return null;
+    return this.getTenantEmail(sub);
   }
 
   private async sendIfNotAlreadySent(

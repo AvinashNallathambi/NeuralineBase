@@ -4,6 +4,7 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,13 +17,21 @@ const DEV_TENANT_ID = '00000000-0000-0000-0000-000000000000';
 const SALT_ROUNDS = 12;
 
 @Injectable()
-export class UsersService {
+export class UsersService implements OnModuleInit {
   private readonly logger = new Logger(UsersService.name);
 
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.seedDevUsers();
+    } catch (error) {
+      this.logger.warn('Failed to seed dev users:', error);
+    }
+  }
 
   // ─── CRUD ─────────────────────────────────────────────────────────
 
@@ -174,7 +183,18 @@ export class UsersService {
     const count = await this.userRepository.count({
       where: { tenantId: DEV_TENANT_ID },
     });
+
+    // One-time upgrade: promote the original dev admin to super_admin so
+    // they can access the trial management endpoints.
     if (count > 0) {
+      const sarah = await this.userRepository.findOne({
+        where: { tenantId: DEV_TENANT_ID, email: 'dr.sarah.chen@neuraline.health' },
+      });
+      if (sarah && sarah.role === 'admin') {
+        sarah.role = 'super_admin';
+        await this.userRepository.save(sarah);
+        this.logger.log('Upgraded dev user dr.sarah.chen@neuraline.health from admin → super_admin');
+      }
       this.logger.log(`Dev users already seeded (${count}), skipping`);
       return;
     }
@@ -185,7 +205,7 @@ export class UsersService {
         password: 'Neuraline@2025',
         firstName: 'Sarah',
         lastName: 'Chen',
-        role: 'admin',
+        role: 'super_admin',
         phone: '(555) 100-2001',
         department: 'Primary Care',
       },

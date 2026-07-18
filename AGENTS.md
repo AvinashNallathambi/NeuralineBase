@@ -48,9 +48,78 @@ npx typeorm migration:revert -d src/config/database.config.ts
 To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env` or Docker env, then disable it and create a migration before committing.
 
 ## Backend Modules
-- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging
+- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Reports, Telemedicine, Users
-- AuthService uses in-memory dev user (no UsersService/DB persistence yet)
+- AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
+
+## Subscriptions Module
+The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS billing, payment method management, and dunning:
+
+### Entities
+- **Subscription**: Tenant subscription with plan tier, billing cycle, status (trialing/active/past_due/cancelled/expired), Stripe IDs, trial dates
+- **SubscriptionPlan**: Plan catalog (free/professional/enterprise) with monthly/annual pricing and feature limits
+- **SubscriptionInvoice**: Invoice history with status tracking (paid/open/failed/void/refunded)
+- **SubscriptionPaymentMethod**: Saved payment methods (card/ACH) with brand, last4, expiry, billing address, HSA/FSA flag, default flag
+- **SubscriptionPaymentPlan**: Installment payment plans for splitting balances across scheduled payments
+
+### Providers
+- **SubscriptionProvider interface**: Abstraction for subscription billing operations
+- **StripeSubscriptionProvider**: Real Stripe integration (subscriptions, payment methods, SetupIntents, customer portal, invoice retry, dunning)
+- **MockSubscriptionProvider**: In-memory mock for development without Stripe API keys
+
+### API Endpoints (all under `/api/v1/subscriptions`)
+- `GET /plans` / `GET /plans/:tier` — List/get subscription plans
+- `GET /current` — Get current tenant subscription with plan details
+- `POST /change-plan` — Change plan tier and/or billing cycle
+- `POST /cancel` — Cancel subscription (immediate or at period end)
+- `POST /reactivate` — Reactivate a cancelled subscription
+- `GET /invoices` — List invoice history
+- `GET /features/:feature` — Check if current plan includes a feature
+- **Payment Methods**:
+  - `GET /payment-methods` — List saved payment methods
+  - `POST /setup-intent` — Create SetupIntent for collecting new payment method
+  - `POST /payment-methods/attach` — Attach a confirmed payment method
+  - `DELETE /payment-methods/:id` — Detach/remove a payment method
+  - `PATCH /payment-methods/:id/default` — Set a payment method as default
+  - `GET /payment-methods/expiry-check` — Check for expiring/expired cards
+- **Dunning & Retry**:
+  - `POST /retry-payment` — Retry a failed invoice payment
+- **Customer Portal**:
+  - `POST /customer-portal` — Create Stripe Customer Portal session
+- **Fee Transparency**:
+  - `GET /fee-estimate` — Get processing fee estimates for card vs ACH
+- **AI Payment Optimization**:
+  - `GET /payment-optimization` — Get AI-driven suggestions (switch to ACH, add backup card, update expired card, annual billing, remove unused methods)
+- **Payment Plans**:
+  - `GET /payment-plans` — List payment plans
+  - `POST /payment-plans` — Create a payment plan (split balance into installments)
+  - `POST /payment-plans/:id/installment` — Record an installment payment
+  - `POST /payment-plans/:id/cancel` — Cancel a payment plan
+- `POST /webhook` — Stripe webhook handler (invoice.payment_succeeded, invoice.payment_failed, customer.subscription.deleted, customer.subscription.updated)
+
+### Notification System
+- **SubscriptionNotificationService**: Daily cron job checks for:
+  - Trial expiration sequence (7/3/0 days before, post-expiration grace)
+  - Upcoming renewal reminders (7 days before)
+  - Failed payment dunning (Day 1/3/7/14 with escalating urgency)
+  - Expired subscription grace period (14-day healthcare context)
+  - **Card expiry notifications** (60 days, 30 days, expired)
+- Uses NotificationsModule for in-app + email notifications with deduplication
+
+### Frontend
+- **SettingsPage** (`/settings?tab=billing`): Full billing dashboard with:
+  - Active subscription card with plan details, features, trial/renewal alerts
+  - Payment methods list (card/ACH) with default selection, remove, add
+  - Card expiry warnings (expired/expiring soon alerts)
+  - Past due retry banner with retry button
+  - AI Payment Optimization suggestions card
+  - Transaction fee breakdown (card vs ACH comparison)
+  - Available plans grid with change plan modal
+  - Invoice history table with download links
+  - Stripe Customer Portal link
+- **UpdatePaymentMethodModal**: Stripe Elements-based modal for adding new payment methods (card or ACH)
+- **StripeProvider**: Wraps Stripe Elements with SetupIntent client secret
+- **subscriptionService.ts**: Frontend service with all subscription + payment method + payment plan API methods
 
 ## Patient Portal
 The patient portal provides a dedicated, patient-facing interface separate from the staff EMR. It has its own authentication system, layout, and AI features.

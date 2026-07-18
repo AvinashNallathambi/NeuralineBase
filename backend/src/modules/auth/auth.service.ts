@@ -4,12 +4,16 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
+  OnModuleInit,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcryptjs";
+import * as crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import { PasswordPolicyService } from "../../common/services/password-policy.service";
+import { UsersService } from "../users/users.service";
+import { User } from "../users/entities/user.entity";
 
 export interface UserRecord {
   id: string;
@@ -48,9 +52,11 @@ interface LoginAttempt {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
   private readonly SALT_ROUNDS = 12;
+  private rsaPrivateKey!: crypto.KeyObject;
+  private rsaPublicKeyPem!: string;
 
   // HIPAA: Token blacklist (production should use Redis)
   private readonly tokenBlacklist = new Set<string>();
@@ -64,14 +70,53 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly passwordPolicyService: PasswordPolicyService,
+    private readonly usersService: UsersService,
   ) {}
+
+  onModuleInit() {
+    const privateKeyPem = this.configService.get<string>('AUTH_PRIVATE_KEY', '');
+    const publicKeyPem = this.configService.get<string>('AUTH_PUBLIC_KEY', '');
+
+    if (privateKeyPem && publicKeyPem) {
+      this.rsaPrivateKey = crypto.createPrivateKey(privateKeyPem);
+      this.rsaPublicKeyPem = publicKeyPem;
+      this.logger.log('Loaded RSA key pair from environment variables');
+    } else {
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      });
+      this.rsaPrivateKey = crypto.createPrivateKey(privateKey);
+      this.rsaPublicKeyPem = publicKey;
+      this.logger.warn('Generated EPHEMERAL RSA key pair for login encryption. Set AUTH_PRIVATE_KEY/AUTH_PUBLIC_KEY in production so clients can cache the public key.');
+    }
+  }
+
+  getPublicKey(): string {
+    return this.rsaPublicKeyPem;
+  }
+
+  decryptPassword(encryptedBase64: string): string {
+    const buffer = Buffer.from(encryptedBase64, 'base64');
+    const decrypted = crypto.privateDecrypt(
+      {
+        key: this.rsaPrivateKey,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: 'sha256',
+      },
+      buffer,
+    );
+    return decrypted.toString('utf8');
+  }
 
   /**
    * Authenticate user with email and password
    */
   async login(
     email: string,
-    password: string,
+    passwordOrEncrypted: string,
+    options?: { isEncrypted?: boolean },
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -80,11 +125,10 @@ export class AuthService {
   }> {
     // HIPAA: Check account lockout before processing
     this.checkAccountLockout(email);
-    let actualPassword = password;
-    if (password.startsWith("ENC:")) {
-      actualPassword = await this.decryptPassword(password);
+    let actualPassword = passwordOrEncrypted;
+    if (options?.isEncrypted) {
+      actualPassword = this.decryptPassword(passwordOrEncrypted);
     }
-    // TODO: Replace with actual database lookup via UsersService
     const user = await this.findUserByEmail(email);
 
     if (!user) {
@@ -157,7 +201,7 @@ export class AuthService {
       password: hashedPassword,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      role: "admin",
+      role: "tenant_admin",
       tenantId,
       mfaEnabled: false,
       mfaSecret: null,
@@ -383,10 +427,29 @@ export class AuthService {
     return sanitized;
   }
 
-  // TODO: Replace these stubs with actual database queries via UsersService
+  // Dynamic lookup via UsersService; falls back to hardcoded dev user
+  // when no database record is found (useful for fresh local environments).
+
+  private toUserRecord(user: User): UserRecord {
+    return {
+      id: user.id,
+      email: user.email,
+      password: user.passwordHash,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      tenantId: user.tenantId,
+      mfaEnabled: user.mfaEnabled,
+      mfaSecret: user.mfaSecret,
+      isActive: user.isActive,
+    };
+  }
 
   private async findUserByEmail(email: string): Promise<UserRecord | null> {
-    // Dev user for development - TODO: Replace with TypeORM repository query
+    const dbUser = await this.usersService.findByEmailWithPassword(email);
+    if (dbUser) return this.toUserRecord(dbUser);
+
+    // Fallback dev user for local development
     if (email === "dr.sarah.chen@neuraline.health") {
       const hashedPassword = await bcrypt.hash(
         "Neuraline@2025",
@@ -398,7 +461,7 @@ export class AuthService {
         password: hashedPassword,
         firstName: "Sarah",
         lastName: "Chen",
-        role: "admin",
+        role: "super_admin",
         tenantId: "00000000-0000-0000-0000-000000000000",
         mfaEnabled: false,
         mfaSecret: null,
@@ -409,8 +472,10 @@ export class AuthService {
   }
 
   private async findUserById(id: string): Promise<UserRecord | null> {
-    // Stub - will be replaced with TypeORM repository query
-    // Dev user for testing
+    const dbUser = await this.usersService.findByIdWithPassword(id);
+    if (dbUser) return this.toUserRecord(dbUser);
+
+    // Fallback dev user for local development
     if (id === "dev-user-1") {
       return {
         id: "dev-user-1",
@@ -418,7 +483,7 @@ export class AuthService {
         password: await bcrypt.hash("Neuraline@2025", this.SALT_ROUNDS),
         firstName: "Sarah",
         lastName: "Chen",
-        role: "doctor",
+        role: "super_admin",
         tenantId: "00000000-0000-0000-0000-000000000000",
         mfaEnabled: false,
         mfaSecret: null,
@@ -478,25 +543,5 @@ export class AuthService {
       .update(email)
       .digest("hex")
       .substring(0, 12);
-  }
-  private async decryptPassword(encryptedPassword: string): Promise<string> {
-    // For demo: The frontend sends SHA-256 hash, so we need to compare against known password
-    // In production: Use RSA private key to decrypt
-    const crypto = require("crypto");
-
-    // Extract the hash part (remove ENC: prefix)
-    const hashPart = encryptedPassword.replace("ENC:", "");
-
-    // For development, return the known dev password
-    // In production, implement proper RSA decryption
-    if (
-      hashPart ===
-      crypto.createHash("sha256").update("Neuraline@2025").digest("hex")
-    ) {
-      return "Neuraline@2025";
-    }
-
-    // If hash doesn't match, return as-is (will fail bcrypt comparison)
-    return encryptedPassword;
   }
 }

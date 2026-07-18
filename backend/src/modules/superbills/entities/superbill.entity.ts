@@ -7,6 +7,7 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { SuperbillDiagnosis } from './superbill-diagnosis.entity';
 import { SuperbillProcedure } from './superbill-procedure.entity';
@@ -22,9 +23,14 @@ export enum SuperbillStatus {
 }
 
 @Entity('superbills')
+@Index(['tenantId', 'patientId'])
 export class Superbill {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'tenant_id', type: 'uuid', nullable: true })
+  @Index()
+  tenantId: string | null;
 
   @Column()
   patientId: string;

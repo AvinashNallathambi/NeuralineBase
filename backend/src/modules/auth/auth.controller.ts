@@ -1,11 +1,13 @@
 import {
   Controller,
+  Get,
   Post,
   Body,
   UseGuards,
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -14,7 +16,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -23,9 +25,13 @@ class LoginDto {
   @IsNotEmpty()
   email!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  password!: string;
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  encryptedPassword?: string;
 }
 
 class RegisterDto {
@@ -102,6 +108,14 @@ interface AuthenticatedRequest {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Get('public-key')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get RSA public key for password encryption' })
+  @ApiResponse({ status: 200, description: 'PEM-encoded RSA public key' })
+  getPublicKey() {
+    return { publicKey: this.authService.getPublicKey() };
+  }
+
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
@@ -109,7 +123,14 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Login successful, returns JWT tokens' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto.email, loginDto.password);
+    const hasPlain = typeof loginDto.password === 'string' && loginDto.password.length > 0;
+    const hasEncrypted = typeof loginDto.encryptedPassword === 'string' && loginDto.encryptedPassword.length > 0;
+    if (!hasPlain && !hasEncrypted) {
+      throw new BadRequestException('Either password or encryptedPassword is required');
+    }
+    const useEncrypted = hasEncrypted;
+    const password = (useEncrypted ? loginDto.encryptedPassword : loginDto.password) as string;
+    return this.authService.login(loginDto.email, password, { isEncrypted: useEncrypted });
   }
 
   @Post('register')

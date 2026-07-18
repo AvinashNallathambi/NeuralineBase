@@ -41,7 +41,7 @@ const { Option } = Select;
 const ClinicalTemplateGallery: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'tenant_admin' || user?.role === 'super_admin';
 
   const [templates, setTemplates] = useState<ClinicalTemplate[]>([]);
   const [loading, setLoading] = useState(false);
