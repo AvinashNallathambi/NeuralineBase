@@ -36,6 +36,8 @@ import {
 } from "../../types";
 import dayjs from "dayjs";
 import AiCodingAssistant from "../../components/superbills/AiCodingAssistant";
+import IcdSearchInput from "../../components/icd/IcdSearchInput";
+import CptSearchInput from "../../components/superbills/CptSearchInput";
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -51,7 +53,7 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const { addSuperbill, updateSuperbill } = useSuperbillStore();
-  const { patients } = usePatientStore();
+  const { patients, fetchPatients } = usePatientStore();
   const { users } = useUserStore();
   const [diagnoses, setDiagnoses] = useState<SuperbillDiagnosis[]>(
     initialData?.diagnoses || [],
@@ -62,9 +64,15 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   const [charges, setCharges] = useState<SuperbillCharge[]>(
     initialData?.charges || [],
   );
-  const [totalAmount, setTotalAmount] = useState(initialData?.totalAmount || 0);
+  const [totalAmount, setTotalAmount] = useState(Number(initialData?.totalAmount || 0));
   const [clinicalNotes, setClinicalNotes] = useState(initialData?.notes || "");
   const isEditing = !!initialData;
+
+  useEffect(() => {
+    if (patients.length === 0) {
+      fetchPatients();
+    }
+  }, [patients.length, fetchPatients]);
 
   useEffect(() => {
     if (initialData) {
@@ -113,8 +121,8 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   };
 
   const handleUpdateDiagnosis = (id: string, field: string, value: any) => {
-    setDiagnoses(
-      diagnoses.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
+    setDiagnoses((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)),
     );
   };
 
@@ -141,11 +149,13 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   };
 
   const handleUpdateProcedure = (id: string, field: string, value: any) => {
-    const newProcs = procedures.map((p) =>
-      p.id === id ? { ...p, [field]: value } : p,
-    );
-    setProcedures(newProcs);
-    calculateTotal(newProcs, charges);
+    setProcedures((prev) => {
+      const newProcs = prev.map((p) =>
+        p.id === id ? { ...p, [field]: value } : p,
+      );
+      calculateTotal(newProcs, charges);
+      return newProcs;
+    });
   };
 
   const handleAddCharge = () => {
@@ -168,11 +178,13 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   };
 
   const handleUpdateCharge = (id: string, field: string, value: any) => {
-    const newCharges = charges.map((c) =>
-      c.id === id ? { ...c, [field]: value } : c,
-    );
-    setCharges(newCharges);
-    calculateTotal(procedures, newCharges);
+    setCharges((prev) => {
+      const newCharges = prev.map((c) =>
+        c.id === id ? { ...c, [field]: value } : c,
+      );
+      calculateTotal(procedures, newCharges);
+      return newCharges;
+    });
   };
 
   const handleSubmit = async () => {
@@ -187,11 +199,41 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
         return;
       }
 
+      // Filter out empty diagnoses/procedures (rows where the user didn't
+      // select a code). The backend DTO requires non-empty icdCode/cptCode.
+      const validDiagnoses = diagnoses.filter(
+        (d) => d.icdCode?.trim() && d.description?.trim(),
+      );
+      const validProcedures = procedures.filter(
+        (p) => p.cptCode?.trim() && p.description?.trim(),
+      );
+
+      if (validDiagnoses.length === 0) {
+        message.error("At least one diagnosis with an ICD-10 code is required");
+        return;
+      }
+      if (validProcedures.length === 0) {
+        message.error("At least one procedure with a CPT code is required");
+        return;
+      }
+
+      // Map patient address (uses street1/street2) to the superbill address
+      // DTO shape (uses street/street2).
+      const patientAddr = patient.address || ({} as any);
+      const mappedAddress = {
+        street: patientAddr.street1 || patientAddr.street || "",
+        street2: patientAddr.street2,
+        city: patientAddr.city || "",
+        state: patientAddr.state || "",
+        zipCode: patientAddr.zipCode || patientAddr.zip || "",
+        country: patientAddr.country || "US",
+      };
+
       const payload: any = {
         patientId: patient.id,
         patientName: `${patient.firstName} ${patient.lastName}`,
         patientDOB: patient.dateOfBirth,
-        patientAddress: patient.address,
+        patientAddress: mappedAddress,
         patientPhone: patient.phone,
         providerId: provider.id,
         providerName: `${provider.firstName} ${provider.lastName}`,
@@ -214,9 +256,11 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
           payerId: values.payerId,
           authorizationNumber: values.authorizationNumber,
         },
-        diagnoses: diagnoses.map(({ id, ...rest }) => rest),
-        procedures: procedures.map(({ id, ...rest }) => rest),
-        charges: charges.map(({ id, ...rest }) => rest),
+        diagnoses: validDiagnoses.map(({ id, ...rest }) => rest),
+        procedures: validProcedures.map(({ id, ...rest }) => rest),
+        charges: charges
+          .filter((c) => c.description?.trim())
+          .map(({ id, ...rest }) => rest),
         totalAmount,
         patientResponsibility: totalAmount * 0.2,
         notes: values.notes,
@@ -240,12 +284,17 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
     {
       title: "ICD Code",
       render: (_: any, record: SuperbillDiagnosis) => (
-        <Input
+        <IcdSearchInput
           value={record.icdCode}
-          onChange={(e) =>
-            handleUpdateDiagnosis(record.id, "icdCode", e.target.value)
-          }
-          placeholder="e.g., J06.9"
+          description={record.description}
+          onSelect={(selection) => {
+            handleUpdateDiagnosis(record.id, "icdCode", selection.code);
+            handleUpdateDiagnosis(record.id, "description", selection.description);
+          }}
+          placeholder="Search ICD-10 code or description"
+          patientId={form.getFieldValue("patientId")}
+          providerId={form.getFieldValue("providerId")}
+          style={{ width: "100%" }}
         />
       ),
     },
@@ -293,12 +342,27 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
     {
       title: "CPT Code",
       render: (_: any, record: SuperbillProcedure) => (
-        <Input
+        <CptSearchInput
           value={record.cptCode}
-          onChange={(e) =>
-            handleUpdateProcedure(record.id, "cptCode", e.target.value)
-          }
-          placeholder="e.g., 99213"
+          onSelect={(code, description, price) => {
+            handleUpdateProcedure(record.id, "cptCode", code);
+            if (description) {
+              handleUpdateProcedure(record.id, "description", description);
+            }
+            if (price && price > 0) {
+              handleUpdateProcedure(record.id, "charge", price);
+              calculateTotal(
+                procedures.map((p) =>
+                  p.id === record.id
+                    ? { ...p, cptCode: code, description, charge: price }
+                    : p,
+                ),
+                charges,
+              );
+            }
+          }}
+          placeholder="Search CPT/HCPCS code"
+          style={{ width: "100%" }}
         />
       ),
     },
@@ -317,16 +381,15 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
     {
       title: "Modifiers",
       render: (_: any, record: SuperbillProcedure) => (
-        <Input
-          value={record.modifiers?.join(", ")}
-          onChange={(e) =>
-            handleUpdateProcedure(
-              record.id,
-              "modifiers",
-              e.target.value.split(", ").filter(Boolean),
-            )
+        <Select
+          mode="tags"
+          value={record.modifiers || []}
+          onChange={(value: string[]) =>
+            handleUpdateProcedure(record.id, "modifiers", value)
           }
-          placeholder="e.g., 25, 59"
+          placeholder="Add modifiers (e.g., 25, 59)"
+          tokenSeparators={[",", " "]}
+          style={{ width: "100%" }}
         />
       ),
     },

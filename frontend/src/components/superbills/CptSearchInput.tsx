@@ -1,8 +1,9 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Select, Empty } from 'antd';
 import { LoadingOutlined } from '@ant-design/icons';
+import { cptService, type CptCode } from '../../services/cptService';
 
-export interface CptCode {
+export interface CptCodeOption {
   code: string;
   description: string;
   price?: number;
@@ -11,7 +12,8 @@ export interface CptCode {
 interface CptSearchInputProps {
   value?: string;
   onSelect: (code: string, description: string, price?: number) => void;
-  options: CptCode[];
+  /** Optional static options (if provided, skips backend search) */
+  options?: CptCodeOption[];
   placeholder?: string;
   size?: 'small' | 'middle' | 'large';
   disabled?: boolean;
@@ -48,8 +50,8 @@ function highlightMatch(text: string, query: string): React.ReactNode {
 const CptSearchInput: React.FC<CptSearchInputProps> = ({
   value,
   onSelect,
-  options,
-  placeholder = 'Search CPT code...',
+  options: staticOptions,
+  placeholder = 'Search CPT/HCPCS code...',
   size = 'middle',
   disabled,
   style,
@@ -57,33 +59,81 @@ const CptSearchInput: React.FC<CptSearchInputProps> = ({
   const [searchValue, setSearchValue] = useState('');
   const [debouncedValue, setDebouncedValue] = useState('');
   const [loading, setLoading] = useState(false);
+  const [backendResults, setBackendResults] = useState<CptCode[]>([]);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const allOptions = useMemo(
+  const useBackend = !staticOptions || staticOptions.length === 0;
+
+  const staticAllOptions = useMemo(
     () =>
-      options.map((c) => ({
+      (staticOptions || []).map((c) => ({
         value: c.code,
         label: `${c.code} - ${c.description}`,
         description: c.description,
         price: c.price,
         code: c.code,
       })),
-    [options],
+    [staticOptions],
   );
 
   useEffect(() => {
-    setLoading(true);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
-      setDebouncedValue(searchValue);
+    if (!useBackend) {
+      setLoading(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        setDebouncedValue(searchValue);
+        setLoading(false);
+      }, 150);
+      return () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      };
+    }
+    // Backend search mode
+    if (!searchValue.trim()) {
+      setBackendResults([]);
       setLoading(false);
-    }, 150);
+      return;
+    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(async () => {
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setLoading(true);
+      try {
+        const res = await cptService.search(searchValue, 25, 0);
+        if (!controller.signal.aborted) {
+          setBackendResults(res.data);
+          setDebouncedValue(searchValue);
+        }
+      } catch {
+        if (!controller.signal.aborted) setBackendResults([]);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 200);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [searchValue]);
+  }, [searchValue, useBackend]);
+
+  const backendAllOptions = useMemo(
+    () =>
+      backendResults.map((c) => ({
+        value: c.code,
+        label: `${c.code} - ${c.description}`,
+        description: c.description,
+        price: c.defaultCharge ? Number(c.defaultCharge) : undefined,
+        code: c.code,
+      })),
+    [backendResults],
+  );
+
+  const allOptions = useBackend ? backendAllOptions : staticAllOptions;
 
   const filteredOptions = useMemo(() => {
+    if (useBackend) return allOptions;
     const q = debouncedValue.toLowerCase().trim();
     if (!q) return allOptions;
     return allOptions.filter(
@@ -92,7 +142,7 @@ const CptSearchInput: React.FC<CptSearchInputProps> = ({
         o.description.toLowerCase().includes(q) ||
         o.label.toLowerCase().includes(q),
     );
-  }, [allOptions, debouncedValue]);
+  }, [allOptions, debouncedValue, useBackend]);
 
   const renderedOptions = useMemo(
     () =>

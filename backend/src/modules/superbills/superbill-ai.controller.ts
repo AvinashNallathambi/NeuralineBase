@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Logger, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { AiService } from '../../modules/ai/ai.service';
 import { SuperbillsService } from './superbills.service';
 import { JwtAuthGuard } from '../../modules/auth/guards/jwt-auth.guard';
@@ -250,6 +250,13 @@ Rules:
 - Suggest modifiers when clinically appropriate.
 - Highlight missing documentation that would support higher-level coding.`;
 
-    return this.aiService.generateStructured<SmartCodeResult>(prompt);
+    try {
+      return await this.aiService.generateStructured<SmartCodeResult>(prompt);
+    } catch (err: any) {
+      this.logger.error(`smart-codes failed: ${err.message}`);
+      throw new ServiceUnavailableException(
+        err.message || 'AI service is currently unavailable. Please try again.',
+      );
+    }
   }
 }

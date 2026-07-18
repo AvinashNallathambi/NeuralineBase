@@ -32,6 +32,7 @@ interface IcdSearchInputProps {
   autoFocus?: boolean;
   patientId?: string;
   providerId?: string;
+  style?: React.CSSProperties;
 }
 
 function highlightMatch(text: string, query: string): React.ReactNode {
@@ -78,6 +79,7 @@ const IcdSearchInput: React.FC<IcdSearchInputProps> = ({
   autoFocus = false,
   patientId,
   providerId,
+  style,
 }) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value || desc || '');
@@ -563,7 +565,7 @@ const IcdSearchInput: React.FC<IcdSearchInputProps> = ({
   let currentIndex = 0;
 
   return (
-    <div ref={containerRef} style={{ position: 'relative' }}>
+    <div ref={containerRef} style={{ position: 'relative', ...style }}>
       <Input
         ref={inputRef}
         placeholder={placeholder}

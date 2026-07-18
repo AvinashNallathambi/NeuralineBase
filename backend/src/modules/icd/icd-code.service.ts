@@ -158,7 +158,10 @@ export class IcdCodeService {
         }),
       );
 
-    if (providerId) {
+    // Only filter by providerId if it's a valid UUID — the favorite_diagnoses
+    // table stores provider_id as a uuid column, so passing a non-UUID string
+    // (e.g. dev seed IDs like "usr-001") would cause a Postgres syntax error.
+    if (providerId && this.isValidUuid(providerId)) {
       qb.andWhere(
         new Brackets((sub) => {
           sub.where('f.providerId = :providerId', { providerId });
@@ -237,7 +240,7 @@ export class IcdCodeService {
       .andWhere('f.deletedAt IS NULL')
       .orderBy('f.createdAt', 'DESC');
 
-    if (providerId) {
+    if (providerId && this.isValidUuid(providerId)) {
       qb.andWhere(
         new Brackets((sub) => {
           sub.where('f.providerId = :providerId', { providerId });
@@ -312,5 +315,10 @@ export class IcdCodeService {
   async deleteAll(): Promise<void> {
     await this.repository.query('TRUNCATE TABLE icd_codes RESTART IDENTITY CASCADE');
     this.logger.log('All ICD-10 codes deleted');
+  }
+
+  /** Quick UUID format check to avoid Postgres "invalid input syntax for type uuid" errors. */
+  private isValidUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 }

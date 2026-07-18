@@ -79,19 +79,19 @@ const GfePanel: React.FC<GfePanelProps> = ({ superbillId }) => {
       title: 'Charge',
       dataIndex: 'charge',
       key: 'charge',
-      render: (v: number) => `$${v.toFixed(2)}`,
+      render: (v: number | string) => `$${Number(v || 0).toFixed(2)}`,
     },
     {
       title: 'Insurance Est.',
       dataIndex: 'insuranceEstimate',
       key: 'insuranceEstimate',
-      render: (v: number) => `$${v.toFixed(2)}`,
+      render: (v: number | string) => `$${Number(v || 0).toFixed(2)}`,
     },
     {
       title: 'Patient Est.',
       dataIndex: 'patientEstimate',
       key: 'patientEstimate',
-      render: (v: number) => `$${v.toFixed(2)}`,
+      render: (v: number | string) => `$${Number(v || 0).toFixed(2)}`,
     },
   ];
 
