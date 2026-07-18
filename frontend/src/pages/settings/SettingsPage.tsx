@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Row,
   Col,
@@ -28,7 +28,7 @@ import {
   Empty,
   Statistic,
   Tooltip,
-} from 'antd';
+} from "antd";
 import {
   SettingOutlined,
   UserOutlined,
@@ -60,11 +60,14 @@ import {
   ArrowUpOutlined,
   ExclamationCircleOutlined,
   ReloadOutlined,
-} from '@ant-design/icons';
-import { mockUsers, mockAuditLog } from '../../data/mockData';
-import type { User } from '../../types';
-import { useIntegrations } from '../../hooks/useIntegrations';
-import { integrationService, type Integration } from '../../services/integrationService';
+} from "@ant-design/icons";
+import { mockUsers, mockAuditLog } from "../../data/mockData";
+import type { User } from "../../types";
+import { useIntegrations } from "../../hooks/useIntegrations";
+import {
+  integrationService,
+  type Integration,
+} from "../../services/integrationService";
 import subscriptionService, {
   type SubscriptionPlan,
   type SubscriptionWithPlan,
@@ -73,13 +76,15 @@ import subscriptionService, {
   type CardExpiryCheck,
   type FeeEstimate,
   type PaymentOptimizationSuggestion,
-} from '../../services/subscriptionService';
-import UpdatePaymentMethodModal from './UpdatePaymentMethodModal';
+} from "../../services/subscriptionService";
+import UpdatePaymentMethodModal from "./UpdatePaymentMethodModal";
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }) => {
+const IntegrationCard: React.FC<{ integration: Integration }> = ({
+  integration,
+}) => {
   const [enabled, setEnabled] = useState(integration.enabled);
   const [saving, setSaving] = useState(false);
 
@@ -88,9 +93,13 @@ const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }
     try {
       await integrationService.update(integration.key, { enabled: checked });
       setEnabled(checked);
-      message.success(`${integration.name} ${checked ? 'enabled' : 'disabled'}`);
+      message.success(
+        `${integration.name} ${checked ? "enabled" : "disabled"}`,
+      );
     } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Failed to update integration');
+      message.error(
+        err?.response?.data?.message || "Failed to update integration",
+      );
     } finally {
       setSaving(false);
     }
@@ -100,14 +109,20 @@ const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }
     <Card bordered={false} style={{ borderRadius: 12 }}>
       <Row align="middle" gutter={16}>
         <Col>
-          <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
+          <div style={{ fontSize: 36 }}>{integration.icon || "🔌"}</div>
         </Col>
         <Col flex={1}>
-          <Text strong style={{ fontSize: 16 }}>{integration.name}</Text>
+          <Text strong style={{ fontSize: 16 }}>
+            {integration.name}
+          </Text>
           <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>{integration.description}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {integration.description}
+          </Text>
           <br />
-          <Tag color="blue" style={{ marginTop: 4 }}>{integration.provider || 'Internal'}</Tag>
+          <Tag color="blue" style={{ marginTop: 4 }}>
+            {integration.provider || "Internal"}
+          </Tag>
         </Col>
         <Col>
           <Switch
@@ -153,66 +168,68 @@ const IntegrationsTabContent: React.FC = () => {
 
 // ─── Billing & Subscription Tab Content ─────────────────────────────────────────
 const SUB_STATUS_COLORS: Record<string, string> = {
-  trialing: 'processing',
-  active: 'success',
-  past_due: 'warning',
-  cancelled: 'error',
-  expired: 'default',
-  paused: 'default',
+  trialing: "processing",
+  active: "success",
+  past_due: "warning",
+  cancelled: "error",
+  expired: "default",
+  paused: "default",
 };
 
 const SUB_STATUS_LABELS: Record<string, string> = {
-  trialing: 'Trial',
-  active: 'Active',
-  past_due: 'Past Due',
-  cancelled: 'Cancelled',
-  expired: 'Expired',
-  paused: 'Paused',
+  trialing: "Trial",
+  active: "Active",
+  past_due: "Past Due",
+  cancelled: "Cancelled",
+  expired: "Expired",
+  paused: "Paused",
 };
 
 const PLAN_COLORS: Record<string, string> = {
-  solo: '#69C0FF',
-  professional: '#0D7C8A',
-  enterprise: '#B37FEB',
+  solo: "#69C0FF",
+  professional: "#0D7C8A",
+  enterprise: "#B37FEB",
 };
 
 const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 const formatDate = (dateStr: string | null) => {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 };
 
 const getCardBrandIcon = (brand: string | null): string => {
   switch (brand?.toLowerCase()) {
-    case 'visa':
-      return '💳';
-    case 'mastercard':
-      return '💳';
-    case 'amex':
-    case 'american express':
-      return '💳';
-    case 'discover':
-      return '💳';
-    case 'jcb':
-      return '💳';
-    case 'diners':
-    case 'diners club':
-      return '💳';
-    case 'unionpay':
-      return '💳';
+    case "visa":
+      return "💳";
+    case "mastercard":
+      return "💳";
+    case "amex":
+    case "american express":
+      return "💳";
+    case "discover":
+      return "💳";
+    case "jcb":
+      return "💳";
+    case "diners":
+    case "diners club":
+      return "💳";
+    case "unionpay":
+      return "💳";
     default:
-      return '💳';
+      return "💳";
   }
 };
 
 const BillingSettingsTabContent: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [currentSub, setCurrentSub] = useState<SubscriptionWithPlan | null>(null);
+  const [currentSub, setCurrentSub] = useState<SubscriptionWithPlan | null>(
+    null,
+  );
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [invoices, setInvoices] = useState<SubscriptionInvoice[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -223,8 +240,10 @@ const BillingSettingsTabContent: React.FC = () => {
   >([]);
   const [changePlanModal, setChangePlanModal] = useState(false);
   const [updatePmModal, setUpdatePmModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string>('');
-  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<string>("");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
+    "monthly",
+  );
   const [changing, setChanging] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [retrying, setRetrying] = useState(false);
@@ -252,7 +271,9 @@ const BillingSettingsTabContent: React.FC = () => {
             subscriptionService.getPaymentMethods().catch(() => []),
             subscriptionService.checkCardExpiry().catch(() => null),
             subscriptionService.getFeeEstimate().catch(() => null),
-            subscriptionService.getPaymentOptimization().catch(() => ({ suggestions: [] })),
+            subscriptionService
+              .getPaymentOptimization()
+              .catch(() => ({ suggestions: [] })),
           ]);
           setPaymentMethods(pmData);
           setCardExpiry(expiryData);
@@ -265,7 +286,7 @@ const BillingSettingsTabContent: React.FC = () => {
         // No subscription yet — show available plans
       }
     } catch {
-      message.error('Failed to load subscription data');
+      message.error("Failed to load subscription data");
     } finally {
       setLoading(false);
     }
@@ -279,12 +300,15 @@ const BillingSettingsTabContent: React.FC = () => {
     if (!selectedPlan) return;
     setChanging(true);
     try {
-      await subscriptionService.changePlan({ planTier: selectedPlan, billingCycle });
-      message.success('Plan updated successfully!');
+      await subscriptionService.changePlan({
+        planTier: selectedPlan,
+        billingCycle,
+      });
+      message.success("Plan updated successfully!");
       setChangePlanModal(false);
       loadData();
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to change plan');
+      message.error(err.response?.data?.message || "Failed to change plan");
     } finally {
       setChanging(false);
     }
@@ -292,23 +316,25 @@ const BillingSettingsTabContent: React.FC = () => {
 
   const handleCancel = () => {
     Modal.confirm({
-      title: 'Cancel Subscription?',
+      title: "Cancel Subscription?",
       icon: <ExclamationCircleOutlined />,
       content: currentSub?.subscription.cancelAtPeriodEnd
-        ? 'Your subscription is already set to cancel at the end of the current billing period.'
-        : 'You can cancel immediately or at the end of the current billing period. Your data will be preserved for 30 days.',
-      okText: 'Cancel at Period End',
-      cancelText: 'Cancel Immediately',
-      okType: 'default',
-      cancelType: 'danger',
+        ? "Your subscription is already set to cancel at the end of the current billing period."
+        : "You can cancel immediately or at the end of the current billing period. Your data will be preserved for 30 days.",
+      okText: "Cancel at Period End",
+      cancelText: "Cancel Immediately",
+      okType: "default",
+      cancelType: "danger",
       onOk: async () => {
         setCancelling(true);
         try {
           await subscriptionService.cancel(true);
-          message.success('Subscription will cancel at the end of the billing period');
+          message.success(
+            "Subscription will cancel at the end of the billing period",
+          );
           loadData();
         } catch (err: any) {
-          message.error(err.response?.data?.message || 'Failed to cancel');
+          message.error(err.response?.data?.message || "Failed to cancel");
         } finally {
           setCancelling(false);
         }
@@ -317,10 +343,10 @@ const BillingSettingsTabContent: React.FC = () => {
         setCancelling(true);
         try {
           await subscriptionService.cancel(false);
-          message.success('Subscription cancelled');
+          message.success("Subscription cancelled");
           loadData();
         } catch (err: any) {
-          message.error(err.response?.data?.message || 'Failed to cancel');
+          message.error(err.response?.data?.message || "Failed to cancel");
         } finally {
           setCancelling(false);
         }
@@ -331,10 +357,10 @@ const BillingSettingsTabContent: React.FC = () => {
   const handleReactivate = async () => {
     try {
       await subscriptionService.reactivate();
-      message.success('Subscription reactivated!');
+      message.success("Subscription reactivated!");
       loadData();
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to reactivate');
+      message.error(err.response?.data?.message || "Failed to reactivate");
     }
   };
 
@@ -347,10 +373,12 @@ const BillingSettingsTabContent: React.FC = () => {
     setPmLoading(true);
     try {
       await subscriptionService.setDefaultPaymentMethod(pmId);
-      message.success('Default payment method updated');
+      message.success("Default payment method updated");
       loadData();
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to set default payment method');
+      message.error(
+        err.response?.data?.message || "Failed to set default payment method",
+      );
     } finally {
       setPmLoading(false);
     }
@@ -358,20 +386,22 @@ const BillingSettingsTabContent: React.FC = () => {
 
   const handleRemovePm = async (pm: PaymentMethod) => {
     Modal.confirm({
-      title: 'Remove Payment Method?',
+      title: "Remove Payment Method?",
       icon: <ExclamationCircleOutlined />,
-      content: `Are you sure you want to remove the ${pm.cardBrand ?? 'card'} ending in ${pm.cardLast4 ?? pm.bankLast4 ?? '****'}? This cannot be undone.`,
-      okText: 'Remove',
-      okType: 'danger',
-      cancelText: 'Cancel',
+      content: `Are you sure you want to remove the ${pm.cardBrand ?? "card"} ending in ${pm.cardLast4 ?? pm.bankLast4 ?? "****"}? This cannot be undone.`,
+      okText: "Remove",
+      okType: "danger",
+      cancelText: "Cancel",
       onOk: async () => {
         setPmLoading(true);
         try {
           await subscriptionService.detachPaymentMethod(pm.id);
-          message.success('Payment method removed');
+          message.success("Payment method removed");
           loadData();
         } catch (err: any) {
-          message.error(err.response?.data?.message || 'Failed to remove payment method');
+          message.error(
+            err.response?.data?.message || "Failed to remove payment method",
+          );
         } finally {
           setPmLoading(false);
         }
@@ -384,13 +414,17 @@ const BillingSettingsTabContent: React.FC = () => {
     try {
       const result = await subscriptionService.retryFailedPayment();
       if (result.success) {
-        message.success('Payment retry successful! Your subscription is now active.');
+        message.success(
+          "Payment retry successful! Your subscription is now active.",
+        );
         loadData();
       } else {
-        message.error('Payment retry failed. Please update your payment method and try again.');
+        message.error(
+          "Payment retry failed. Please update your payment method and try again.",
+        );
       }
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to retry payment');
+      message.error(err.response?.data?.message || "Failed to retry payment");
     } finally {
       setRetrying(false);
     }
@@ -401,17 +435,19 @@ const BillingSettingsTabContent: React.FC = () => {
       const result = await subscriptionService.createCustomerPortalSession(
         window.location.href,
       );
-      window.open(result.url, '_blank');
+      window.open(result.url, "_blank");
     } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to open billing portal');
+      message.error(
+        err.response?.data?.message || "Failed to open billing portal",
+      );
     }
   };
 
   const renderFeatureIcon = (included: boolean) =>
     included ? (
-      <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} />
+      <CheckCircleOutlined style={{ color: "#52c41a", fontSize: 16 }} />
     ) : (
-      <CloseCircleOutlined style={{ color: '#d9d9d9', fontSize: 16 }} />
+      <CloseCircleOutlined style={{ color: "#d9d9d9", fontSize: 16 }} />
     );
 
   const trialDaysLeft = (trialEndsAt: string | null) => {
@@ -422,7 +458,9 @@ const BillingSettingsTabContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}>
+      <div
+        style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}
+      >
         <Spin size="large" tip="Loading subscription..." />
       </div>
     );
@@ -433,49 +471,53 @@ const BillingSettingsTabContent: React.FC = () => {
 
   const invoiceColumns = [
     {
-      title: 'Invoice #',
-      dataIndex: 'invoiceNumber',
-      key: 'invoiceNumber',
+      title: "Invoice #",
+      dataIndex: "invoiceNumber",
+      key: "invoiceNumber",
       render: (text: string) => <Text strong>{text}</Text>,
     },
     {
-      title: 'Plan',
-      dataIndex: 'planTier',
-      key: 'planTier',
-      render: (tier: string) => <Tag color={PLAN_COLORS[tier] || '#0D7C8A'}>{tier}</Tag>,
+      title: "Plan",
+      dataIndex: "planTier",
+      key: "planTier",
+      render: (tier: string) => (
+        <Tag color={PLAN_COLORS[tier] || "#0D7C8A"}>{tier}</Tag>
+      ),
     },
     {
-      title: 'Period',
-      key: 'period',
+      title: "Period",
+      key: "period",
       render: (_: unknown, record: SubscriptionInvoice) =>
         `${formatDate(record.periodStart)} — ${formatDate(record.periodEnd)}`,
     },
     {
-      title: 'Amount',
-      dataIndex: 'amount',
-      key: 'amount',
+      title: "Amount",
+      dataIndex: "amount",
+      key: "amount",
       render: (amount: number, record: SubscriptionInvoice) =>
         `$${amount.toFixed(2)} ${record.currency.toUpperCase()}`,
     },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
       render: (status: string) => {
         const colors: Record<string, string> = {
-          paid: 'success',
-          open: 'processing',
-          failed: 'error',
-          void: 'default',
-          refunded: 'warning',
+          paid: "success",
+          open: "processing",
+          failed: "error",
+          void: "default",
+          refunded: "warning",
         };
-        return <Tag color={colors[status] || 'default'}>{status.toUpperCase()}</Tag>;
+        return (
+          <Tag color={colors[status] || "default"}>{status.toUpperCase()}</Tag>
+        );
       },
     },
     {
-      title: 'Date',
-      dataIndex: 'paidAt',
-      key: 'paidAt',
+      title: "Date",
+      dataIndex: "paidAt",
+      key: "paidAt",
       render: (paidAt: string | null, record: SubscriptionInvoice) =>
         formatDate(paidAt || record.createdAt),
     },
@@ -489,33 +531,33 @@ const BillingSettingsTabContent: React.FC = () => {
           style={{
             marginBottom: 16,
             borderRadius: 12,
-            border: `2px solid ${PLAN_COLORS[sub.planTier] || '#0D7C8A'}40`,
+            border: `2px solid ${PLAN_COLORS[sub.planTier] || "#0D7C8A"}40`,
             padding: 0,
           }}
           bodyStyle={{ padding: 0 }}
         >
           {/* 1. Top Alert Banner (Full Width) */}
-          {sub.status === 'trialing' && sub.trialEndsAt && (
+          {sub.status === "trialing" && sub.trialEndsAt && (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display: "flex",
+                alignItems: "center",
                 gap: 12,
-                background: '#faad1415',
-                padding: '14px 24px',
-                borderBottom: '1px solid #faad1430',
-                borderRadius: '10px 10px 0 0',
+                background: "#faad1415",
+                padding: "14px 24px",
+                borderBottom: "1px solid #faad1430",
+                borderRadius: "10px 10px 0 0",
               }}
             >
-              <ThunderboltOutlined style={{ fontSize: 22, color: '#faad14' }} />
+              <ThunderboltOutlined style={{ fontSize: 22, color: "#faad14" }} />
               <div>
-                <Text strong style={{ color: '#faad14', fontSize: 15 }}>
+                <Text strong style={{ color: "#faad14", fontSize: 15 }}>
                   {trialDaysLeft(sub.trialEndsAt)} days left in trial
                 </Text>
                 <br />
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  Trial ends {formatDate(sub.trialEndsAt)}. Add a payment method to continue
-                  after trial.
+                  Trial ends {formatDate(sub.trialEndsAt)}. Add a payment method
+                  to continue after trial.
                 </Text>
               </div>
             </div>
@@ -523,17 +565,19 @@ const BillingSettingsTabContent: React.FC = () => {
           {sub.cancelAtPeriodEnd && (
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
+                display: "flex",
+                alignItems: "center",
                 gap: 12,
-                background: '#ff4d4f15',
-                padding: '14px 24px',
-                borderBottom: '1px solid #ff4d4f30',
-                borderRadius: sub.status === 'trialing' ? '0' : '10px 10px 0 0',
+                background: "#ff4d4f15",
+                padding: "14px 24px",
+                borderBottom: "1px solid #ff4d4f30",
+                borderRadius: sub.status === "trialing" ? "0" : "10px 10px 0 0",
               }}
             >
-              <ExclamationCircleOutlined style={{ fontSize: 22, color: '#ff4d4f' }} />
-              <Text strong style={{ color: '#ff4d4f', fontSize: 15 }}>
+              <ExclamationCircleOutlined
+                style={{ fontSize: 22, color: "#ff4d4f" }}
+              />
+              <Text strong style={{ color: "#ff4d4f", fontSize: 15 }}>
                 Cancels on {formatDate(sub.currentPeriodEnd)}
               </Text>
             </div>
@@ -547,8 +591,12 @@ const BillingSettingsTabContent: React.FC = () => {
                 <Space direction="vertical" size={6}>
                   <Space>
                     <Tag
-                      color={PLAN_COLORS[sub.planTier] || '#0D7C8A'}
-                      style={{ borderRadius: 6, padding: '2px 12px', fontSize: 14 }}
+                      color={PLAN_COLORS[sub.planTier] || "#0D7C8A"}
+                      style={{
+                        borderRadius: 6,
+                        padding: "2px 12px",
+                        fontSize: 14,
+                      }}
                     >
                       {plan.name}
                     </Tag>
@@ -565,9 +613,11 @@ const BillingSettingsTabContent: React.FC = () => {
                       type="secondary"
                       style={{ fontSize: 16, fontWeight: 400 }}
                     >
-                      {' '}
-                      /{' '}
-                      {sub.billingCycle === 'annual' ? 'mo (billed annually)' : 'mo'}
+                      {" "}
+                      /{" "}
+                      {sub.billingCycle === "annual"
+                        ? "mo (billed annually)"
+                        : "mo"}
                     </Text>
                   </Title>
                   <Text type="secondary">{plan.description}</Text>
@@ -579,18 +629,20 @@ const BillingSettingsTabContent: React.FC = () => {
                 xs={24}
                 lg={12}
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-end',
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-end",
                   gap: 16,
                 }}
               >
                 {/* Billing Cycle & Current Period — horizontal */}
-                <Row gutter={32} style={{ width: '100%' }} justify="end">
+                <Row gutter={32} style={{ width: "100%" }} justify="end">
                   <Col>
                     <Statistic
                       title="Billing Cycle"
-                      value={sub.billingCycle === 'annual' ? 'Annual' : 'Monthly'}
+                      value={
+                        sub.billingCycle === "annual" ? "Annual" : "Monthly"
+                      }
                       prefix={<DollarOutlined />}
                       valueStyle={{ fontSize: 16 }}
                     />
@@ -606,7 +658,10 @@ const BillingSettingsTabContent: React.FC = () => {
                 </Row>
 
                 {/* Action Buttons — side-by-side */}
-                <Space size={12} style={{ width: '100%', justifyContent: 'flex-end' }}>
+                <Space
+                  size={12}
+                  style={{ width: "100%", justifyContent: "flex-end" }}
+                >
                   <Button
                     type="primary"
                     icon={<ArrowUpOutlined />}
@@ -615,15 +670,15 @@ const BillingSettingsTabContent: React.FC = () => {
                       setBillingCycle(sub.billingCycle);
                       setChangePlanModal(true);
                     }}
-                    disabled={sub.status === 'cancelled'}
+                    disabled={sub.status === "cancelled"}
                     style={{ borderRadius: 8 }}
                   >
                     Change Plan
                   </Button>
-                  {sub.cancelAtPeriodEnd || sub.status === 'cancelled' ? (
+                  {sub.cancelAtPeriodEnd || sub.status === "cancelled" ? (
                     <Button
                       onClick={handleReactivate}
-                      disabled={sub.status === 'expired'}
+                      disabled={sub.status === "expired"}
                       style={{ borderRadius: 8 }}
                     >
                       Reactivate
@@ -643,7 +698,7 @@ const BillingSettingsTabContent: React.FC = () => {
             </Row>
 
             {/* 3. Divider */}
-            <Divider style={{ margin: '20px 0' }} />
+            <Divider style={{ margin: "20px 0" }} />
 
             {/* 4. Feature List (Grid Layout — 2-col mobile, 3-col desktop) */}
             <Row gutter={[24, 16]}>
@@ -679,21 +734,24 @@ const BillingSettingsTabContent: React.FC = () => {
               </Col>
               <Col xs={12} md={8}>
                 <Space align="center">
-                  <TeamOutlined style={{ color: '#0D7C8A' }} />
+                  <TeamOutlined style={{ color: "#0D7C8A" }} />
                   <Text>
-                    {plan.maxProviders === null ? 'Unlimited' : plan.maxProviders} providers
+                    {plan.maxProviders === null
+                      ? "Unlimited"
+                      : plan.maxProviders}{" "}
+                    providers
                   </Text>
                 </Space>
               </Col>
               <Col xs={12} md={8}>
                 <Space align="center">
-                  <RobotOutlined style={{ color: '#0D7C8A' }} />
+                  <RobotOutlined style={{ color: "#0D7C8A" }} />
                   <Text>{plan.aiCreditsMonthly} AI credits/mo</Text>
                 </Space>
               </Col>
               <Col xs={12} md={8}>
                 <Space align="center">
-                  <SafetyOutlined style={{ color: '#0D7C8A' }} />
+                  <SafetyOutlined style={{ color: "#0D7C8A" }} />
                   <Text>HIPAA Compliant</Text>
                 </Space>
               </Col>
@@ -751,7 +809,8 @@ const BillingSettingsTabContent: React.FC = () => {
                 {cardExpiry.expired.map((pm) => (
                   <Text key={pm.id}>
                     Your {pm.cardBrand} ending in {pm.cardLast4} has expired.
-                    Please update your payment method to avoid service interruption.
+                    Please update your payment method to avoid service
+                    interruption.
                   </Text>
                 ))}
               </Space>
@@ -768,8 +827,9 @@ const BillingSettingsTabContent: React.FC = () => {
               <Space direction="vertical" size={2}>
                 {cardExpiry.expiringSoon.map((pm) => (
                   <Text key={pm.id}>
-                    Your {pm.cardBrand} ending in {pm.cardLast4} expires in
-                    {' '}{pm.cardExpMonth}/{pm.cardExpYear}. Consider updating it soon.
+                    Your {pm.cardBrand} ending in {pm.cardLast4} expires in{" "}
+                    {pm.cardExpMonth}/{pm.cardExpYear}. Consider updating it
+                    soon.
                   </Text>
                 ))}
               </Space>
@@ -780,7 +840,7 @@ const BillingSettingsTabContent: React.FC = () => {
         )}
 
         {/* Past Due Retry Banner (Phase 2) */}
-        {sub?.status === 'past_due' && (
+        {sub?.status === "past_due" && (
           <Alert
             type="error"
             message="Payment Action Required"
@@ -806,7 +866,7 @@ const BillingSettingsTabContent: React.FC = () => {
           <Empty
             description="No payment method on file. Add a payment method to continue your subscription after the trial."
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            style={{ padding: '24px 0' }}
+            style={{ padding: "24px 0" }}
           >
             <Button
               type="primary"
@@ -848,45 +908,54 @@ const BillingSettingsTabContent: React.FC = () => {
                 >
                   <List.Item.Meta
                     avatar={
-                      <div style={{ fontSize: 28, width: 40, textAlign: 'center' }}>
-                        {pm.type === 'card'
+                      <div
+                        style={{ fontSize: 28, width: 40, textAlign: "center" }}
+                      >
+                        {pm.type === "card"
                           ? getCardBrandIcon(pm.cardBrand)
-                          : '🏦'}
+                          : "🏦"}
                       </div>
                     }
                     title={
                       <Space>
                         <Text strong>
-                          {pm.type === 'card'
-                            ? `${(pm.cardBrand ?? 'Card').toUpperCase()} •••• ${pm.cardLast4 ?? '****'}`
-                            : `${pm.bankName ?? 'Bank'} •••• ${pm.bankLast4 ?? '****'}`}
+                          {pm.type === "card"
+                            ? `${(pm.cardBrand ?? "Card").toUpperCase()} •••• ${pm.cardLast4 ?? "****"}`
+                            : `${pm.bankName ?? "Bank"} •••• ${pm.bankLast4 ?? "****"}`}
                         </Text>
                         {pm.isDefault && <Tag color="green">Default</Tag>}
                         {pm.isHsaFsa && <Tag color="blue">HSA/FSA</Tag>}
-                        {pm.cardFunding === 'prepaid' && !pm.isHsaFsa && (
+                        {pm.cardFunding === "prepaid" && !pm.isHsaFsa && (
                           <Tag color="orange">Prepaid</Tag>
                         )}
                       </Space>
                     }
                     description={
                       <Space direction="vertical" size={0}>
-                        {pm.type === 'card' && pm.cardExpMonth && pm.cardExpYear && (
+                        {pm.type === "card" &&
+                          pm.cardExpMonth &&
+                          pm.cardExpYear && (
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              Expires{" "}
+                              {pm.cardExpMonth.toString().padStart(2, "0")}/
+                              {pm.cardExpYear}
+                            </Text>
+                          )}
+                        {pm.type === "us_bank_account" && (
                           <Text type="secondary" style={{ fontSize: 12 }}>
-                            Expires {pm.cardExpMonth.toString().padStart(2, '0')}/{pm.cardExpYear}
-                          </Text>
-                        )}
-                        {pm.type === 'us_bank_account' && (
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {pm.bankAccountType ?? 'Checking'} account • ACH
+                            {pm.bankAccountType ?? "Checking"} account • ACH
                           </Text>
                         )}
                         {pm.billingAddress && (
                           <Text type="secondary" style={{ fontSize: 12 }}>
                             {pm.billingName && `${pm.billingName}, `}
                             {pm.billingAddress.line1}
-                            {pm.billingAddress.city && `, ${pm.billingAddress.city}`}
-                            {pm.billingAddress.state && `, ${pm.billingAddress.state}`}
-                            {pm.billingAddress.postalCode && ` ${pm.billingAddress.postalCode}`}
+                            {pm.billingAddress.city &&
+                              `, ${pm.billingAddress.city}`}
+                            {pm.billingAddress.state &&
+                              `, ${pm.billingAddress.state}`}
+                            {pm.billingAddress.postalCode &&
+                              ` ${pm.billingAddress.postalCode}`}
                           </Text>
                         )}
                       </Space>
@@ -906,7 +975,7 @@ const BillingSettingsTabContent: React.FC = () => {
           style={{ borderRadius: 12, marginBottom: 16 }}
           title={
             <Space>
-              <RobotOutlined style={{ color: '#0D7C8A' }} />
+              <RobotOutlined style={{ color: "#0D7C8A" }} />
               <Text strong>Payment Optimization</Text>
             </Space>
           }
@@ -915,11 +984,11 @@ const BillingSettingsTabContent: React.FC = () => {
             dataSource={optimizationSuggestions}
             renderItem={(suggestion) => {
               const priorityColor =
-                suggestion.priority === 'high'
-                  ? 'red'
-                  : suggestion.priority === 'medium'
-                    ? 'orange'
-                    : 'blue';
+                suggestion.priority === "high"
+                  ? "red"
+                  : suggestion.priority === "medium"
+                    ? "orange"
+                    : "blue";
               return (
                 <List.Item
                   actions={[
@@ -964,7 +1033,7 @@ const BillingSettingsTabContent: React.FC = () => {
           style={{ borderRadius: 12, marginBottom: 16 }}
           title={
             <Space>
-              <DollarOutlined style={{ color: '#0D7C8A' }} />
+              <DollarOutlined style={{ color: "#0D7C8A" }} />
               <Text strong>Processing Fee Breakdown</Text>
             </Space>
           }
@@ -987,14 +1056,18 @@ const BillingSettingsTabContent: React.FC = () => {
                     borderRadius: 8,
                     border:
                       item.estimatedFee === feeEstimate.currentMethodFee
-                        ? '2px solid #0D7C8A'
-                        : '1px solid #f0f0f0',
+                        ? "2px solid #0D7C8A"
+                        : "1px solid #f0f0f0",
                   }}
                 >
-                  <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                  <Space
+                    direction="vertical"
+                    size={2}
+                    style={{ width: "100%" }}
+                  >
                     <Text strong>{item.method}</Text>
                     {item.estimatedFee === feeEstimate.currentMethodFee && (
-                      <Tag color="green" style={{ alignSelf: 'flex-start' }}>
+                      <Tag color="green" style={{ alignSelf: "flex-start" }}>
                         Current Method
                       </Tag>
                     )}
@@ -1004,7 +1077,7 @@ const BillingSettingsTabContent: React.FC = () => {
                     <Statistic
                       title="Estimated Fee"
                       value={`$${item.estimatedFee.toFixed(2)}`}
-                      valueStyle={{ fontSize: 18, color: '#0D7C8A' }}
+                      valueStyle={{ fontSize: 18, color: "#0D7C8A" }}
                     />
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       Net amount: ${item.estimatedNet.toFixed(2)}
@@ -1031,64 +1104,82 @@ const BillingSettingsTabContent: React.FC = () => {
                 style={{
                   borderRadius: 12,
                   border: isCurrent
-                    ? `2px solid ${PLAN_COLORS[p.tier] || '#0D7C8A'}`
-                    : '1px solid #f0f0f0',
-                  height: '100%',
+                    ? `2px solid ${PLAN_COLORS[p.tier] || "#0D7C8A"}`
+                    : "1px solid #f0f0f0",
+                  height: "100%",
                 }}
               >
                 {isCurrent && (
                   <Tag
-                    color={PLAN_COLORS[p.tier] || '#0D7C8A'}
+                    color={PLAN_COLORS[p.tier] || "#0D7C8A"}
                     style={{
-                      position: 'absolute',
+                      position: "absolute",
                       top: -10,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
+                      left: "50%",
+                      transform: "translateX(-50%)",
                       borderRadius: 12,
                     }}
                   >
                     Current Plan
                   </Tag>
                 )}
-                <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <div style={{ textAlign: "center", marginBottom: 20 }}>
                   <Title level={4} style={{ marginBottom: 4 }}>
                     {p.name}
                   </Title>
                   <Text type="secondary" style={{ fontSize: 13 }}>
                     {p.description}
                   </Text>
-                  <div style={{ margin: '16px 0' }}>
+                  <div style={{ margin: "16px 0" }}>
                     <Text
                       style={{
                         fontSize: 36,
                         fontWeight: 800,
-                        color: PLAN_COLORS[p.tier] || '#0D7C8A',
+                        color: PLAN_COLORS[p.tier] || "#0D7C8A",
                       }}
                     >
                       {formatCurrency(p.priceMonthlyCents)}
                     </Text>
-                    <Text type="secondary" style={{ fontSize: 16 }}>/mo</Text>
+                    <Text type="secondary" style={{ fontSize: 16 }}>
+                      /mo
+                    </Text>
                   </div>
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    or {formatCurrency(p.priceAnnualCents)}/mo billed annually (save 15%)
+                    or {formatCurrency(p.priceAnnualCents)}/mo billed annually
+                    (save 15%)
                   </Text>
                 </div>
-                <Divider style={{ margin: '12px 0' }} />
+                <Divider style={{ margin: "12px 0" }} />
                 <div style={{ minHeight: 180 }}>
                   {[
                     {
-                      label: `${p.maxProviders === null ? 'Unlimited' : p.maxProviders} providers`,
+                      label: `${p.maxProviders === null ? "Unlimited" : p.maxProviders} providers`,
                       included: true,
                     },
                     {
-                      label: `${p.maxPatients === null ? 'Unlimited' : p.maxPatients} patients`,
+                      label: `${p.maxPatients === null ? "Unlimited" : p.maxPatients} patients`,
                       included: true,
                     },
-                    { label: 'Full RCM (claims, denials, appeals)', included: p.includesRcm },
-                    { label: 'AI Scribe (SOAP notes)', included: p.includesAiScribe },
-                    { label: 'AI Code Suggestions', included: p.includesAiCoding },
-                    { label: 'Patient Portal', included: p.includesPatientPortal },
-                    { label: 'RCM Automation Engine', included: p.includesAutomation },
+                    {
+                      label: "Full RCM (claims, denials, appeals)",
+                      included: p.includesRcm,
+                    },
+                    {
+                      label: "AI Scribe (SOAP notes)",
+                      included: p.includesAiScribe,
+                    },
+                    {
+                      label: "AI Code Suggestions",
+                      included: p.includesAiCoding,
+                    },
+                    {
+                      label: "Patient Portal",
+                      included: p.includesPatientPortal,
+                    },
+                    {
+                      label: "RCM Automation Engine",
+                      included: p.includesAutomation,
+                    },
                     {
                       label: `${p.aiCreditsMonthly} AI credits/month`,
                       included: p.aiCreditsMonthly > 0,
@@ -1097,8 +1188,8 @@ const BillingSettingsTabContent: React.FC = () => {
                     <div
                       key={idx}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
+                        display: "flex",
+                        alignItems: "center",
                         gap: 8,
                         marginBottom: 10,
                       }}
@@ -1107,7 +1198,7 @@ const BillingSettingsTabContent: React.FC = () => {
                       <Text
                         style={{
                           fontSize: 13,
-                          color: feat.included ? '#1a2b3c' : '#bfbfbf',
+                          color: feat.included ? "#1a2b3c" : "#bfbfbf",
                         }}
                       >
                         {feat.label}
@@ -1119,14 +1210,14 @@ const BillingSettingsTabContent: React.FC = () => {
                   <Button
                     type="primary"
                     block
-                    disabled={sub?.status === 'cancelled'}
+                    disabled={sub?.status === "cancelled"}
                     onClick={() => {
                       setSelectedPlan(p.tier);
-                      setBillingCycle(sub?.billingCycle || 'monthly');
+                      setBillingCycle(sub?.billingCycle || "monthly");
                       setChangePlanModal(true);
                     }}
                   >
-                    {sub ? 'Switch' : 'Get Started'}
+                    {sub ? "Switch" : "Get Started"}
                   </Button>
                 )}
                 {isCurrent && (
@@ -1141,7 +1232,10 @@ const BillingSettingsTabContent: React.FC = () => {
       </Row>
 
       {/* ─── Billing History ─────────────────────────────────────── */}
-      <Card title="Billing History" style={{ borderRadius: 12, marginBottom: 16 }}>
+      <Card
+        title="Billing History"
+        style={{ borderRadius: 12, marginBottom: 16 }}
+      >
         {invoices.length > 0 ? (
           <Table
             dataSource={invoices}
@@ -1169,26 +1263,28 @@ const BillingSettingsTabContent: React.FC = () => {
         width={600}
       >
         <Paragraph type="secondary" style={{ marginBottom: 20 }}>
-          Select a new plan and billing cycle. Changes take effect immediately. Prorations are
-          calculated automatically.
+          Select a new plan and billing cycle. Changes take effect immediately.
+          Prorations are calculated automatically.
         </Paragraph>
 
-        <Text strong style={{ display: 'block', marginBottom: 12 }}>
+        <Text strong style={{ display: "block", marginBottom: 12 }}>
           Select Plan
         </Text>
         <Radio.Group
           value={selectedPlan}
           onChange={(e) => setSelectedPlan(e.target.value)}
-          style={{ width: '100%', marginBottom: 20 }}
+          style={{ width: "100%", marginBottom: 20 }}
         >
-          <Space direction="vertical" style={{ width: '100%' }}>
+          <Space direction="vertical" style={{ width: "100%" }}>
             {plans.map((p) => (
-              <Radio key={p.id} value={p.tier} style={{ width: '100%' }}>
+              <Radio key={p.id} value={p.tier} style={{ width: "100%" }}>
                 <Space>
                   <Text strong>{p.name}</Text>
                   <Text type="secondary">
                     {formatCurrency(
-                      billingCycle === 'annual' ? p.priceAnnualCents : p.priceMonthlyCents,
+                      billingCycle === "annual"
+                        ? p.priceAnnualCents
+                        : p.priceMonthlyCents,
                     )}
                     /mo
                   </Text>
@@ -1198,13 +1294,13 @@ const BillingSettingsTabContent: React.FC = () => {
           </Space>
         </Radio.Group>
 
-        <Text strong style={{ display: 'block', marginBottom: 12 }}>
+        <Text strong style={{ display: "block", marginBottom: 12 }}>
           Billing Cycle
         </Text>
         <Radio.Group
           value={billingCycle}
           onChange={(e) => setBillingCycle(e.target.value)}
-          style={{ width: '100%' }}
+          style={{ width: "100%" }}
         >
           <Space direction="vertical">
             <Radio value="monthly">Monthly — pay each month</Radio>
@@ -1222,27 +1318,30 @@ const BillingSettingsTabContent: React.FC = () => {
             style={{
               marginTop: 20,
               padding: 16,
-              background: '#f5f7fa',
+              background: "#f5f7fa",
               borderRadius: 8,
             }}
           >
             <Space>
-              <DollarOutlined style={{ color: '#0D7C8A' }} />
+              <DollarOutlined style={{ color: "#0D7C8A" }} />
               <Text strong>
-                New price:{' '}
+                New price:{" "}
                 {formatCurrency(
-                  billingCycle === 'annual'
-                    ? plans.find((p) => p.tier === selectedPlan)!.priceAnnualCents
-                    : plans.find((p) => p.tier === selectedPlan)!.priceMonthlyCents,
+                  billingCycle === "annual"
+                    ? plans.find((p) => p.tier === selectedPlan)!
+                        .priceAnnualCents
+                    : plans.find((p) => p.tier === selectedPlan)!
+                        .priceMonthlyCents,
                 )}
                 /mo
               </Text>
-              {billingCycle === 'annual' && (
+              {billingCycle === "annual" && (
                 <Text type="secondary">
                   (
                   {formatCurrency(
-                    plans.find((p) => p.tier === selectedPlan)!.priceAnnualCents * 12,
-                  )}{' '}
+                    plans.find((p) => p.tier === selectedPlan)!
+                      .priceAnnualCents * 12,
+                  )}{" "}
                   billed annually)
                 </Text>
               )}
@@ -1263,8 +1362,6 @@ const BillingSettingsTabContent: React.FC = () => {
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 const SettingsPage: React.FC = () => {
-  const [inviteModalVisible, setInviteModalVisible] = useState(false);
-
   const handleSave = (section: string) => {
     message.success(`${section} settings saved successfully.`);
   };
@@ -1273,38 +1370,67 @@ const SettingsPage: React.FC = () => {
   const ProfileTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
       <Row gutter={32}>
-        <Col xs={24} md={6} style={{ textAlign: 'center', marginBottom: 24 }}>
+        <Col xs={24} md={6} style={{ textAlign: "center", marginBottom: 24 }}>
           <Upload
             showUploadList={false}
             beforeUpload={() => {
-              message.success('Avatar uploaded.');
+              message.success("Avatar uploaded.");
               return false;
             }}
           >
-            <div style={{ cursor: 'pointer' }}>
-              <Avatar size={120} icon={<UserOutlined />} style={{ backgroundColor: '#0D7C8A', marginBottom: 12 }} />
+            <div style={{ cursor: "pointer" }}>
+              <Avatar
+                size={120}
+                icon={<UserOutlined />}
+                style={{ backgroundColor: "#0D7C8A", marginBottom: 12 }}
+              />
               <br />
-              <Button icon={<UploadOutlined />} size="small">Change Avatar</Button>
+              <Button icon={<UploadOutlined />} size="small">
+                Change Avatar
+              </Button>
             </div>
           </Upload>
         </Col>
         <Col xs={24} md={18}>
-          <Form layout="vertical" initialValues={{ firstName: 'Sarah', lastName: 'Chen', email: 'dr.sarah.chen@neuraline.health', phone: '(555) 100-2001', specialization: 'Internal Medicine', department: 'Primary Care', bio: 'Board-certified Internal Medicine physician with over 15 years of experience in primary care and chronic disease management.' }}>
+          <Form
+            layout="vertical"
+            initialValues={{
+              firstName: "Sarah",
+              lastName: "Chen",
+              email: "dr.sarah.chen@neuraline.health",
+              phone: "(555) 100-2001",
+              specialization: "Internal Medicine",
+              department: "Primary Care",
+              bio: "Board-certified Internal Medicine physician with over 15 years of experience in primary care and chronic disease management.",
+            }}
+          >
             <Row gutter={16}>
               <Col xs={24} md={12}>
-                <Form.Item label="First Name" name="firstName" rules={[{ required: true }]}>
+                <Form.Item
+                  label="First Name"
+                  name="firstName"
+                  rules={[{ required: true }]}
+                >
                   <Input />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item label="Last Name" name="lastName" rules={[{ required: true }]}>
+                <Form.Item
+                  label="Last Name"
+                  name="lastName"
+                  rules={[{ required: true }]}
+                >
                   <Input />
                 </Form.Item>
               </Col>
             </Row>
             <Row gutter={16}>
               <Col xs={24} md={12}>
-                <Form.Item label="Email" name="email" rules={[{ required: true, type: 'email' }]}>
+                <Form.Item
+                  label="Email"
+                  name="email"
+                  rules={[{ required: true, type: "email" }]}
+                >
                   <Input />
                 </Form.Item>
               </Col>
@@ -1329,7 +1455,12 @@ const SettingsPage: React.FC = () => {
             <Form.Item label="Bio" name="bio">
               <TextArea rows={3} />
             </Form.Item>
-            <Button type="primary" icon={<SaveOutlined />} onClick={() => handleSave('Profile')} style={{ borderRadius: 8 }}>
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={() => handleSave("Profile")}
+              style={{ borderRadius: 8 }}
+            >
               Save Changes
             </Button>
           </Form>
@@ -1341,15 +1472,38 @@ const SettingsPage: React.FC = () => {
   // ─── Organization Tab ─────────────────────────────────────────────────────────
   const OrganizationTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
-      <Form layout="vertical" initialValues={{ clinicName: 'Neuraline Medical Center', address: '100 Healthcare Blvd, Springfield, IL 62701', phone: '(555) 100-2000', email: 'info@neuraline.health', website: 'https://neuraline.health', taxId: '12-3456789' }}>
+      <Form
+        layout="vertical"
+        initialValues={{
+          clinicName: "Neuraline Medical Center",
+          address: "100 Healthcare Blvd, Springfield, IL 62701",
+          phone: "(555) 100-2000",
+          email: "info@neuraline.health",
+          website: "https://neuraline.health",
+          taxId: "12-3456789",
+        }}
+      >
         <Row gutter={32}>
-          <Col xs={24} md={6} style={{ textAlign: 'center', marginBottom: 24 }}>
+          <Col xs={24} md={6} style={{ textAlign: "center", marginBottom: 24 }}>
             <Upload
               showUploadList={false}
-              beforeUpload={() => { message.success('Logo uploaded.'); return false; }}
+              beforeUpload={() => {
+                message.success("Logo uploaded.");
+                return false;
+              }}
             >
-              <div style={{ cursor: 'pointer', padding: 24, border: '2px dashed #d9d9d9', borderRadius: 12, background: '#fafafa' }}>
-                <BankOutlined style={{ fontSize: 48, color: '#0D7C8A', marginBottom: 8 }} />
+              <div
+                style={{
+                  cursor: "pointer",
+                  padding: 24,
+                  border: "2px dashed #d9d9d9",
+                  borderRadius: 12,
+                  background: "#fafafa",
+                }}
+              >
+                <BankOutlined
+                  style={{ fontSize: 48, color: "#0D7C8A", marginBottom: 8 }}
+                />
                 <br />
                 <Text type="secondary">Upload Logo</Text>
               </div>
@@ -1358,7 +1512,11 @@ const SettingsPage: React.FC = () => {
           <Col xs={24} md={18}>
             <Row gutter={16}>
               <Col xs={24} md={12}>
-                <Form.Item label="Clinic Name" name="clinicName" rules={[{ required: true }]}>
+                <Form.Item
+                  label="Clinic Name"
+                  name="clinicName"
+                  rules={[{ required: true }]}
+                >
                   <Input />
                 </Form.Item>
               </Col>
@@ -1393,27 +1551,50 @@ const SettingsPage: React.FC = () => {
         <Divider />
         <Title level={5}>Operating Hours</Title>
         <Row gutter={[16, 8]}>
-          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
+          {[
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+          ].map((day) => (
             <Col xs={24} sm={12} md={8} lg={6} key={day}>
               <Card size="small" style={{ borderRadius: 8 }}>
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                  <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                    <Text strong style={{ fontSize: 13 }}>{day}</Text>
-                    <Switch defaultChecked={day !== 'Sunday'} size="small" />
+                <Space direction="vertical" size={4} style={{ width: "100%" }}>
+                  <Space
+                    style={{ justifyContent: "space-between", width: "100%" }}
+                  >
+                    <Text strong style={{ fontSize: 13 }}>
+                      {day}
+                    </Text>
+                    <Switch defaultChecked={day !== "Sunday"} size="small" />
                   </Space>
-                  {day !== 'Sunday' && (
+                  {day !== "Sunday" && (
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      {day === 'Saturday' ? '9:00 AM - 1:00 PM' : '8:00 AM - 5:00 PM'}
+                      {day === "Saturday"
+                        ? "9:00 AM - 1:00 PM"
+                        : "8:00 AM - 5:00 PM"}
                     </Text>
                   )}
-                  {day === 'Sunday' && <Text type="secondary" style={{ fontSize: 12 }}>Closed</Text>}
+                  {day === "Sunday" && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Closed
+                    </Text>
+                  )}
                 </Space>
               </Card>
             </Col>
           ))}
         </Row>
         <div style={{ marginTop: 16 }}>
-          <Button type="primary" icon={<SaveOutlined />} onClick={() => handleSave('Organization')} style={{ borderRadius: 8 }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={() => handleSave("Organization")}
+            style={{ borderRadius: 8 }}
+          >
             Save Changes
           </Button>
         </div>
@@ -1422,116 +1603,34 @@ const SettingsPage: React.FC = () => {
   );
 
   // ─── Users & Roles Tab ────────────────────────────────────────────────────────
-  const roleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'red';
-      case 'doctor': return 'blue';
-      case 'nurse': return 'green';
-      case 'receptionist': return 'purple';
-      case 'billing_staff': return 'orange';
-      default: return 'default';
-    }
-  };
-
-  const userColumns = [
-    {
-      title: 'User',
-      key: 'user',
-      render: (_: unknown, record: User) => (
-        <Space>
-          <Avatar size={32} icon={<UserOutlined />} style={{ backgroundColor: '#0D7C8A' }} />
-          <div>
-            <Text strong>{record.firstName} {record.lastName}</Text>
-            <br />
-            <Text type="secondary" style={{ fontSize: 12 }}>{record.email}</Text>
-          </div>
-        </Space>
-      ),
-    },
-    {
-      title: 'Role',
-      dataIndex: 'role',
-      key: 'role',
-      render: (role: string) => <Tag color={roleColor(role)}>{role.replace('_', ' ').toUpperCase()}</Tag>,
-    },
-    { title: 'Department', dataIndex: 'department', key: 'department' },
-    {
-      title: 'MFA',
-      dataIndex: 'mfaEnabled',
-      key: 'mfa',
-      render: (v: boolean) => v ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <CloseCircleOutlined style={{ color: '#d9d9d9' }} />,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'isActive',
-      key: 'status',
-      render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? 'Active' : 'Inactive'} />,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: () => (
-        <Space>
-          <Button type="text" size="small" icon={<EditOutlined />} />
-          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-        </Space>
-      ),
-    },
-  ];
-
-  const UsersTab = (
-    <Card
-      bordered={false}
-      style={{ borderRadius: 12 }}
-      title={
-        <Space>
-          <TeamOutlined />
-          <Text strong>Staff Members</Text>
-        </Space>
-      }
-      extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteModalVisible(true)} style={{ borderRadius: 8 }}>
-          Invite User
-        </Button>
-      }
-    >
-      <Table dataSource={mockUsers} columns={userColumns} rowKey="id" pagination={false} size="middle" />
-      <Modal
-        title="Invite New User"
-        open={inviteModalVisible}
-        onCancel={() => setInviteModalVisible(false)}
-        onOk={() => { setInviteModalVisible(false); message.success('Invitation sent!'); }}
-        okText="Send Invitation"
-      >
-        <Form layout="vertical">
-          <Form.Item label="Email Address" rules={[{ required: true, type: 'email' }]}>
-            <Input placeholder="user@neuraline.health" />
-          </Form.Item>
-          <Form.Item label="Role">
-            <Select
-              placeholder="Select role"
-              options={[
-                { label: 'Doctor', value: 'doctor' },
-                { label: 'Nurse', value: 'nurse' },
-                { label: 'Receptionist', value: 'receptionist' },
-                { label: 'Billing Staff', value: 'billing_staff' },
-                { label: 'Admin', value: 'admin' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label="Department">
-            <Input placeholder="e.g., Primary Care" />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Card>
-  );
+  const UsersTab = <UsersRolesTab />;
 
   // ─── Security Tab ─────────────────────────────────────────────────────────────
   const activeSessions = [
-    { id: 's1', device: 'Chrome on Windows', ip: '192.168.1.105', location: 'Springfield, IL', lastActive: '2024-12-20 09:15 AM', current: true },
-    { id: 's2', device: 'Safari on iPhone', ip: '10.0.0.42', location: 'Springfield, IL', lastActive: '2024-12-20 08:30 AM', current: false },
-    { id: 's3', device: 'Firefox on macOS', ip: '172.16.0.15', location: 'Chicago, IL', lastActive: '2024-12-19 04:22 PM', current: false },
+    {
+      id: "s1",
+      device: "Chrome on Windows",
+      ip: "192.168.1.105",
+      location: "Springfield, IL",
+      lastActive: "2024-12-20 09:15 AM",
+      current: true,
+    },
+    {
+      id: "s2",
+      device: "Safari on iPhone",
+      ip: "10.0.0.42",
+      location: "Springfield, IL",
+      lastActive: "2024-12-20 08:30 AM",
+      current: false,
+    },
+    {
+      id: "s3",
+      device: "Firefox on macOS",
+      ip: "172.16.0.15",
+      location: "Chicago, IL",
+      lastActive: "2024-12-19 04:22 PM",
+      current: false,
+    },
   ];
 
   const SecurityTab = (
@@ -1543,7 +1642,10 @@ const SettingsPage: React.FC = () => {
         </Title>
         <Row align="middle" justify="space-between">
           <Col>
-            <Text>Protect your account with 2FA. A verification code will be required on each login.</Text>
+            <Text>
+              Protect your account with 2FA. A verification code will be
+              required on each login.
+            </Text>
           </Col>
           <Col>
             <Switch defaultChecked />
@@ -1566,7 +1668,12 @@ const SettingsPage: React.FC = () => {
           <Form.Item label="Confirm New Password">
             <Input.Password />
           </Form.Item>
-          <Button type="primary" icon={<SaveOutlined />} onClick={() => handleSave('Password')} style={{ borderRadius: 8 }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={() => handleSave("Password")}
+            style={{ borderRadius: 8 }}
+          >
             Update Password
           </Button>
         </Form>
@@ -1582,7 +1689,12 @@ const SettingsPage: React.FC = () => {
                 session.current
                   ? [<Tag color="green">Current Session</Tag>]
                   : [
-                      <Button size="small" danger onClick={() => message.success('Session revoked.')} style={{ borderRadius: 6 }}>
+                      <Button
+                        size="small"
+                        danger
+                        onClick={() => message.success("Session revoked.")}
+                        style={{ borderRadius: 6 }}
+                      >
                         Revoke
                       </Button>,
                     ]
@@ -1592,9 +1704,15 @@ const SettingsPage: React.FC = () => {
                 title={<Text strong>{session.device}</Text>}
                 description={
                   <Space split={<Divider type="vertical" />}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{session.ip}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{session.location}</Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Last active: {session.lastActive}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {session.ip}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {session.location}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Last active: {session.lastActive}
+                    </Text>
                   </Space>
                 }
               />
@@ -1607,18 +1725,62 @@ const SettingsPage: React.FC = () => {
 
   // ─── Notifications Tab ────────────────────────────────────────────────────────
   const notificationCategories = [
-    { key: 'appointments', label: 'Appointment Reminders', desc: 'Notifications for upcoming and changed appointments', email: true, sms: true, inApp: true },
-    { key: 'labResults', label: 'Lab Results', desc: 'Alerts when lab results are available', email: true, sms: false, inApp: true },
-    { key: 'prescriptions', label: 'Prescription Updates', desc: 'Refill requests and pharmacy notifications', email: true, sms: true, inApp: true },
-    { key: 'messages', label: 'Patient Messages', desc: 'New messages from patients', email: false, sms: false, inApp: true },
-    { key: 'billing', label: 'Billing Alerts', desc: 'Claim updates and payment notifications', email: true, sms: false, inApp: true },
-    { key: 'system', label: 'System Notifications', desc: 'Maintenance updates and system alerts', email: true, sms: false, inApp: true },
+    {
+      key: "appointments",
+      label: "Appointment Reminders",
+      desc: "Notifications for upcoming and changed appointments",
+      email: true,
+      sms: true,
+      inApp: true,
+    },
+    {
+      key: "labResults",
+      label: "Lab Results",
+      desc: "Alerts when lab results are available",
+      email: true,
+      sms: false,
+      inApp: true,
+    },
+    {
+      key: "prescriptions",
+      label: "Prescription Updates",
+      desc: "Refill requests and pharmacy notifications",
+      email: true,
+      sms: true,
+      inApp: true,
+    },
+    {
+      key: "messages",
+      label: "Patient Messages",
+      desc: "New messages from patients",
+      email: false,
+      sms: false,
+      inApp: true,
+    },
+    {
+      key: "billing",
+      label: "Billing Alerts",
+      desc: "Claim updates and payment notifications",
+      email: true,
+      sms: false,
+      inApp: true,
+    },
+    {
+      key: "system",
+      label: "System Notifications",
+      desc: "Maintenance updates and system alerts",
+      email: true,
+      sms: false,
+      inApp: true,
+    },
   ];
 
   const NotificationsTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
       <div style={{ marginBottom: 16 }}>
-        <Text type="secondary">Configure how you want to receive notifications for each category.</Text>
+        <Text type="secondary">
+          Configure how you want to receive notifications for each category.
+        </Text>
       </div>
       <Table
         dataSource={notificationCategories}
@@ -1626,41 +1788,72 @@ const SettingsPage: React.FC = () => {
         pagination={false}
         columns={[
           {
-            title: 'Category',
-            key: 'category',
-            render: (_: unknown, record: (typeof notificationCategories)[0]) => (
+            title: "Category",
+            key: "category",
+            render: (
+              _: unknown,
+              record: (typeof notificationCategories)[0],
+            ) => (
               <div>
                 <Text strong>{record.label}</Text>
                 <br />
-                <Text type="secondary" style={{ fontSize: 12 }}>{record.desc}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {record.desc}
+                </Text>
               </div>
             ),
           },
           {
-            title: <Space><MailOutlined /> Email</Space>,
-            key: 'email',
+            title: (
+              <Space>
+                <MailOutlined /> Email
+              </Space>
+            ),
+            key: "email",
             width: 100,
-            align: 'center' as const,
-            render: (_: unknown, record: (typeof notificationCategories)[0]) => <Switch defaultChecked={record.email} size="small" />,
+            align: "center" as const,
+            render: (
+              _: unknown,
+              record: (typeof notificationCategories)[0],
+            ) => <Switch defaultChecked={record.email} size="small" />,
           },
           {
-            title: <Space><MobileOutlined /> SMS</Space>,
-            key: 'sms',
+            title: (
+              <Space>
+                <MobileOutlined /> SMS
+              </Space>
+            ),
+            key: "sms",
             width: 100,
-            align: 'center' as const,
-            render: (_: unknown, record: (typeof notificationCategories)[0]) => <Switch defaultChecked={record.sms} size="small" />,
+            align: "center" as const,
+            render: (
+              _: unknown,
+              record: (typeof notificationCategories)[0],
+            ) => <Switch defaultChecked={record.sms} size="small" />,
           },
           {
-            title: <Space><NotificationOutlined /> In-App</Space>,
-            key: 'inApp',
+            title: (
+              <Space>
+                <NotificationOutlined /> In-App
+              </Space>
+            ),
+            key: "inApp",
             width: 100,
-            align: 'center' as const,
-            render: (_: unknown, record: (typeof notificationCategories)[0]) => <Switch defaultChecked={record.inApp} size="small" />,
+            align: "center" as const,
+            render: (
+              _: unknown,
+              record: (typeof notificationCategories)[0],
+            ) => <Switch defaultChecked={record.inApp} size="small" />,
           },
         ]}
       />
       <div style={{ marginTop: 16 }}>
-        <Button type="primary" icon={<SaveOutlined />} onClick={() => handleSave('Notifications')} style={{ borderRadius: 8 }}>
+        <Button
+          type="primary"
+          icon={<SaveOutlined />}
+          onClick={() => handleSave("Notifications")}
+          style={{ borderRadius: 8 }}
+        >
           Save Changes
         </Button>
       </div>
@@ -1676,34 +1869,47 @@ const SettingsPage: React.FC = () => {
   // ─── Audit Log Tab ────────────────────────────────────────────────────────────
   const auditColumns = [
     {
-      title: 'User',
-      dataIndex: 'userName',
-      key: 'user',
+      title: "User",
+      dataIndex: "userName",
+      key: "user",
       render: (v: string) => <Text strong>{v}</Text>,
     },
     {
-      title: 'Action',
-      dataIndex: 'action',
-      key: 'action',
+      title: "Action",
+      dataIndex: "action",
+      key: "action",
       render: (v: string) => {
-        const colors: Record<string, string> = { VIEW: 'blue', CREATE: 'green', UPDATE: 'orange', DELETE: 'red', EXPORT: 'purple', LOGIN: 'cyan' };
-        return <Tag color={colors[v] || 'default'}>{v}</Tag>;
+        const colors: Record<string, string> = {
+          VIEW: "blue",
+          CREATE: "green",
+          UPDATE: "orange",
+          DELETE: "red",
+          EXPORT: "purple",
+          LOGIN: "cyan",
+        };
+        return <Tag color={colors[v] || "default"}>{v}</Tag>;
       },
     },
-    { title: 'Resource', dataIndex: 'resource', key: 'resource' },
-    { title: 'Details', dataIndex: 'details', key: 'details', ellipsis: true },
-    { title: 'IP Address', dataIndex: 'ipAddress', key: 'ip' },
+    { title: "Resource", dataIndex: "resource", key: "resource" },
+    { title: "Details", dataIndex: "details", key: "details", ellipsis: true },
+    { title: "IP Address", dataIndex: "ipAddress", key: "ip" },
     {
-      title: 'Timestamp',
-      dataIndex: 'timestamp',
-      key: 'timestamp',
+      title: "Timestamp",
+      dataIndex: "timestamp",
+      key: "timestamp",
       render: (v: string) => new Date(v).toLocaleString(),
     },
   ];
 
   const AuditLogTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
-      <Table dataSource={mockAuditLog} columns={auditColumns} rowKey="id" size="small" pagination={{ pageSize: 10 }} />
+      <Table
+        dataSource={mockAuditLog}
+        columns={auditColumns}
+        rowKey="id"
+        size="small"
+        pagination={{ pageSize: 10 }}
+      />
     </Card>
   );
 
@@ -1715,10 +1921,17 @@ const SettingsPage: React.FC = () => {
           <ExportOutlined style={{ marginRight: 8 }} />
           Data Export
         </Title>
-        <Paragraph type="secondary">Export all clinic data in a machine-readable format for migration or backup.</Paragraph>
+        <Paragraph type="secondary">
+          Export all clinic data in a machine-readable format for migration or
+          backup.
+        </Paragraph>
         <Space>
-          <Button icon={<ExportOutlined />} style={{ borderRadius: 8 }}>Export All Data (JSON)</Button>
-          <Button icon={<ExportOutlined />} style={{ borderRadius: 8 }}>Export Patient Records (CSV)</Button>
+          <Button icon={<ExportOutlined />} style={{ borderRadius: 8 }}>
+            Export All Data (JSON)
+          </Button>
+          <Button icon={<ExportOutlined />} style={{ borderRadius: 8 }}>
+            Export Patient Records (CSV)
+          </Button>
         </Space>
       </Card>
 
@@ -1728,14 +1941,29 @@ const SettingsPage: React.FC = () => {
           Backup Status
         </Title>
         <Descriptions column={{ xs: 1, md: 2 }}>
-          <Descriptions.Item label="Last Backup">Dec 20, 2024 at 3:00 AM</Descriptions.Item>
-          <Descriptions.Item label="Status"><Badge status="success" text="Completed" /></Descriptions.Item>
+          <Descriptions.Item label="Last Backup">
+            Dec 20, 2024 at 3:00 AM
+          </Descriptions.Item>
+          <Descriptions.Item label="Status">
+            <Badge status="success" text="Completed" />
+          </Descriptions.Item>
           <Descriptions.Item label="Backup Size">2.4 GB</Descriptions.Item>
-          <Descriptions.Item label="Next Scheduled">Dec 21, 2024 at 3:00 AM</Descriptions.Item>
-          <Descriptions.Item label="Retention Period">90 days</Descriptions.Item>
-          <Descriptions.Item label="Storage Location">AWS S3 (us-east-1)</Descriptions.Item>
+          <Descriptions.Item label="Next Scheduled">
+            Dec 21, 2024 at 3:00 AM
+          </Descriptions.Item>
+          <Descriptions.Item label="Retention Period">
+            90 days
+          </Descriptions.Item>
+          <Descriptions.Item label="Storage Location">
+            AWS S3 (us-east-1)
+          </Descriptions.Item>
         </Descriptions>
-        <Button type="primary" icon={<DatabaseOutlined />} onClick={() => message.success('Manual backup initiated.')} style={{ marginTop: 8, borderRadius: 8 }}>
+        <Button
+          type="primary"
+          icon={<DatabaseOutlined />}
+          onClick={() => message.success("Manual backup initiated.")}
+          style={{ marginTop: 8, borderRadius: 8 }}
+        >
           Run Manual Backup
         </Button>
       </Card>
@@ -1746,7 +1974,8 @@ const SettingsPage: React.FC = () => {
           Maintenance Mode
         </Title>
         <Paragraph type="secondary">
-          When enabled, the system will show a maintenance page to all users. Only administrators can access the system.
+          When enabled, the system will show a maintenance page to all users.
+          Only administrators can access the system.
         </Paragraph>
         <Row align="middle" justify="space-between">
           <Col>
@@ -1762,22 +1991,103 @@ const SettingsPage: React.FC = () => {
 
   // ─── All Tabs ─────────────────────────────────────────────────────────────────
   const tabItems = [
-    { key: 'profile', label: <span><UserOutlined style={{ marginRight: 6 }} />Profile</span>, children: ProfileTab },
-    { key: 'organization', label: <span><BankOutlined style={{ marginRight: 6 }} />Organization</span>, children: OrganizationTab },
-    { key: 'users', label: <span><TeamOutlined style={{ marginRight: 6 }} />Users & Roles</span>, children: UsersTab },
-    { key: 'security', label: <span><SafetyOutlined style={{ marginRight: 6 }} />Security</span>, children: SecurityTab },
-    { key: 'notifications', label: <span><BellOutlined style={{ marginRight: 6 }} />Notifications</span>, children: NotificationsTab },
-    { key: 'billing', label: <span><DollarOutlined style={{ marginRight: 6 }} />Billing & Subscription</span>, children: BillingSettingsTab },
-    { key: 'integrations', label: <span><ApiOutlined style={{ marginRight: 6 }} />Integrations</span>, children: IntegrationsTab },
-    { key: 'audit', label: <span><AuditOutlined style={{ marginRight: 6 }} />Audit Log</span>, children: AuditLogTab },
-    { key: 'system', label: <span><CloudServerOutlined style={{ marginRight: 6 }} />System</span>, children: SystemTab },
+    {
+      key: "profile",
+      label: (
+        <span>
+          <UserOutlined style={{ marginRight: 6 }} />
+          Profile
+        </span>
+      ),
+      children: ProfileTab,
+    },
+    {
+      key: "organization",
+      label: (
+        <span>
+          <BankOutlined style={{ marginRight: 6 }} />
+          Organization
+        </span>
+      ),
+      children: OrganizationTab,
+    },
+    {
+      key: "users",
+      label: (
+        <span>
+          <TeamOutlined style={{ marginRight: 6 }} />
+          Users & Roles
+        </span>
+      ),
+      children: UsersTab,
+    },
+    {
+      key: "security",
+      label: (
+        <span>
+          <SafetyOutlined style={{ marginRight: 6 }} />
+          Security
+        </span>
+      ),
+      children: SecurityTab,
+    },
+    {
+      key: "notifications",
+      label: (
+        <span>
+          <BellOutlined style={{ marginRight: 6 }} />
+          Notifications
+        </span>
+      ),
+      children: NotificationsTab,
+    },
+    {
+      key: "billing",
+      label: (
+        <span>
+          <DollarOutlined style={{ marginRight: 6 }} />
+          Billing & Subscription
+        </span>
+      ),
+      children: BillingSettingsTab,
+    },
+    {
+      key: "integrations",
+      label: (
+        <span>
+          <ApiOutlined style={{ marginRight: 6 }} />
+          Integrations
+        </span>
+      ),
+      children: IntegrationsTab,
+    },
+    {
+      key: "audit",
+      label: (
+        <span>
+          <AuditOutlined style={{ marginRight: 6 }} />
+          Audit Log
+        </span>
+      ),
+      children: AuditLogTab,
+    },
+    {
+      key: "system",
+      label: (
+        <span>
+          <CloudServerOutlined style={{ marginRight: 6 }} />
+          System
+        </span>
+      ),
+      children: SystemTab,
+    },
   ];
 
   return (
     <div>
       {/* Header */}
-      <Title level={2} style={{ marginBottom: 24 }}>
-        <SettingOutlined style={{ marginRight: 12, color: '#0D7C8A' }} />
+      <Title level={3} style={{ marginBottom: 24 }}>
+        <SettingOutlined style={{ marginRight: 12, color: "#0D7C8A" }} />
         Settings & Administration
       </Title>
 

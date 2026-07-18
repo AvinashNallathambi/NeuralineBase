@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { UsersController } from './users.controller';
-import { UsersService } from './users.service';
-import { User } from './entities/user.entity';
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { UsersController } from "./users.controller";
+import { UsersService } from "./users.service";
+import { User } from "./entities/user.entity";
 
 @Module({
   imports: [TypeOrmModule.forFeature([User])],
@@ -10,4 +10,10 @@ import { User } from './entities/user.entity';
   providers: [UsersService],
   exports: [UsersService],
 })
-export class UsersModule {}
+export class UsersModule implements OnModuleInit {
+  constructor(private readonly usersService: UsersService) {}
+
+  async onModuleInit() {
+    await this.usersService.seedDevUsers();
+  }
+}

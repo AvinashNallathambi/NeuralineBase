@@ -15,7 +15,10 @@ api.interceptors.request.use(
   (config) => {
     // For patient portal endpoints, use patient token
     const url = config.url || '';
-    const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+    const isPatientEndpoint =
+      url.startsWith('/patients/auth') ||
+      url.startsWith('/patients/portal') ||
+      url.startsWith('/messaging/patient');
 
     if (isPatientEndpoint) {
       const patientToken = sessionStorage.getItem('neuraline_patient_token');
@@ -41,7 +44,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
-      const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+      const isPatientEndpoint =
+        url.startsWith('/patients/auth') ||
+        url.startsWith('/patients/portal') ||
+        url.startsWith('/messaging/patient');
 
       if (isPatientEndpoint) {
         // Patient token expired — redirect to patient login

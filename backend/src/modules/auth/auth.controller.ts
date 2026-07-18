@@ -54,6 +54,10 @@ class RegisterDto {
   @IsString()
   @IsNotEmpty()
   tenantName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  planTier!: string; // solo | professional | enterprise
 }
 
 class RefreshTokenDto {

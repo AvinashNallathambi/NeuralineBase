@@ -25,6 +25,7 @@ import { PrescriptionsModule } from '../prescriptions/prescriptions.module';
 import { LaboratoryModule } from '../laboratory/laboratory.module';
 import { BillingModule } from '../billing/billing.module';
 import { RemittanceModule } from '../remittance/remittance.module';
+import { ProvidersModule } from '../providers/providers.module';
 import { AiModule } from '../ai/ai.module';
 
 @Module({
@@ -46,6 +47,7 @@ import { AiModule } from '../ai/ai.module';
     LaboratoryModule,
     BillingModule,
     RemittanceModule,
+    ProvidersModule,
     AiModule,
   ],
   controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientGroupsController],

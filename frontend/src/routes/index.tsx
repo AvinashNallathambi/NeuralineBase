@@ -83,20 +83,44 @@ const BillingPage = lazyWithRetry(() => import("../pages/billing/BillingPage"));
 const ClaimDetailPage = lazyWithRetry(
   () => import("../pages/billing/ClaimDetailPage"),
 );
-const RemittancePage = lazyWithRetry(() => import("../pages/remittance/RemittancePage"));
+const RemittancePage = lazyWithRetry(
+  () => import("../pages/remittance/RemittancePage"),
+);
 const DenialsPage = lazyWithRetry(() => import("../pages/denials/DenialsPage"));
 const AppealsPage = lazyWithRetry(() => import("../pages/appeals/AppealsPage"));
-const UnderpaymentsPage = lazyWithRetry(() => import("../pages/underpayments/UnderpaymentsPage"));
-const AutomationPage = lazyWithRetry(() => import("../pages/automation/AutomationPage"));
-const EligibilityPage = lazyWithRetry(() => import('../pages/eligibility/EligibilityPage'));
-const SuperbillListPage = lazyWithRetry(() => import('../pages/superbills/SuperbillListPage'));
-const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbills/SuperbillDetailPage'));
-const CreateSuperbillPage = lazyWithRetry(() => import('../pages/superbills/CreateSuperbillPage'));
-const EditSuperbillPage = lazyWithRetry(() => import('../pages/superbills/EditSuperbillPage'));
-const WorkflowListPage = lazyWithRetry(() => import('../pages/workflow/WorkflowListPage'));
-const WorkflowBuilderPage = lazyWithRetry(() => import('../pages/workflow/WorkflowBuilderPage'));
-const ProviderAvailabilityPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderAvailabilityPage'));
-const ProviderScheduleDetailPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderScheduleDetailPage'));
+const UnderpaymentsPage = lazyWithRetry(
+  () => import("../pages/underpayments/UnderpaymentsPage"),
+);
+const AutomationPage = lazyWithRetry(
+  () => import("../pages/automation/AutomationPage"),
+);
+const EligibilityPage = lazyWithRetry(
+  () => import("../pages/eligibility/EligibilityPage"),
+);
+const SuperbillListPage = lazyWithRetry(
+  () => import("../pages/superbills/SuperbillListPage"),
+);
+const SuperbillDetailPage = lazyWithRetry(
+  () => import("../pages/superbills/SuperbillDetailPage"),
+);
+const CreateSuperbillPage = lazyWithRetry(
+  () => import("../pages/superbills/CreateSuperbillPage"),
+);
+const EditSuperbillPage = lazyWithRetry(
+  () => import("../pages/superbills/EditSuperbillPage"),
+);
+const WorkflowListPage = lazyWithRetry(
+  () => import("../pages/workflow/WorkflowListPage"),
+);
+const WorkflowBuilderPage = lazyWithRetry(
+  () => import("../pages/workflow/WorkflowBuilderPage"),
+);
+const ProviderAvailabilityPage = lazyWithRetry(
+  () => import("../pages/provider-availability/ProviderAvailabilityPage"),
+);
+const ProviderScheduleDetailPage = lazyWithRetry(
+  () => import("../pages/provider-availability/ProviderScheduleDetailPage"),
+);
 const AiEncounterPage = lazyWithRetry(
   () => import("../pages/ai-encounter/AiEncounterPage"),
 );
@@ -120,18 +144,45 @@ const ForgotPasswordPage = lazyWithRetry(
 );
 
 // Patient Portal
-const PatientLoginPage = lazyWithRetry(() => import("../pages/auth/PatientLoginPage"));
-const PatientPortalLayout = lazyWithRetry(() => import("../layouts/PatientPortalLayout"));
-const PortalDashboardPage = lazyWithRetry(() => import("../pages/portal/PortalDashboardPage"));
-const PortalAppointmentsPage = lazyWithRetry(() => import("../pages/portal/PortalAppointmentsPage"));
-const PortalPrescriptionsPage = lazyWithRetry(() => import("../pages/portal/PortalPrescriptionsPage"));
-const PortalLabResultsPage = lazyWithRetry(() => import("../pages/portal/PortalLabResultsPage"));
-const PortalBillingPage = lazyWithRetry(() => import("../pages/portal/PortalBillingPage"));
-const PortalEobsPage = lazyWithRetry(() => import("../pages/portal/PortalEobsPage"));
-const PortalInsurancePage = lazyWithRetry(() => import("../pages/portal/PortalInsurancePage"));
-const PortalProfilePage = lazyWithRetry(() => import("../pages/portal/PortalProfilePage"));
-const PortalMessagesPage = lazyWithRetry(() => import("../pages/portal/PortalMessagesPage"));
-const PortalAiAssistantPage = lazyWithRetry(() => import("../pages/portal/PortalAiAssistantPage"));
+const PatientLoginPage = lazyWithRetry(
+  () => import("../pages/auth/PatientLoginPage"),
+);
+const PatientPortalLayout = lazyWithRetry(
+  () => import("../layouts/PatientPortalLayout"),
+);
+const PortalDashboardPage = lazyWithRetry(
+  () => import("../pages/portal/PortalDashboardPage"),
+);
+const PortalAppointmentsPage = lazyWithRetry(
+  () => import("../pages/portal/PortalAppointmentsPage"),
+);
+const PortalPrescriptionsPage = lazyWithRetry(
+  () => import("../pages/portal/PortalPrescriptionsPage"),
+);
+const PortalLabResultsPage = lazyWithRetry(
+  () => import("../pages/portal/PortalLabResultsPage"),
+);
+const PortalBillingPage = lazyWithRetry(
+  () => import("../pages/portal/PortalBillingPage"),
+);
+const PortalEobsPage = lazyWithRetry(
+  () => import("../pages/portal/PortalEobsPage"),
+);
+const PortalInsurancePage = lazyWithRetry(
+  () => import("../pages/portal/PortalInsurancePage"),
+);
+const PortalProfilePage = lazyWithRetry(
+  () => import("../pages/portal/PortalProfilePage"),
+);
+const PortalMessagesPage = lazyWithRetry(
+  () => import("../pages/portal/PortalMessagesPage"),
+);
+const PortalAiAssistantPage = lazyWithRetry(
+  () => import("../pages/portal/PortalAiAssistantPage"),
+);
+const PortalVideoVisitPage = lazyWithRetry(
+  () => import("../pages/portal/PortalVideoVisitPage"),
+);
 
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
@@ -163,6 +214,25 @@ const router = createBrowserRouter([
       </LazyPage>
     ),
   },
+  // Pricing page
+  {
+    path: "/pricing",
+    element: (
+      <LazyPage>
+        <PricingPage />
+      </LazyPage>
+    ),
+  },
+
+  // Registration – standalone route (own split-screen layout, not inside AuthLayout)
+  {
+    path: "/register",
+    element: (
+      <LazyPage>
+        <RegisterPage />
+      </LazyPage>
+    ),
+  },
 
   // Public pricing page
   {
@@ -183,14 +253,6 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <LoginPage />
-          </LazyPage>
-        ),
-      },
-      {
-        path: "/register",
-        element: (
-          <LazyPage>
-            <RegisterPage />
           </LazyPage>
         ),
       },
@@ -399,7 +461,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/eligibility',
+        path: "/eligibility",
         element: (
           <LazyPage>
             <EligibilityPage />
@@ -407,7 +469,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/superbills',
+        path: "/superbills",
         element: (
           <LazyPage>
             <SuperbillListPage />
@@ -415,7 +477,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/superbills/new',
+        path: "/superbills/new",
         element: (
           <LazyPage>
             <CreateSuperbillPage />
@@ -423,7 +485,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/superbills/:id',
+        path: "/superbills/:id",
         element: (
           <LazyPage>
             <SuperbillDetailPage />
@@ -431,7 +493,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/superbills/:id/edit',
+        path: "/superbills/:id/edit",
         element: (
           <LazyPage>
             <EditSuperbillPage />
@@ -439,7 +501,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/provider-availability',
+        path: "/provider-availability",
         element: (
           <LazyPage>
             <ProviderAvailabilityPage />
@@ -447,7 +509,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: '/provider-availability/:id',
+        path: "/provider-availability/:id",
         element: (
           <LazyPage>
             <ProviderScheduleDetailPage />
@@ -522,7 +584,15 @@ const router = createBrowserRouter([
         path: "/portal",
         element: (
           <LazyPage>
-            <PatientPortalPage />
+            <SubscriptionPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/notifications",
+        element: (
+          <LazyPage>
+            <NotificationsPage />
           </LazyPage>
         ),
       },
@@ -538,7 +608,7 @@ const router = createBrowserRouter([
     ),
     children: [
       {
-        index: true,
+        path: "/portal",
         element: (
           <LazyPage>
             <PortalDashboardPage />
@@ -622,6 +692,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PortalAiAssistantPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/visit/:sessionId",
+        element: (
+          <LazyPage>
+            <PortalVideoVisitPage />
           </LazyPage>
         ),
       },

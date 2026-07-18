@@ -34,6 +34,7 @@ interface RegisterDto {
   firstName: string;
   lastName: string;
   tenantName: string;
+  planTier: string; // solo | professional | enterprise
 }
 
 interface TokenPayload {
@@ -178,6 +179,7 @@ export class AuthService implements OnModuleInit {
     refreshToken: string;
     user: Omit<UserRecord, "password" | "mfaSecret">;
     tenantId: string;
+    planTier: string;
   }> {
     // Check if email already exists
     const existingUser = await this.findUserByEmail(dto.email);
@@ -191,14 +193,10 @@ export class AuthService implements OnModuleInit {
     // Create tenant
     const tenantId = uuidv4();
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
-
-    // Create admin user
-    const user: UserRecord = {
-      id: uuidv4(),
+    // Persist the admin user to the database via UsersService
+    const dbUser = await this.usersService.create(tenantId, {
       email: dto.email,
-      password: hashedPassword,
+      password: dto.password,
       firstName: dto.firstName,
       lastName: dto.lastName,
       role: "tenant_admin",
@@ -208,10 +206,9 @@ export class AuthService implements OnModuleInit {
       isActive: true,
     };
 
-    // TODO: Save tenant and user to database via UsersService
     // HIPAA: Do not log email in plaintext
     this.logger.log(
-      `New tenant "${dto.tenantName}" registered with admin userId=${user.id}`,
+      `New tenant "${dto.tenantName}" registered with admin userId=${user.id} (plan: ${dto.planTier})`,
     );
 
     const tokens = this.generateTokens(user);
@@ -220,6 +217,7 @@ export class AuthService implements OnModuleInit {
       ...tokens,
       user: this.sanitizeUser(user),
       tenantId,
+      planTier: dto.planTier,
     };
   }
 

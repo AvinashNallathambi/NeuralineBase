@@ -19,12 +19,15 @@
     "antd": "^6.4.3",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
+    "buffer": "^6.0.3",
     "dayjs": "^1.11.21",
     "jsonwebtoken": "^9.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.16.0",
     "recharts": "^3.8.1",
+    "simple-peer": "^9.11.1",
+    "socket.io-client": "^4.8.3",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -32,6 +35,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/react-router-dom": "^5.3.3",
+    "@types/simple-peer": "^9.11.9",
     "@vitejs/plugin-react": "^4.3.3",
     "eslint": "^9.13.0",
     "eslint-plugin-react-hooks": "^5.0.0",
