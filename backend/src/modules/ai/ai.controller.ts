@@ -47,6 +47,68 @@ interface ParsePrescriptionDto {
   transcript: string;
 }
 
+interface PriorAuthLetterDto {
+  patientName: string;
+  patientDob: string;
+  medicationName: string;
+  diagnosis: string;
+  clinicalNotes: string;
+  insurancePlan: string;
+}
+
+interface DenialRiskDto {
+  cptCodes: string[];
+  icd10Codes: string[];
+  modifierCodes?: string[];
+  patientAge: number;
+  patientGender: string;
+  insuranceType: string;
+  priorDenials: number;
+}
+
+interface CodingAuditDto {
+  soapNote: string;
+  cptCodes: string[];
+  icd10Codes: string[];
+}
+
+interface NoShowPredictionDto {
+  patientAge: number;
+  patientGender: string;
+  appointmentType: string;
+  daysSinceLastVisit: number;
+  historicalNoShows: number;
+  dayOfWeek: string;
+  timeOfDay: string;
+  distanceFromClinic: number;
+}
+
+interface CdiReviewDto {
+  soapNote: string;
+  encounterType: string;
+}
+
+interface DrugDosingDto {
+  medicationName: string;
+  patientAge: number;
+  patientWeight: number;
+  patientSex: string;
+  creatinine: number;
+  diagnosis: string;
+  currentMedications: string[];
+}
+
+interface ReferralLetterDto {
+  patientName: string;
+  patientDob: string;
+  referringProvider: string;
+  specialistName: string;
+  specialty: string;
+  reasonForReferral: string;
+  clinicalSummary: string;
+  urgent: boolean;
+}
+
 @Controller('ai')
 @UseGuards(JwtAuthGuard)
 export class AiController {
@@ -278,5 +340,210 @@ Rules:
       medications: ReviewMedication[];
       notes?: string;
     }>(prompt);
+  }
+
+  @Post('prior-auth-letter')
+  async generatePriorAuthLetter(@Body() dto: PriorAuthLetterDto) {
+    this.logger.debug('Generating prior authorization letter');
+
+    if (!dto.patientName || !dto.patientName.trim()) {
+      throw new HttpException('patientName is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.medicationName || !dto.medicationName.trim()) {
+      throw new HttpException('medicationName is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.clinicalNotes || !dto.clinicalNotes.trim()) {
+      throw new HttpException('clinicalNotes is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.generatePriorAuthLetter({
+        patientName: dto.patientName,
+        patientDob: dto.patientDob,
+        medicationName: dto.medicationName,
+        diagnosis: dto.diagnosis,
+        clinicalNotes: dto.clinicalNotes,
+        insurancePlan: dto.insurancePlan,
+      });
+    } catch (err: any) {
+      this.logger.error(`Prior auth letter generation failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI prior auth letter generation failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('denial-risk')
+  async predictDenialRisk(@Body() dto: DenialRiskDto) {
+    this.logger.debug('Predicting claim denial risk');
+
+    if (!dto.cptCodes || dto.cptCodes.length === 0) {
+      throw new HttpException('cptCodes is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.icd10Codes || dto.icd10Codes.length === 0) {
+      throw new HttpException('icd10Codes is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.predictDenialRisk({
+        cptCodes: dto.cptCodes,
+        icd10Codes: dto.icd10Codes,
+        modifierCodes: dto.modifierCodes,
+        patientAge: dto.patientAge,
+        patientGender: dto.patientGender,
+        insuranceType: dto.insuranceType,
+        priorDenials: dto.priorDenials,
+      });
+    } catch (err: any) {
+      this.logger.error(`Denial risk prediction failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI denial risk prediction failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('coding-audit')
+  async codingAudit(@Body() dto: CodingAuditDto) {
+    this.logger.debug('Auditing clinical documentation for coding completeness');
+
+    if (!dto.soapNote || !dto.soapNote.trim()) {
+      throw new HttpException('soapNote is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.auditCoding({
+        soapNote: dto.soapNote,
+        cptCodes: dto.cptCodes || [],
+        icd10Codes: dto.icd10Codes || [],
+      });
+    } catch (err: any) {
+      this.logger.error(`Coding audit failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI coding audit failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('noshow-prediction')
+  async noshowPrediction(@Body() dto: NoShowPredictionDto) {
+    this.logger.debug('Predicting appointment no-show risk');
+
+    if (!dto.appointmentType || !dto.appointmentType.trim()) {
+      throw new HttpException('appointmentType is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.predictNoShow({
+        patientAge: dto.patientAge,
+        patientGender: dto.patientGender,
+        appointmentType: dto.appointmentType,
+        daysSinceLastVisit: dto.daysSinceLastVisit,
+        historicalNoShows: dto.historicalNoShows,
+        dayOfWeek: dto.dayOfWeek,
+        timeOfDay: dto.timeOfDay,
+        distanceFromClinic: dto.distanceFromClinic,
+      });
+    } catch (err: any) {
+      this.logger.error(`No-show prediction failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI no-show prediction failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('cdi-review')
+  async cdiReview(@Body() dto: CdiReviewDto) {
+    this.logger.debug('Reviewing clinical documentation for completeness (CDI)');
+
+    if (!dto.soapNote || !dto.soapNote.trim()) {
+      throw new HttpException('soapNote is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.encounterType || !dto.encounterType.trim()) {
+      throw new HttpException('encounterType is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.cdiReview({
+        soapNote: dto.soapNote,
+        encounterType: dto.encounterType,
+      });
+    } catch (err: any) {
+      this.logger.error(`CDI review failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI CDI review failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('drug-dosing')
+  async drugDosing(@Body() dto: DrugDosingDto) {
+    this.logger.debug('Generating AI drug dosing recommendations');
+
+    if (!dto.medicationName || !dto.medicationName.trim()) {
+      throw new HttpException('medicationName is required', HttpStatus.BAD_REQUEST);
+    }
+    if (dto.patientAge === undefined || dto.patientAge === null) {
+      throw new HttpException('patientAge is required', HttpStatus.BAD_REQUEST);
+    }
+    if (dto.patientWeight === undefined || dto.patientWeight === null) {
+      throw new HttpException('patientWeight is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.recommendDrugDosing({
+        medicationName: dto.medicationName,
+        patientAge: dto.patientAge,
+        patientWeight: dto.patientWeight,
+        patientSex: dto.patientSex,
+        creatinine: dto.creatinine,
+        diagnosis: dto.diagnosis,
+        currentMedications: dto.currentMedications || [],
+      });
+    } catch (err: any) {
+      this.logger.error(`Drug dosing recommendation failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI drug dosing recommendation failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+  }
+
+  @Post('referral-letter')
+  async generateReferralLetter(@Body() dto: ReferralLetterDto) {
+    this.logger.debug('Generating referral letter');
+
+    if (!dto.patientName || !dto.patientName.trim()) {
+      throw new HttpException('patientName is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.specialistName || !dto.specialistName.trim()) {
+      throw new HttpException('specialistName is required', HttpStatus.BAD_REQUEST);
+    }
+    if (!dto.reasonForReferral || !dto.reasonForReferral.trim()) {
+      throw new HttpException('reasonForReferral is required', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      return await this.aiService.generateReferralLetter({
+        patientName: dto.patientName,
+        patientDob: dto.patientDob,
+        referringProvider: dto.referringProvider,
+        specialistName: dto.specialistName,
+        specialty: dto.specialty,
+        reasonForReferral: dto.reasonForReferral,
+        clinicalSummary: dto.clinicalSummary,
+        urgent: dto.urgent,
+      });
+    } catch (err: any) {
+      this.logger.error(`Referral letter generation failed: ${err.message}`);
+      throw new HttpException(
+        err.message || 'AI referral letter generation failed',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
   }
 }

@@ -465,3 +465,76 @@ Agentic AI orchestration and predictive denial prevention:
   - `GET /pipeline/status` — Pipeline run status
   - `POST /prevention/assess` — AI pre-submission denial risk assessment
   - `POST /prevention/quick-check` — Heuristic quick risk check (no AI needed)
+
+## Integrations Module
+The integrations module (`backend/src/modules/integrations/`) provides a pluggable integration framework with OAuth support, test-connection, config schemas, and audit logging:
+
+### Entities
+- **Integration**: Tenant integration with key, name, category, status (disconnected/connected/error/pending), config (JSONB), credentials (encrypted JSONB), requiresOAuth, configurable, lastConnectedAt, errorMessage
+- **IntegrationAuditLog**: Audit trail of all integration changes (enable/disable/configure/test/oauth)
+
+### Integration Catalog (22 integrations across 10 categories)
+- **Calendar**: Google Calendar, Outlook/Microsoft 365 Calendar (OAuth, two-way sync)
+- **Communication**: Twilio SMS, RingCentral (OAuth, voice/SMS/fax), Email Notifications (Resend/SendGrid/SES/SMTP)
+- **Video**: Zoom, Microsoft Teams, Google Meet (OAuth, meeting creation)
+- **Clinical**: RxNorm Medication Database
+- **Pharmacy**: Pharmacy Network (Surescripts), EPCS, PDMP, Formulary, ePA (CoverMyMeds), Medication History
+- **Lab**: Lab Systems (Quest/LabCorp/BioReference)
+- **Billing**: Insurance Clearinghouse (Availity/Change Healthcare/Waystar), Stripe Payments
+- **EHR**: EHR Interoperability (FHIR R4)
+- **AI**: AI Prescribing Assistant, Voice-to-Prescription
+- **Patient Engagement**: Email Notifications
+
+### Provider Abstractions
+- **CalendarProvider**: `testConnection`, `getAuthUrl`, `exchangeCode`, `refreshToken`, `upsertEvent`, `deleteEvent`, `listEvents`, `syncFromAppointments`
+- **SmsProvider**: `testConnection`, `sendSms`, `makeCall`, `sendFax`, `getMessageStatus`, `parseWebhook`
+- **VideoProvider**: `testConnection`, `getAuthUrl`, `exchangeCode`, `createMeeting`, `getMeeting`, `updateMeeting`, `deleteMeeting`, `getJoinToken`
+
+### Provider Implementations
+- **Calendar**: MockCalendarProvider, GoogleCalendarProvider (Google Calendar API v3), OutlookCalendarProvider (Microsoft Graph)
+- **SMS**: MockSmsProvider, TwilioSmsProvider (Twilio REST API), RingCentralProvider (RingCentral REST API)
+- **Video**: MockVideoProvider, ZoomProvider (Server-to-Server OAuth), MsTeamsProvider (Microsoft Graph), GoogleMeetProvider (Google Calendar with Meet conference data)
+
+### Config Schemas
+Each integration has a `IntegrationConfigSchema` that defines its configuration fields (text, password, select, boolean, url, phone, number). Fields marked `isCredential` are stored in the encrypted `credentials` column and never exposed to the frontend. The frontend uses these schemas to render dynamic config forms.
+
+### API Endpoints (all under `/api/v1/integrations`)
+- `GET /` — List all integrations (credentials stripped)
+- `GET /:key` — Get single integration (credentials stripped)
+- `PUT /:key` — Update integration (admin only) — splits config into visible config vs encrypted credentials
+- `GET /schemas` — Get all config schemas
+- `GET /schemas/:key` — Get config schema for a single integration
+- `POST /:key/test` — Test connection (admin only)
+- `POST /:key/oauth/url` — Get OAuth authorization URL (admin only)
+- `POST /:key/oauth/callback` — Handle OAuth callback (admin only)
+- `GET /audit-logs` — Get audit logs (admin only, optional `key` and `limit` query params)
+
+### Frontend
+- **IntegrationConfigDrawer** (`frontend/src/pages/settings/IntegrationConfigDrawer.tsx`): Config drawer with:
+  - Dynamic form fields rendered from config schema
+  - OAuth connect button (opens popup for Google/Microsoft/RingCentral)
+  - Test connection button
+  - Status badge (connected/disconnected/error/pending)
+  - Error messages for failed connections
+  - Last connected timestamp
+  - Recent activity timeline (audit log)
+  - Help text and setup instructions
+- **IntegrationCard**: Card with icon, name, description, provider tag, status badge, OAuth/configurable tags, enable/disable switch, error banner
+- **IntegrationsTabContent**: Groups integrations by category (Calendar, Communication, Video, Clinical, Pharmacy, Lab, Billing, EHR, AI, Patient Engagement)
+
+### Integration Wiring
+- **Appointments → Calendar**: When an appointment is created or updated, if Google Calendar or Outlook is enabled, the appointment is synced to the calendar via `upsertEvent`
+- **Notifications → SMS**: When appointment reminders are sent, if Twilio or RingCentral is enabled, an SMS is also sent
+- **Telemedicine → Video**: When a telehealth appointment needs a meeting link, if Zoom/Teams/Meet is enabled, a meeting is created via the video provider
+
+## AI Module — Additional Features
+The AI module (`backend/src/modules/ai/`) includes these additional endpoints beyond the core SOAP/coding/transcription features:
+
+### AI Endpoints (all under `/api/v1/ai`)
+- `POST /prior-auth-letter` — Generate a prior authorization letter from clinical notes
+- `POST /denial-risk` — Predict claim denial risk (low/medium/high, score, factors, recommendations)
+- `POST /coding-audit` — Audit clinical documentation for coding completeness (missing HPI/ROS/MDM, under/over-coding)
+- `POST /noshow-prediction` — Predict appointment no-show risk (probability, factors, recommendations)
+- `POST /cdi-review` — Clinical Documentation Improvement review (missing elements, quality score, audit risk)
+- `POST /drug-dosing` — AI-powered drug dosing recommendations (renal/hepatic adjustments, warnings, alternatives)
+- `POST /referral-letter` — Generate a referral letter to a specialist

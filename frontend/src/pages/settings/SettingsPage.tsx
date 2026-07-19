@@ -64,7 +64,8 @@ import {
 import { mockUsers, mockAuditLog } from '../../data/mockData';
 import type { User } from '../../types';
 import { useIntegrations } from '../../hooks/useIntegrations';
-import { integrationService, type Integration } from '../../services/integrationService';
+import { integrationService, type Integration, type IntegrationCategory } from '../../services/integrationService';
+import IntegrationConfigDrawer from './IntegrationConfigDrawer';
 import subscriptionService, {
   type SubscriptionPlan,
   type SubscriptionWithPlan,
@@ -79,9 +80,37 @@ import UpdatePaymentMethodModal from './UpdatePaymentMethodModal';
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
 
-const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }) => {
+const statusBadgeConfig: Record<string, { status: 'success' | 'default' | 'error' | 'processing'; text: string }> = {
+  connected: { status: 'success', text: 'Connected' },
+  disconnected: { status: 'default', text: 'Disconnected' },
+  error: { status: 'error', text: 'Error' },
+  pending: { status: 'processing', text: 'Pending' },
+};
+
+const categoryLabels: Record<string, string> = {
+  clinical: 'Clinical',
+  calendar: 'Calendar & Scheduling',
+  communication: 'Communication',
+  video: 'Video & Telehealth',
+  billing: 'Billing & Payments',
+  lab: 'Laboratory',
+  pharmacy: 'Pharmacy & Prescribing',
+  ehr: 'EHR Interoperability',
+  ai: 'AI Features',
+  patient_engagement: 'Patient Engagement',
+  analytics: 'Analytics & Reporting',
+};
+
+const categoryOrder: string[] = ['calendar', 'communication', 'video', 'clinical', 'pharmacy', 'lab', 'billing', 'ehr', 'ai', 'patient_engagement', 'analytics'];
+
+const IntegrationCard: React.FC<{ integration: Integration; onConfigure: () => void }> = ({ integration, onConfigure }) => {
   const [enabled, setEnabled] = useState(integration.enabled);
   const [saving, setSaving] = useState(false);
+
+  // Sync local state when integration prop changes
+  useEffect(() => {
+    setEnabled(integration.enabled);
+  }, [integration.enabled]);
 
   const handleToggle = async (checked: boolean) => {
     setSaving(true);
@@ -96,34 +125,86 @@ const IntegrationCard: React.FC<{ integration: Integration }> = ({ integration }
     }
   };
 
+  const statusInfo = statusBadgeConfig[integration.status] || statusBadgeConfig.disconnected;
+
   return (
-    <Card bordered={false} style={{ borderRadius: 12 }}>
+    <Card
+      bordered={false}
+      style={{ borderRadius: 12, height: '100%' }}
+      hoverable
+      onClick={(e) => {
+        // Only open config if the click wasn't on the switch
+        if ((e.target as HTMLElement).closest('.ant-switch') === null) {
+          onConfigure();
+        }
+      }}
+    >
       <Row align="middle" gutter={16}>
         <Col>
           <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
         </Col>
         <Col flex={1}>
-          <Text strong style={{ fontSize: 16 }}>{integration.name}</Text>
-          <br />
-          <Text type="secondary" style={{ fontSize: 12 }}>{integration.description}</Text>
-          <br />
-          <Tag color="blue" style={{ marginTop: 4 }}>{integration.provider || 'Internal'}</Tag>
+          <Space direction="vertical" size={2} style={{ width: '100%' }}>
+            <Space>
+              <Text strong style={{ fontSize: 16 }}>{integration.name}</Text>
+              <Badge status={statusInfo.status} text={<Text type="secondary" style={{ fontSize: 11 }}>{statusInfo.text}</Text>} />
+            </Space>
+            <Text type="secondary" style={{ fontSize: 12 }}>{integration.description}</Text>
+            <Space size={4}>
+              <Tag color="blue" style={{ margin: 0 }}>{integration.provider || 'Internal'}</Tag>
+              {integration.requiresOAuth && <Tag color="orange" style={{ margin: 0 }}>OAuth</Tag>}
+              {integration.configurable && <Tag style={{ margin: 0 }}>Configurable</Tag>}
+            </Space>
+          </Space>
         </Col>
         <Col>
-          <Switch
-            checked={enabled}
-            onChange={handleToggle}
-            loading={saving}
-            disabled={saving}
-          />
+          <Tooltip title={enabled ? 'Disable' : 'Enable'}>
+            <Switch
+              checked={enabled}
+              onChange={handleToggle}
+              loading={saving}
+              disabled={saving}
+            />
+          </Tooltip>
         </Col>
       </Row>
+      {integration.status === 'error' && integration.errorMessage && (
+        <Alert
+          type="error"
+          message={integration.errorMessage}
+          showIcon
+          style={{ marginTop: 12, fontSize: 12 }}
+          banner
+        />
+      )}
     </Card>
   );
 };
 
 const IntegrationsTabContent: React.FC = () => {
-  const { integrations, loading, error } = useIntegrations();
+  const { integrations, loading, error, refetch } = useIntegrations();
+  const [drawerIntegration, setDrawerIntegration] = useState<Integration | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const handleConfigure = (integration: Integration) => {
+    setDrawerIntegration(integration);
+    setDrawerOpen(true);
+  };
+
+  const handleDrawerClose = () => {
+    setDrawerOpen(false);
+    setDrawerIntegration(null);
+  };
+
+  const handleUpdated = () => {
+    refetch();
+    // Also update the drawer integration if it's open
+    if (drawerIntegration) {
+      integrationService.findOne(drawerIntegration.key).then((updated) => {
+        setDrawerIntegration(updated);
+      }).catch(() => {});
+    }
+  };
 
   if (loading) {
     return <Card loading bordered={false} style={{ borderRadius: 12 }} />;
@@ -140,14 +221,44 @@ const IntegrationsTabContent: React.FC = () => {
     );
   }
 
+  // Group integrations by category
+  const grouped = integrations.reduce<Record<string, Integration[]>>((acc, integration) => {
+    const cat = integration.category || 'other';
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(integration);
+    return acc;
+  }, {});
+
   return (
-    <Row gutter={[16, 16]}>
-      {integrations.map((integration) => (
-        <Col xs={24} md={12} key={integration.key}>
-          <IntegrationCard integration={integration} />
-        </Col>
-      ))}
-    </Row>
+    <>
+      {categoryOrder.map((category) => {
+        const items = grouped[category];
+        if (!items || items.length === 0) return null;
+        return (
+          <div key={category} style={{ marginBottom: 24 }}>
+            <Title level={5} style={{ marginBottom: 12, textTransform: 'capitalize' }}>
+              {categoryLabels[category] || category}
+            </Title>
+            <Row gutter={[16, 16]}>
+              {items.map((integration) => (
+                <Col xs={24} md={12} key={integration.key}>
+                  <IntegrationCard
+                    integration={integration}
+                    onConfigure={() => handleConfigure(integration)}
+                  />
+                </Col>
+              ))}
+            </Row>
+          </div>
+        );
+      })}
+      <IntegrationConfigDrawer
+        integration={drawerIntegration}
+        open={drawerOpen}
+        onClose={handleDrawerClose}
+        onUpdated={handleUpdated}
+      />
+    </>
   );
 };
 

@@ -7,11 +7,13 @@ import { NotificationsService } from './notifications.service';
 import { MockEmailProvider } from './providers/mock-email.provider';
 import { ResendEmailProvider } from './providers/resend-email.provider';
 import { EMAIL_PROVIDER } from './providers/email-provider.interface';
+import { IntegrationsModule } from '../integrations/integrations.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Notification]),
     ConfigModule,
+    IntegrationsModule,
   ],
   controllers: [NotificationsController],
   providers: [

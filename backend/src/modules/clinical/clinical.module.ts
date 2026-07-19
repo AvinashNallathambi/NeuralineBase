@@ -45,6 +45,7 @@ import { AiModule } from '../ai/ai.module';
     DocumentationController,
     DocumentationIntelligenceController,
     DocumentationActionsController,
+    DocumentationRevenueController,
   ],
   providers: [
     EncounterService,
@@ -53,6 +54,7 @@ import { AiModule } from '../ai/ai.module';
     DocumentationService,
     DocumentationIntelligenceService,
     DocumentationActionsService,
+    DocumentationRevenueService,
   ],
   exports: [
     EncounterService,

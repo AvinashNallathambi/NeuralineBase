@@ -11,6 +11,8 @@ import {
   EMAIL_PROVIDER,
   SendEmailRequest,
 } from './providers/email-provider.interface';
+import { IntegrationsService } from '../integrations/integrations.service';
+import { SmsMessage } from '../integrations/providers/sms-provider.interface';
 
 @Injectable()
 export class NotificationsService {
@@ -21,6 +23,7 @@ export class NotificationsService {
     private notificationRepository: Repository<Notification>,
     @Inject(EMAIL_PROVIDER)
     private emailProvider: EmailProvider,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   /**
@@ -82,6 +85,18 @@ export class NotificationsService {
       } catch (err) {
         this.logger.error(`Email send error for notification ${saved.id}: ${(err as Error).message}`);
       }
+    }
+
+    // Send SMS for appointment reminders if an SMS integration is enabled
+    if (params.type === NotificationType.APPOINTMENT_REMINDER && params.metadata?.phone) {
+      this.sendSmsNotification(
+        params.tenantId,
+        String(params.metadata.phone),
+        params.title,
+        params.message,
+      ).catch((err) =>
+        this.logger.error(`SMS send error for notification ${saved.id}: ${(err as Error).message}`),
+      );
     }
 
     return saved;
@@ -179,6 +194,54 @@ export class NotificationsService {
       order: { createdAt: 'DESC' },
     });
     return recent ? recent.createdAt > since : false;
+  }
+
+  /**
+   * Send an SMS notification via the enabled SMS integration (Twilio or RingCentral).
+   * Failures are logged but never throw.
+   */
+  async sendSmsNotification(
+    tenantId: string,
+    to: string,
+    title: string,
+    body: string,
+  ): Promise<void> {
+    const smsKeys = ['twilio_sms', 'ringcentral'];
+
+    for (const key of smsKeys) {
+      try {
+        const credentials = await this.integrationsService.getIntegrationCredentials(
+          tenantId,
+          key,
+        );
+        if (!credentials) {
+          // Integration not enabled or not connected — skip silently
+          continue;
+        }
+
+        const provider = this.integrationsService.getSmsProviderFor(key);
+
+        const message: SmsMessage = {
+          to,
+          body: `${title}: ${body}`,
+        };
+
+        const result = await provider.sendSms(credentials, message);
+
+        if (result.status === 'sent' || result.status === 'queued' || result.status === 'delivered') {
+          this.logger.log(`SMS sent via ${key} to ${to}: messageId=${result.messageId}`);
+        } else {
+          this.logger.warn(`SMS failed via ${key} to ${to}: ${result.error || result.status}`);
+        }
+
+        // Only use the first enabled SMS provider
+        return;
+      } catch (error: any) {
+        this.logger.warn(`SMS send via ${key} failed: ${error?.message || error}`);
+      }
+    }
+
+    this.logger.debug(`No SMS integration enabled for tenant ${tenantId} — skipping SMS`);
   }
 
   private defaultEmailHtml(

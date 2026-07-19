@@ -8,11 +8,13 @@ import { ProviderAvailabilityOverride } from './entities/provider-availability-o
 import { Patient } from '../patients/entities/patient.entity';
 import { User } from '../users/entities/user.entity';
 import { WorkflowModule } from '../workflow/workflow.module';
+import { IntegrationsModule } from '../integrations/integrations.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Appointment, ProviderAvailability, ProviderAvailabilityOverride, Patient, User]),
     WorkflowModule,
+    IntegrationsModule,
   ],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],

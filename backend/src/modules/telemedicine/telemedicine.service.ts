@@ -29,6 +29,11 @@ import { HipaaAuditService } from '../../common/services/hipaa-audit.service';
 import { EncounterType, EncounterStatus } from '../clinical/entities/encounter.entity';
 import { SuperbillStatus } from '../superbills/entities/superbill.entity';
 import { DiagnosisType } from '../superbills/entities/superbill-diagnosis.entity';
+import { IntegrationsService } from '../integrations/integrations.service';
+import {
+  CreateMeetingRequest,
+  CreateMeetingResult,
+} from '../integrations/providers/video-provider.interface';
 
 export interface CreateSessionDto {
   appointmentId?: string | null;
@@ -67,6 +72,7 @@ export class TelemedicineService {
     private readonly patientsService: PatientsService,
     private readonly aiService: AiService,
     private readonly hipaaAuditService: HipaaAuditService,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   async createSession(
@@ -655,6 +661,93 @@ export class TelemedicineService {
       prompt,
       { temperature: 0.3, maxTokens: 1536 },
     );
+  }
+
+  // ── Video Integration Methods ──────────────────────────────────────────────
+
+  /**
+   * Create a video meeting via the enabled video integration (Zoom, MS Teams, or Google Meet).
+   * Returns the meeting join URL, or null if no video integration is enabled.
+   */
+  async createVideoMeeting(
+    tenantId: string,
+    params: {
+      topic: string;
+      startTime: Date;
+      durationMinutes: number;
+      appointmentId?: string;
+    },
+  ): Promise<CreateMeetingResult | null> {
+    const videoKeys = ['zoom', 'ms_teams', 'google_meet'];
+
+    for (const key of videoKeys) {
+      try {
+        const credentials = await this.integrationsService.getIntegrationCredentials(
+          tenantId,
+          key,
+        );
+        if (!credentials) {
+          // Integration not enabled or not connected — skip silently
+          continue;
+        }
+
+        const provider = this.integrationsService.getVideoProviderFor(key);
+
+        const meetingRequest: CreateMeetingRequest = {
+          topic: params.topic,
+          startTime: params.startTime,
+          durationMinutes: params.durationMinutes,
+          metadata: {
+            appointmentId: params.appointmentId,
+            tenantId,
+          },
+        };
+
+        const result = await provider.createMeeting(credentials, meetingRequest);
+        this.logger.log(
+          `Video meeting created via ${key}: meetingId=${result.meetingId}, joinUrl=${result.joinUrl}`,
+        );
+
+        return result;
+      } catch (error: any) {
+        this.logger.warn(`Video meeting creation via ${key} failed: ${error?.message || error}`);
+      }
+    }
+
+    this.logger.debug(`No video integration enabled for tenant ${tenantId} — returning null`);
+    return null;
+  }
+
+  /**
+   * Get the video meeting join link for a given appointment.
+   * Creates a new meeting if a video integration is enabled; returns null otherwise.
+   */
+  async getVideoMeetingLink(
+    tenantId: string,
+    appointmentId: string,
+  ): Promise<string | null> {
+    try {
+      const appointment = await this.appointmentsService.findOne(tenantId, appointmentId);
+
+      const startTime = appointment.startTime || new Date();
+      const durationMinutes = appointment.durationMinutes ?? 60;
+
+      const result = await this.createVideoMeeting(tenantId, {
+        topic: appointment.reasonForVisit
+          ? `Telehealth: ${appointment.reasonForVisit}`
+          : `Telehealth Appointment`,
+        startTime,
+        durationMinutes,
+        appointmentId: appointment.id,
+      });
+
+      return result?.joinUrl ?? null;
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to get video meeting link for appointment ${appointmentId}: ${error?.message || error}`,
+      );
+      return null;
+    }
   }
 
   private scoreConnection(quality: { bitrate?: number; packetLoss?: number }): number {

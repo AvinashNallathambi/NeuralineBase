@@ -19,6 +19,8 @@ import { CreateAppointmentWithWorkflowDto, TransitionAppointmentDto } from './dt
 import { CreateProviderAvailabilityDto, UpdateProviderAvailabilityDto, CreateGroupAppointmentDto, UpdateGroupAppointmentDto } from './dto/provider-availability.dto';
 import { WorkflowService } from '../workflow/workflow.service';
 import { CreateWorkflowInstanceDto } from '../workflow/dto/workflow-instance.dto';
+import { IntegrationsService } from '../integrations/integrations.service';
+import { CalendarEvent } from '../integrations/providers/calendar-provider.interface';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -55,6 +57,7 @@ export class AppointmentsService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly workflowService: WorkflowService,
+    private readonly integrationsService: IntegrationsService,
   ) {}
 
   /**
@@ -294,6 +297,11 @@ export class AppointmentsService {
     // Auto-create workflow instance if an active template exists
     await this.createWorkflowInstanceIfAvailable(tenantId, saved.id, userId, userName);
 
+    // Sync to external calendar if a calendar integration is enabled
+    this.syncAppointmentToCalendar(saved).catch((err) =>
+      this.logger.error(`Calendar sync failed for appointment ${saved.id}: ${err?.message || err}`),
+    );
+
     return saved;
   }
 
@@ -363,6 +371,9 @@ export class AppointmentsService {
       }
     }
 
+    // Track whether the appointment time changed so we can re-sync the calendar
+    const timeChanged = !!(dto.startTime || dto.endTime);
+
     // Map frontend field aliases to entity properties
     const newType = dto.type || dto.appointmentType;
     if (newType) {
@@ -394,6 +405,14 @@ export class AppointmentsService {
 
     const updated = await this.appointmentRepository.save(appointment);
     this.logger.log(`Appointment updated: ${id} in tenant ${tenantId}`);
+
+    // Re-sync to external calendar if the appointment time changed
+    if (timeChanged) {
+      this.syncAppointmentToCalendar(updated).catch((err) =>
+        this.logger.error(`Calendar sync failed for appointment ${updated.id}: ${err?.message || err}`),
+      );
+    }
+
     return updated;
   }
 
@@ -527,6 +546,65 @@ export class AppointmentsService {
       }
     } catch (error: any) {
       this.logger.warn(`Failed to auto-create workflow instance: ${error?.message || error}`);
+    }
+  }
+
+  /**
+   * Sync an appointment to the enabled external calendar integration(s).
+   * Failures are logged but never block the appointment operation.
+   */
+  private async syncAppointmentToCalendar(appointment: Appointment): Promise<void> {
+    const calendarKeys = ['google_calendar', 'outlook_calendar'];
+
+    for (const key of calendarKeys) {
+      try {
+        const credentials = await this.integrationsService.getIntegrationCredentials(
+          appointment.tenantId,
+          key,
+        );
+        if (!credentials) {
+          // Integration not enabled or not connected — skip silently
+          continue;
+        }
+
+        const provider = this.integrationsService.getCalendarProviderFor(key);
+
+        const calendarEvent: CalendarEvent = {
+          id: appointment.id,
+          appointmentId: appointment.id,
+          title: appointment.reasonForVisit
+            ? `Appointment: ${appointment.reasonForVisit}`
+            : `Appointment with ${appointment.providerName || appointment.providerId}`,
+          description: appointment.notes || undefined,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+          location: appointment.location
+            ? typeof appointment.location === 'string'
+              ? appointment.location
+              : (appointment.location as any)?.name || JSON.stringify(appointment.location)
+            : undefined,
+          attendees: [],
+          reminders: appointment.remindersEnabled
+            ? [{ minutesBefore: 30, method: 'popup' }]
+            : undefined,
+          metadata: {
+            appointmentId: appointment.id,
+            patientName: appointment.patientName,
+            providerName: appointment.providerName,
+            appointmentType: appointment.appointmentType,
+            isTelehealth: appointment.isTelehealth,
+          },
+        };
+
+        const result = await provider.upsertEvent(credentials, calendarEvent);
+        this.logger.log(
+          `Calendar sync (${key}) succeeded for appointment ${appointment.id}: eventId=${result.eventId}`,
+        );
+      } catch (error: any) {
+        this.logger.warn(
+          `Calendar sync (${key}) failed for appointment ${appointment.id}: ${error?.message || error}`,
+        );
+      }
     }
   }
 

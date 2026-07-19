@@ -19,6 +19,7 @@ export enum NotificationType {
   ACCOUNT_SUSPENDED = 'account_suspended',
   DENIAL_DEADLINE_APPROACHING = 'denial_deadline_approaching',
   DENIAL_DEADLINE_CRITICAL = 'denial_deadline_critical',
+  APPOINTMENT_REMINDER = 'appointment_reminder',
   GENERAL = 'general',
 }
 
