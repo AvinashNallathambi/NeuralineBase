@@ -27,6 +27,7 @@ import {
   PaymentPlanStatus,
   PaymentPlanFrequency,
 } from './entities/payment-plan.entity';
+import { SubscriptionWebhookEvent } from './entities/subscription-webhook-event.entity';
 import {
   SubscriptionProvider,
   SUBSCRIPTION_PROVIDER,
@@ -51,6 +52,8 @@ export class SubscriptionsService {
     private paymentMethodRepository: Repository<SubscriptionPaymentMethod>,
     @InjectRepository(SubscriptionPaymentPlan)
     private paymentPlanRepository: Repository<SubscriptionPaymentPlan>,
+    @InjectRepository(SubscriptionWebhookEvent)
+    private webhookEventRepository: Repository<SubscriptionWebhookEvent>,
     @Inject(SUBSCRIPTION_PROVIDER)
     private subscriptionProvider: SubscriptionProvider,
     private notificationService: SubscriptionNotificationService,
@@ -201,6 +204,11 @@ export class SubscriptionsService {
     const cycle = billingCycle ?? subscription.billingCycle;
     const newPriceCents =
       cycle === BillingCycle.ANNUAL ? newPlan.priceAnnualCents : newPlan.priceMonthlyCents;
+    const oldPriceCents = subscription.priceCents;
+
+    // Determine proration behavior: create prorations for upgrades, none for downgrades
+    const isUpgrade = newPriceCents > oldPriceCents;
+    const prorate = isUpgrade;
 
     // Update via provider if Stripe is configured
     if (
@@ -217,7 +225,7 @@ export class SubscriptionsService {
           await this.subscriptionProvider.changePlan({
             providerSubscriptionId: subscription.stripeSubscriptionId,
             newStripePriceId: stripePriceId,
-            prorate: true,
+            prorate,
           });
         } catch (err) {
           this.logger.error(`Stripe plan change failed: ${(err as Error).message}`);
@@ -355,8 +363,18 @@ export class SubscriptionsService {
 
   // ── Webhook handling ──────────────────────────────────────────────
 
-  async handleWebhook(rawBody: string, signature: string): Promise<{ processed: boolean }> {
+  async handleWebhook(rawBody: string | Buffer, signature: string): Promise<{ processed: boolean }> {
     const event = this.subscriptionProvider.parseWebhook(rawBody, signature);
+
+    // ── Idempotency: skip already-processed events ────────────────────
+    const existing = await this.webhookEventRepository.findOne({
+      where: { eventId: event.eventId },
+    });
+    if (existing) {
+      this.logger.log(`Webhook event ${event.eventId} already processed — skipping`);
+      return { processed: false };
+    }
+
     this.logger.log(
       `Subscription webhook: ${event.providerSubscriptionId} → ${event.status}`,
     );
@@ -368,6 +386,7 @@ export class SubscriptionsService {
       this.logger.warn(
         `Webhook for unknown subscription ${event.providerSubscriptionId}`,
       );
+      await this.recordWebhookEvent(event, false, 'Unknown subscription');
       return { processed: false };
     }
 
@@ -398,6 +417,11 @@ export class SubscriptionsService {
 
     await this.subscriptionRepository.save(subscription);
 
+    // ── Sync invoice data from webhook ───────────────────────────────
+    if (event.invoice) {
+      await this.syncInvoiceFromWebhook(subscription, event.invoice);
+    }
+
     // ── Trigger event-driven notifications ──────────────────────────
     // Only fire when the status actually changed (idempotency at notification level too)
     if (previousStatus !== subscription.status) {
@@ -420,16 +444,314 @@ export class SubscriptionsService {
       }
     }
 
+    await this.recordWebhookEvent(event, true);
     return { processed: true };
+  }
+
+  /**
+   * Persist a record of the processed webhook event for idempotency.
+   */
+  private async recordWebhookEvent(
+    event: any,
+    processed: boolean,
+    errorMessage?: string,
+  ): Promise<void> {
+    try {
+      const record = this.webhookEventRepository.create({
+        eventId: event.eventId,
+        eventType: event.rawEvent?.type ?? 'unknown',
+        providerSubscriptionId: event.providerSubscriptionId,
+        status: event.status,
+        processed,
+        invoiceId: event.invoice?.id ?? null,
+        errorMessage: errorMessage ?? null,
+      });
+      await this.webhookEventRepository.save(record);
+    } catch (err) {
+      this.logger.error(`Failed to record webhook event: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Upsert a SubscriptionInvoice from a Stripe webhook invoice payload.
+   */
+  private async syncInvoiceFromWebhook(
+    subscription: Subscription,
+    invoice: any,
+  ): Promise<void> {
+    try {
+      const existing = await this.invoiceRepository.findOne({
+        where: { stripeInvoiceId: invoice.id },
+      });
+
+      if (existing) {
+        existing.status = invoice.status;
+        existing.amount = invoice.amount;
+        existing.currency = invoice.currency;
+        existing.paidAt = invoice.paidAt ?? null;
+        existing.failureReason = invoice.failureReason ?? null;
+        existing.stripeHostedInvoiceUrl = invoice.hostedInvoiceUrl ?? null;
+        if (invoice.periodStart) existing.periodStart = invoice.periodStart;
+        if (invoice.periodEnd) existing.periodEnd = invoice.periodEnd;
+        await this.invoiceRepository.save(existing);
+        return;
+      }
+
+      const newInvoice = this.invoiceRepository.create({
+        tenantId: subscription.tenantId,
+        subscriptionId: subscription.id,
+        invoiceNumber: invoice.id,
+        planTier: subscription.planTier,
+        billingCycle: subscription.billingCycle,
+        amount: invoice.amount,
+        currency: invoice.currency,
+        status: invoice.status,
+        periodStart: invoice.periodStart ?? subscription.currentPeriodStart,
+        periodEnd: invoice.periodEnd ?? subscription.currentPeriodEnd,
+        paidAt: invoice.paidAt ?? null,
+        failureReason: invoice.failureReason ?? null,
+        stripeInvoiceId: invoice.id,
+        stripeHostedInvoiceUrl: invoice.hostedInvoiceUrl ?? null,
+      });
+      await this.invoiceRepository.save(newInvoice);
+    } catch (err) {
+      this.logger.error(`Failed to sync invoice from webhook: ${(err as Error).message}`);
+    }
+  }
+
+  // ── Mock Billing Simulation ───────────────────────────────────────
+
+  /**
+   * Simulates Stripe's recurring billing cycle for mock subscriptions.
+   * Called daily by the subscription processor before notification checks.
+   *
+   * When a mock subscription's trial ends or current period ends:
+   * - If a default payment method exists, create a paid invoice and set ACTIVE
+   * - If no default payment method exists, create a failed invoice and set PAST_DUE
+   * - After a 14-day dunning period, set EXPIRED
+   */
+  async processMockBillingSimulation(): Promise<void> {
+    if (this.subscriptionProvider.name !== 'mock') {
+      // Only run in mock mode; Stripe handles real billing
+      return;
+    }
+
+    const now = new Date();
+    const gracePeriodCutoff = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    // 1. Convert trialing subscriptions whose trial has ended
+    const trialingSubs = await this.subscriptionRepository.find({
+      where: { status: SubscriptionStatus.TRIALING },
+    });
+
+    for (const sub of trialingSubs) {
+      if (!sub.trialEndsAt || new Date(sub.trialEndsAt).getTime() > now.getTime()) {
+        continue;
+      }
+
+      const defaultPm = await this.paymentMethodRepository.findOne({
+        where: { tenantId: sub.tenantId, isDefault: true },
+      });
+
+      if (defaultPm) {
+        // Successful trial conversion
+        sub.status = SubscriptionStatus.ACTIVE;
+        sub.currentPeriodStart = now;
+        sub.currentPeriodEnd = new Date(
+          now.getTime() + this.getCycleDays(sub.billingCycle) * 24 * 60 * 60 * 1000,
+        );
+        await this.subscriptionRepository.save(sub);
+
+        await this.createMockInvoice(sub, sub.priceCents, 'paid', 'usd');
+        this.logger.log(`Mock billing: trial converted for tenant ${sub.tenantId}`);
+
+        try {
+          await this.notificationService.onPaymentSucceeded(sub);
+        } catch (err) {
+          this.logger.error(`Mock payment succeeded notification failed: ${(err as Error).message}`);
+        }
+      } else {
+        // Trial ended without payment method
+        sub.status = SubscriptionStatus.PAST_DUE;
+        sub.metadata = { ...sub.metadata, pastDueSince: now.toISOString() };
+        await this.subscriptionRepository.save(sub);
+
+        await this.createMockInvoice(sub, sub.priceCents, 'failed', 'usd', 'No payment method on file');
+        this.logger.warn(`Mock billing: trial ended with no payment method for tenant ${sub.tenantId}`);
+
+        try {
+          await this.notificationService.onPaymentFailed(sub);
+        } catch (err) {
+          this.logger.error(`Mock payment failed notification failed: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    // 2. Renew active subscriptions whose period has ended
+    const activeSubs = await this.subscriptionRepository.find({
+      where: { status: SubscriptionStatus.ACTIVE },
+    });
+
+    for (const sub of activeSubs) {
+      if (!sub.currentPeriodEnd || new Date(sub.currentPeriodEnd).getTime() > now.getTime()) {
+        continue;
+      }
+
+      const defaultPm = await this.paymentMethodRepository.findOne({
+        where: { tenantId: sub.tenantId, isDefault: true },
+      });
+
+      if (defaultPm) {
+        // Successful renewal
+        sub.currentPeriodStart = now;
+        sub.currentPeriodEnd = new Date(
+          now.getTime() + this.getCycleDays(sub.billingCycle) * 24 * 60 * 60 * 1000,
+        );
+        await this.subscriptionRepository.save(sub);
+
+        await this.createMockInvoice(sub, sub.priceCents, 'paid', 'usd');
+        this.logger.log(`Mock billing: renewed subscription for tenant ${sub.tenantId}`);
+      } else {
+        // Renewal failed
+        sub.status = SubscriptionStatus.PAST_DUE;
+        sub.metadata = { ...sub.metadata, pastDueSince: now.toISOString() };
+        await this.subscriptionRepository.save(sub);
+
+        await this.createMockInvoice(sub, sub.priceCents, 'failed', 'usd', 'No payment method on file');
+        this.logger.warn(`Mock billing: renewal failed for tenant ${sub.tenantId}`);
+
+        try {
+          await this.notificationService.onPaymentFailed(sub);
+        } catch (err) {
+          this.logger.error(`Mock payment failed notification failed: ${(err as Error).message}`);
+        }
+      }
+    }
+
+    // 3. Expire past_due subscriptions after grace period
+    const pastDueSubs = await this.subscriptionRepository.find({
+      where: { status: SubscriptionStatus.PAST_DUE },
+    });
+
+    for (const sub of pastDueSubs) {
+      const pastDueSince = sub.metadata?.pastDueSince
+        ? new Date(sub.metadata.pastDueSince as string)
+        : sub.updatedAt;
+
+      if (pastDueSince && pastDueSince.getTime() < gracePeriodCutoff.getTime()) {
+        sub.status = SubscriptionStatus.EXPIRED;
+        await this.subscriptionRepository.save(sub);
+        this.logger.warn(`Mock billing: subscription expired for tenant ${sub.tenantId}`);
+
+        try {
+          await this.notificationService.onSubscriptionCancelled(sub, true);
+        } catch (err) {
+          this.logger.error(`Mock subscription cancelled notification failed: ${(err as Error).message}`);
+        }
+      }
+    }
+  }
+
+  private getCycleDays(cycle: BillingCycle): number {
+    return cycle === BillingCycle.ANNUAL ? 365 : 30;
+  }
+
+  private async createMockInvoice(
+    subscription: Subscription,
+    amountCents: number,
+    status: 'paid' | 'failed' | 'open',
+    currency: string,
+    failureReason?: string,
+  ): Promise<void> {
+    const now = new Date();
+    const periodEnd = new Date(
+      now.getTime() + this.getCycleDays(subscription.billingCycle) * 24 * 60 * 60 * 1000,
+    );
+
+    const invoice = this.invoiceRepository.create({
+      tenantId: subscription.tenantId,
+      subscriptionId: subscription.id,
+      invoiceNumber: `mock_inv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      planTier: subscription.planTier,
+      billingCycle: subscription.billingCycle,
+      amount: amountCents / 100,
+      currency,
+      status: status as SubscriptionInvoiceStatus,
+      periodStart: now,
+      periodEnd,
+      paidAt: status === 'paid' ? now : null,
+      failureReason: failureReason ?? null,
+      stripeInvoiceId: null,
+      stripeHostedInvoiceUrl: null,
+    });
+    await this.invoiceRepository.save(invoice);
   }
 
   // ── Usage / feature gates ─────────────────────────────────────────
 
   /**
+   * Check if the tenant's subscription is in an active/trialing state.
+   * Used to enforce that payment is up to date before granting feature access.
+   */
+  async isSubscriptionActive(tenantId: string): Promise<boolean> {
+    try {
+      const subscription = await this.getSubscription(tenantId);
+      return (
+        subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.TRIALING
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Check if the tenant's subscription has an active payment method on file.
+   * A default payment method is required for paid plans after the trial ends.
+   */
+  async hasDefaultPaymentMethod(tenantId: string): Promise<boolean> {
+    try {
+      const subscription = await this.getSubscription(tenantId);
+      // Free/solo plans with $0 price may not need a payment method during trial
+      if (subscription.status === SubscriptionStatus.TRIALING) {
+        return true;
+      }
+      const pm = await this.paymentMethodRepository.findOne({
+        where: { tenantId, isDefault: true },
+      });
+      return !!pm;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Check if the tenant's subscription includes a specific feature.
+   * Denies access when the subscription is past_due, cancelled, or expired,
+   * or when the trial is over and no payment method is on file.
    */
   async hasFeature(tenantId: string, feature: string): Promise<boolean> {
     try {
+      const subscription = await this.getSubscription(tenantId);
+      const activeStatus =
+        subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.TRIALING;
+
+      if (!activeStatus) {
+        return false;
+      }
+
+      // If trial has ended, require a payment method on file
+      if (this.isTrialExpired(subscription)) {
+        const hasPm = await this.paymentMethodRepository.findOne({
+          where: { tenantId, isDefault: true },
+        });
+        if (!hasPm) {
+          this.logger.warn(`Feature ${feature} denied for tenant ${tenantId}: trial expired and no payment method`);
+          return false;
+        }
+      }
+
       const { plan } = await this.getSubscriptionWithPlan(tenantId);
       switch (feature) {
         case 'rcm':
@@ -452,9 +774,29 @@ export class SubscriptionsService {
 
   /**
    * Check if the tenant can add more providers.
+   * Same subscription status/payment-method enforcement as hasFeature.
    */
   async canAddProvider(tenantId: string, currentProviderCount: number): Promise<boolean> {
     try {
+      const subscription = await this.getSubscription(tenantId);
+      const activeStatus =
+        subscription.status === SubscriptionStatus.ACTIVE ||
+        subscription.status === SubscriptionStatus.TRIALING;
+
+      if (!activeStatus) {
+        return false;
+      }
+
+      if (this.isTrialExpired(subscription)) {
+        const hasPm = await this.paymentMethodRepository.findOne({
+          where: { tenantId, isDefault: true },
+        });
+        if (!hasPm) {
+          this.logger.warn(`canAddProvider denied for tenant ${tenantId}: trial expired and no payment method`);
+          return false;
+        }
+      }
+
       const { plan } = await this.getSubscriptionWithPlan(tenantId);
       if (plan.maxProviders === null) return true; // unlimited
       return currentProviderCount < plan.maxProviders;
@@ -463,17 +805,25 @@ export class SubscriptionsService {
     }
   }
 
+  private isTrialExpired(subscription: Subscription): boolean {
+    if (subscription.status !== SubscriptionStatus.TRIALING) return false;
+    if (!subscription.trialEndsAt) return false;
+    return new Date(subscription.trialEndsAt).getTime() <= Date.now();
+  }
+
   // ── Payment Method Management (Phase 1, 3) ────────────────────────
 
   /**
    * Get all payment methods for a tenant.
-   * Syncs from Stripe if a Stripe customer ID exists, then returns DB records.
+   * Syncs from Stripe if a real Stripe customer ID exists, then returns DB records.
+   * In mock mode, the database is the source of truth because the mock provider's
+   * in-memory store is ephemeral across restarts.
    */
   async getPaymentMethods(tenantId: string): Promise<SubscriptionPaymentMethod[]> {
     const subscription = await this.getSubscription(tenantId);
 
-    // If Stripe customer exists, sync payment methods from Stripe
-    if (subscription.stripeCustomerId) {
+    // Only sync from Stripe in production/stripe mode. In mock mode, the DB is authoritative.
+    if (subscription.stripeCustomerId && this.subscriptionProvider.name === 'stripe') {
       try {
         await this.syncPaymentMethodsFromProvider(tenantId, subscription.stripeCustomerId);
       } catch (err) {

@@ -97,6 +97,21 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
   - `POST /payment-plans/:id/cancel` — Cancel a payment plan
 - `POST /webhook` — Stripe webhook handler (invoice.payment_succeeded, invoice.payment_failed, customer.subscription.deleted, customer.subscription.updated)
 
+### Payment Workflow & Security
+- **Stripe handles recurring billing automatically** after a subscription is created with a Stripe Price ID. No backend scheduler initiates charges.
+- **SetupIntent flow** (`POST /setup-intent` → Stripe Elements → `POST /payment-methods/attach`) collects payment details directly in Stripe's iframe. Card data never touches the backend.
+- **Default payment method** is set on both the Stripe Customer and the Subscription, ensuring renewals use the correct card/bank.
+- **Webhook security**:
+  - Webhooks are verified with Stripe's official SDK using `STRIPE_WEBHOOK_SECRET`.
+  - The raw request body is captured via a custom Express body parser (`bodyParser: false` + `verify` hook) so signature verification succeeds.
+  - In production, `STRIPE_WEBHOOK_SECRET` is required; unverified webhooks are rejected with `400`.
+- **Webhook idempotency**: Each Stripe event ID is recorded in `subscription_webhook_events`; duplicate events are ignored.
+- **Invoice sync**: `invoice.payment_succeeded` and `invoice.payment_failed` webhooks upsert `SubscriptionInvoice` records, so the invoice history table stays current.
+- **Trial enforcement**: `hasFeature` and `canAddProvider` deny access when the subscription is `past_due`/`cancelled`/`expired`, or when a trial has ended without a default payment method on file.
+- **Plan change proration**: Upgrades use `create_prorations`; downgrades use `none` to avoid surprising credits/charges.
+- **Mock billing simulation**: When `STRIPE_API_KEY` is empty, the daily job simulates trial conversion, renewals, and dunning/expiration using the database as the source of truth for payment methods.
+- **Stripe Price IDs** are loaded from environment variables (`STRIPE_PRICE_*`) during plan seeding. Create the products/prices in Stripe first, then populate `.env` before enabling Stripe mode.
+
 ### Notification System
 - **SubscriptionNotificationService**: Daily cron job checks for:
   - Trial expiration sequence (7/3/0 days before, post-expiration grace)

@@ -11,8 +11,10 @@ import {
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionSchedulerService } from './subscription-scheduler.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BillingCycle } from './entities/subscription.entity';
 
@@ -25,7 +27,10 @@ interface AuthenticatedRequest {
 @ApiBearerAuth('JWT-auth')
 @Controller('subscriptions')
 export class SubscriptionsController {
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly schedulerService: SubscriptionSchedulerService,
+  ) {}
 
   // ── Plans ─────────────────────────────────────────────────────────
 
@@ -129,7 +134,10 @@ export class SubscriptionsController {
   @Get('features/:feature')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Check if the current plan includes a feature' })
-  async checkFeature(@Req() req: AuthenticatedRequest, feature: string) {
+  async checkFeature(
+    @Req() req: AuthenticatedRequest,
+    @Param('feature') feature: string,
+  ) {
     const tenantId = req.tenantId ?? req.user?.tenantId;
     const hasFeature = await this.subscriptionsService.hasFeature(tenantId, feature);
     return { feature, hasFeature };
@@ -314,16 +322,12 @@ export class SubscriptionsController {
   // ── Webhook (NOT guarded by JWT) ──────────────────────────────────
 
   @Post('webhook')
+  @SkipThrottle()
   webhook(
-    @Req() req: { rawBody?: Buffer; body?: unknown },
+    @Req() req: { rawBody?: string | Buffer; body?: unknown },
     @Headers('stripe-signature') signature?: string,
   ) {
-    const raw =
-      typeof req.rawBody === 'string'
-        ? req.rawBody
-        : req.rawBody
-          ? req.rawBody.toString('utf8')
-          : JSON.stringify(req.body ?? {});
+    const raw = req.rawBody ?? JSON.stringify(req.body ?? {});
     return this.subscriptionsService.handleWebhook(raw, signature ?? '');
   }
 }

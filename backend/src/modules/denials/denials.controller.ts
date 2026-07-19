@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { DenialsService } from './denials.service';
 import { DenialAiService } from './denial-ai.service';
+import { DenialSchedulerService } from './denial-scheduler.service';
 import {
   DenialRootCause,
   DenialPriority,
@@ -24,6 +25,7 @@ export class DenialsController {
   constructor(
     private readonly denialsService: DenialsService,
     private readonly denialAiService: DenialAiService,
+    private readonly denialSchedulerService: DenialSchedulerService,
   ) {}
 
   // ─── Auto-generate from remittance ─────────────────────────────────
@@ -141,5 +143,12 @@ export class DenialsController {
   aiPrioritize(@Request() req: any) {
     const tenantId = req.user?.tenantId || '00000000-0000-0000-0000-000000000000';
     return this.denialAiService.prioritizeWorklist(tenantId);
+  }
+
+  // ─── SLA Deadline Tracking ─────────────────────────────────────────
+
+  @Post('sla/trigger-deadline-check')
+  triggerDeadlineCheck() {
+    return this.denialSchedulerService.triggerDeadlineCheck();
   }
 }

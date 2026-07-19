@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Remittance, RemittanceStatus, RemittanceType } from './entities/remittance.entity';
@@ -12,6 +12,7 @@ import { X12Parser835, Parsed835 } from './x12-parser-835.service';
 import { ImportEraDto, ImportEobDto } from './dto/import-era.dto';
 import { EncounterClaim, ClaimStatus } from '../billing/entities/encounter-claim.entity';
 import { ClaimLineItem } from '../billing/entities/claim-line-item.entity';
+import { DenialsService } from '../denials/denials.service';
 
 @Injectable()
 export class RemittanceService {
@@ -38,6 +39,8 @@ export class RemittanceService {
     private readonly lineItemRepository: Repository<ClaimLineItem>,
     private readonly parser: X12Parser835,
     private readonly dataSource: DataSource,
+    @Inject(forwardRef(() => DenialsService))
+    private readonly denialsService: DenialsService,
   ) {}
 
   // ─── ERA Import & Parsing ──────────────────────────────────────────
@@ -95,6 +98,24 @@ export class RemittanceService {
     this.logger.log(
       `ERA imported: ${parsed.claims.length} claims, ${postResult.postedCount} posted, ${postResult.postedAmount} posted amount`,
     );
+
+    // Auto-generate denial records from this remittance's adjustments.
+    // This was previously a manual step (POST /denials/generate/:remittanceId);
+    // now it fires automatically on ERA import so denials appear in the
+    // worklist without staff having to remember to trigger generation.
+    try {
+      const denialCount = await this.denialsService.generateFromRemittance(savedRemittance.id, tenantId);
+      if (denialCount > 0) {
+        this.logger.log(`Auto-generated ${denialCount} denial records from remittance ${savedRemittance.id}`);
+      }
+    } catch (err) {
+      // Denial generation failure must not fail the ERA import — the
+      // remittance and payments are already saved. Staff can re-trigger
+      // denial generation manually via POST /denials/generate/:remittanceId.
+      this.logger.error(
+        `Auto-denial generation failed for remittance ${savedRemittance.id}: ${(err as Error).message}`,
+      );
+    }
 
     return this.findOneRemittance(savedRemittance.id);
   }

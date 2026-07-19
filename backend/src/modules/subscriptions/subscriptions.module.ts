@@ -13,6 +13,7 @@ import { SubscriptionPlan } from './entities/subscription-plan.entity';
 import { SubscriptionInvoice } from './entities/subscription-invoice.entity';
 import { SubscriptionPaymentMethod } from './entities/payment-method.entity';
 import { SubscriptionPaymentPlan } from './entities/payment-plan.entity';
+import { SubscriptionWebhookEvent } from './entities/subscription-webhook-event.entity';
 import { MockSubscriptionProvider } from './providers/mock-subscription.provider';
 import { StripeSubscriptionProvider } from './providers/stripe-subscription.provider';
 import { SUBSCRIPTION_PROVIDER } from './providers/subscription-provider.interface';
@@ -27,6 +28,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       SubscriptionInvoice,
       SubscriptionPaymentMethod,
       SubscriptionPaymentPlan,
+      SubscriptionWebhookEvent,
     ]),
     BullModule.registerQueue({ name: 'subscriptions' }),
     ConfigModule,

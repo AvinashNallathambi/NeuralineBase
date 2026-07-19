@@ -5,6 +5,7 @@ import {
   Row,
   Col,
   Steps,
+  Checkbox,
   Button,
   Input,
   Select,
@@ -30,6 +31,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import AudioRecorder from '../../components/AudioRecorder';
+import { documentationService, DocumentationSession } from '../../services/documentationService';
 import { useProviderStore } from '../../store/dataStore';
 import { usePatientStore } from '../../store/dataStore';
 
@@ -57,6 +59,8 @@ const AiEncounterPage: React.FC = () => {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [documentationSession, setDocumentationSession] = useState<DocumentationSession | null>(null);
+  const [recordingConsent, setRecordingConsent] = useState(false);
 
   // Step 0: Setup
   const [selectedPatient, setSelectedPatient] = useState<string | undefined>();
@@ -98,30 +102,51 @@ const AiEncounterPage: React.FC = () => {
     throw new Error(`Server error (${res.status})`);
   };
 
+  const handleStartEncounter = async () => {
+    if (!selectedPatient || !selectedProvider) {
+      message.warning('Select a patient and provider first');
+      return;
+    }
+    if (!recordingConsent) {
+      message.warning('Confirm documented patient consent before recording');
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await documentationService.createSession({
+        patientId: selectedPatient,
+        providerId: selectedProvider,
+        consentStatus: 'granted',
+        consentMethod: 'provider_confirmed_in_app',
+      });
+      setDocumentationSession(response.data);
+      setCurrentStep(1);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err.message || 'Unable to start documentation session');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTranscribe = async () => {
     if (!audioBlob) {
       message.warning('Please record audio first');
       return;
     }
+    if (!documentationSession) {
+      message.error('Start a documentation session before transcribing');
+      return;
+    }
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', audioBlob, 'encounter.webm');
-
-      const res = await fetch(`${apiBase}/transcribe`, {
-        method: 'POST',
-        headers: { Authorization: getAuthHeader() },
-        body: formData,
-      });
-
-      if (!res.ok) handleApiError(res);
-      const data = await res.json();
-      setTranscript(data.text || '');
-      setTranscriptDuration(data.duration || 0);
-      message.success('Transcription complete');
+      const response = await documentationService.transcribe(documentationSession.id, audioBlob);
+      setDocumentationSession(response.data);
+      setTranscript(response.data.transcript || '');
+      setTranscriptDuration(audioBlob.size ? transcriptDuration : 0);
+      message.success('Transcription complete. The source audio was deleted after transcription.');
       setCurrentStep(2);
     } catch (err: any) {
-      message.error(err.message || 'Transcription failed');
+      message.error(err?.response?.data?.message || err.message || 'Transcription failed');
     } finally {
       setLoading(false);
     }
@@ -132,33 +157,20 @@ const AiEncounterPage: React.FC = () => {
       message.warning('Please provide a transcript first');
       return;
     }
+    if (!documentationSession) {
+      message.error('Start a documentation session before generating a note');
+      return;
+    }
     setLoading(true);
     try {
-      const patientContext = patient
-        ? {
-            name: `${patient.firstName} ${patient.lastName}`,
-            gender: patient.gender,
-            chiefComplaint,
-          }
-        : { chiefComplaint };
-
-      const res = await fetch(`${apiBase}/generate-soap`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: getAuthHeader(),
-        },
-        body: JSON.stringify({ transcript, patientContext }),
-      });
-
-      if (!res.ok) handleApiError(res);
-      const data = await res.json();
-      setSoapNote(data);
-      message.success('SOAP note generated');
+      await documentationService.saveTranscript(documentationSession.id, transcript);
+      const response = await documentationService.generateNote(documentationSession.id);
+      setDocumentationSession(response.data);
+      setSoapNote(response.data.soapNote);
+      message.success('SOAP draft generated. Review all content before applying or signing.');
       setCurrentStep(3);
     } catch (err: any) {
-      message.error(err.message || 'SOAP generation failed');
-      setCurrentStep(3);
+      message.error(err?.response?.data?.message || err.message || 'SOAP generation failed');
     } finally {
       setLoading(false);
     }
@@ -171,6 +183,10 @@ const AiEncounterPage: React.FC = () => {
     }
     setLoading(true);
     try {
+      if (documentationSession) {
+        const sessionResponse = await documentationService.updateNote(documentationSession.id, soapNote);
+        setDocumentationSession(sessionResponse.data);
+      }
       const res = await fetch(`${apiBase}/suggest-codes`, {
         method: 'POST',
         headers: {
@@ -194,9 +210,31 @@ const AiEncounterPage: React.FC = () => {
     }
   };
 
+  const handleApplyAndSign = async () => {
+    if (!documentationSession) {
+      message.error('No documentation session is active');
+      return;
+    }
+    setLoading(true);
+    try {
+      await documentationService.updateNote(documentationSession.id, soapNote);
+      await documentationService.applyToEncounter(documentationSession.id);
+      const signed = await documentationService.sign(documentationSession.id);
+      setDocumentationSession(signed.data);
+      message.success('Note applied to the encounter and signed by the provider.');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || err.message || 'Unable to apply and sign the note');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateSuperbill = () => {
-    message.success('Superbill draft created — redirecting...');
-    navigate('/superbills/new');
+    if (!documentationSession?.encounterId) {
+      message.warning('Apply the note to an encounter before creating a superbill.');
+      return;
+    }
+    navigate(`/superbills/new?encounterId=${documentationSession.encounterId}`);
   };
 
   // ── Render step content ────────────────────────────────────────────
@@ -245,14 +283,23 @@ const AiEncounterPage: React.FC = () => {
           />
         </Col>
       </Row>
+      <div style={{ marginTop: 16 }}>
+        <Checkbox checked={recordingConsent} onChange={(event) => setRecordingConsent(event.target.checked)}>
+          I confirm that the patient has consented to recording and transcription for this encounter.
+        </Checkbox>
+        <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+          Source audio is deleted after successful transcription. The reviewed transcript, note versions, and audit events remain in the clinical record.
+        </Text>
+      </div>
       <div style={{ marginTop: 16, textAlign: 'right' }}>
         <Button
           type="primary"
-          onClick={() => setCurrentStep(1)}
-          disabled={!selectedPatient || !selectedProvider}
+          onClick={handleStartEncounter}
+          loading={loading}
+          disabled={!selectedPatient || !selectedProvider || !recordingConsent}
           style={{ backgroundColor: '#0D7C8A', borderColor: '#0D7C8A' }}
         >
-          Start Encounter
+          Start Documented Encounter
         </Button>
       </div>
     </Card>
@@ -284,13 +331,13 @@ const AiEncounterPage: React.FC = () => {
         </Descriptions>
       )}
 
-      {/* <AudioRecorder
+      <AudioRecorder
         onRecordingComplete={(blob, dur) => {
           setAudioBlob(blob);
           setTranscriptDuration(dur);
         }}
         disabled={loading}
-      /> */}
+      />
 
       <Divider />
 
@@ -421,6 +468,9 @@ const AiEncounterPage: React.FC = () => {
           Suggest Medical Codes with AI
         </Button>
         <Button onClick={() => setCurrentStep(4)}>Skip — Add Codes Manually</Button>
+        <Button onClick={handleApplyAndSign} loading={loading} disabled={!documentationSession}>
+          Apply Note & Sign Encounter
+        </Button>
       </div>
     </Card>
   );

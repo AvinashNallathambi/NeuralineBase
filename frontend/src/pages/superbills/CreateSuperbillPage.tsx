@@ -22,7 +22,8 @@ import {
   DeleteOutlined,
   SaveOutlined,
 } from "@ant-design/icons";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { encounterService } from "../../services/encounterService";
 import {
   useSuperbillStore,
   usePatientStore,
@@ -51,6 +52,8 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
   initialData,
 }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const encounterId = searchParams.get("encounterId");
   const [form] = Form.useForm();
   const { addSuperbill, updateSuperbill } = useSuperbillStore();
   const { patients, fetchPatients } = usePatientStore();
@@ -73,6 +76,48 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
       fetchPatients();
     }
   }, [patients.length, fetchPatients]);
+
+  useEffect(() => {
+    if (!encounterId || initialData) return;
+    const loadEncounter = async () => {
+      try {
+        const encounter = await encounterService.findOne(encounterId);
+        form.setFieldsValue({
+          patientId: encounter.patientId,
+          providerId: encounter.providerId,
+          serviceDate: dayjs(encounter.startTime),
+          notes: [
+            encounter.soapNote?.assessment ? `Assessment: ${encounter.soapNote.assessment}` : '',
+            encounter.soapNote?.plan ? `Plan: ${encounter.soapNote.plan}` : '',
+          ].filter(Boolean).join('\n\n'),
+        });
+        setClinicalNotes([
+          encounter.soapNote?.assessment ? `Assessment: ${encounter.soapNote.assessment}` : '',
+          encounter.soapNote?.plan ? `Plan: ${encounter.soapNote.plan}` : '',
+        ].filter(Boolean).join('\n\n'));
+        setDiagnoses(encounter.diagnoses.map((diagnosis, index) => ({
+          id: `encounter-dx-${index}`,
+          icdCode: diagnosis.code,
+          description: diagnosis.description,
+          type: diagnosis.isPrimary ? 'primary' : 'secondary',
+        })));
+        setProcedures((encounter.treatmentPlan?.procedures || [])
+          .filter((procedure) => procedure.cptCode)
+          .map((procedure, index) => ({
+            id: `encounter-procedure-${index}`,
+            cptCode: procedure.cptCode || '',
+            description: procedure.description,
+            units: 1,
+            charge: 0,
+            serviceDate: encounter.startTime,
+            diagnosisPointer: [1],
+          })));
+      } catch {
+        message.error('Unable to load encounter details for this superbill.');
+      }
+    };
+    void loadEncounter();
+  }, [encounterId, form, initialData]);
 
   useEffect(() => {
     if (initialData) {
@@ -236,6 +281,7 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
         patientAddress: mappedAddress,
         patientPhone: patient.phone,
         providerId: provider.id,
+        encounterId: encounterId || undefined,
         providerName: `${provider.firstName} ${provider.lastName}`,
         providerNPI: provider.specialization || "NPI-1234567890",
         providerAddress: {

@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RemittanceController } from './remittance.controller';
 import { RemittanceService } from './remittance.service';
@@ -14,6 +14,7 @@ import { RarcCode } from './entities/rarc-code.entity';
 import { EncounterClaim } from '../billing/entities/encounter-claim.entity';
 import { ClaimLineItem } from '../billing/entities/claim-line-item.entity';
 import { BillingModule } from '../billing/billing.module';
+import { DenialsModule } from '../denials/denials.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { BillingModule } from '../billing/billing.module';
       ClaimLineItem,
     ]),
     BillingModule,
+    forwardRef(() => DenialsModule),
   ],
   controllers: [RemittanceController],
   providers: [RemittanceService, RemittanceSeedService, X12Parser835],

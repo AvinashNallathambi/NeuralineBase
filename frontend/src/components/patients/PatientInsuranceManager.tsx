@@ -3,6 +3,7 @@ import {
   Card,
   Button,
   Modal,
+  Drawer,
   Form,
   Input,
   Select,
@@ -19,6 +20,8 @@ import {
   Divider,
   Tooltip,
   Typography,
+  Row,
+  Col,
 } from 'antd';
 import {
   PlusOutlined,
@@ -386,11 +389,11 @@ export function PatientInsuranceManager({
         />
       )}
 
-      <Modal
+      <Drawer
         title={editingInsurance ? 'Edit Insurance Policy' : 'Add Insurance Policy'}
         open={modalVisible}
         onOk={handleSubmit}
-        onCancel={() => setModalVisible(false)}
+        onClose={() => setModalVisible(false)}
         width={720}
         okText={editingInsurance ? 'Update' : 'Add'}
         destroyOnClose
@@ -448,7 +451,7 @@ export function PatientInsuranceManager({
             </>
           )}
 
-          <Form form={form} layout="vertical" size="small">
+          <Form form={form} layout="vertical">
             <Form.Item label="Insurance Payer" name="insurancePayerId" rules={[{ required: true, message: 'Select a payer' }]}>
               <Select
                 showSearch
@@ -471,82 +474,104 @@ export function PatientInsuranceManager({
               />
             </Form.Item>
 
-            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
-              <Form.Item
-                label="Policy Number"
-                name="policyNumber"
-                rules={[{ required: true, message: 'Required' }]}
-                style={{ width: '50%', paddingRight: 8 }}
-              >
-                <Input placeholder="Member ID / Policy #" />
-              </Form.Item>
-              <Form.Item label="Group Number" name="groupNumber" style={{ width: '50%' }}>
-                <Input placeholder="Group #" />
-              </Form.Item>
-            </Space.Compact>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  label="Policy Number"
+                  name="policyNumber"
+                  rules={[{ required: true, message: 'Required' }]}
+                >
+                  <Input placeholder="Member ID / Policy #" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Group Number" name="groupNumber">
+                  <Input placeholder="Group #" />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Divider orientation="left" plain>Subscriber Information</Divider>
 
-            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
-              <Form.Item
-                label="Subscriber Name"
-                name="subscriberName"
-                rules={[{ required: true, message: 'Required' }]}
-                style={{ width: '50%', paddingRight: 8 }}
-              >
-                <Input placeholder="Last, First" />
-              </Form.Item>
-              <Form.Item label="Relationship" name="subscriberRelation" style={{ width: '50%' }}>
-                <Select
-                  options={[
-                    { value: 'self', label: 'Self' },
-                    { value: 'spouse', label: 'Spouse' },
-                    { value: 'child', label: 'Child' },
-                    { value: 'other', label: 'Other' },
-                  ]}
-                />
-              </Form.Item>
-            </Space.Compact>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item
+                  label="Subscriber Name"
+                  name="subscriberName"
+                  rules={[{ required: true, message: 'Required' }]}
+                >
+                  <Input placeholder="Last, First" />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Relationship" name="subscriberRelation">
+                  <Select
+                    options={[
+                      { value: 'self', label: 'Self' },
+                      { value: 'spouse', label: 'Spouse' },
+                      { value: 'child', label: 'Child' },
+                      { value: 'other', label: 'Other' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
 
-            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
-              <Form.Item label="Subscriber DOB" name="subscriberDob" style={{ width: '33%', paddingRight: 8 }}>
-                <DatePicker style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item label="Subscriber SSN" name="subscriberSsn" style={{ width: '33%', paddingRight: 8 }}>
-                <Input placeholder="XXX-XX-XXXX" />
-              </Form.Item>
-              <Form.Item label="Authorization #" name="authorizationNumber" style={{ width: '34%' }}>
-                <Input placeholder="Auth #" />
-              </Form.Item>
-            </Space.Compact>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item label="Subscriber DOB" name="subscriberDob">
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Subscriber SSN" name="subscriberSsn">
+                  <Input placeholder="XXX-XX-XXXX" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Authorization #" name="authorizationNumber">
+                  <Input placeholder="Auth #" />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Divider orientation="left" plain>Coverage Dates</Divider>
 
-            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
-              <Form.Item label="Effective Date" name="effectiveDate" style={{ width: '50%', paddingRight: 8 }}>
-                <DatePicker style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item label="Expiration Date" name="expirationDate" style={{ width: '50%' }}>
-                <DatePicker style={{ width: '100%' }} />
-              </Form.Item>
-            </Space.Compact>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Form.Item label="Effective Date" name="effectiveDate">
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Expiration Date" name="expirationDate">
+                  <DatePicker style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Divider orientation="left" plain>Financial Details (Optional)</Divider>
 
-            <Space.Compact style={{ width: '100%' }}>
-              <Form.Item label="Copay ($)" name="copayAmount" style={{ width: '33%', paddingRight: 8 }}>
-                <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
-              </Form.Item>
-              <Form.Item label="Deductible ($)" name="deductibleAmount" style={{ width: '33%', paddingRight: 8 }}>
-                <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
-              </Form.Item>
-              <Form.Item label="Coinsurance (%)" name="coinsurancePercentage" style={{ width: '34%' }}>
-                <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="0" />
-              </Form.Item>
-            </Space.Compact>
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item label="Copay ($)" name="copayAmount">
+                  <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Deductible ($)" name="deductibleAmount">
+                  <InputNumber min={0} style={{ width: '100%' }} placeholder="0.00" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item label="Coinsurance (%)" name="coinsurancePercentage">
+                  <InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="0" />
+                </Form.Item>
+              </Col>
+            </Row>
           </Form>
         </Spin>
-      </Modal>
+      </Drawer>
     </Card>
   );
 }

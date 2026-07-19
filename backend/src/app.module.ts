@@ -1,7 +1,11 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import Redis from 'ioredis';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PatientsModule } from './modules/patients/patients.module';
@@ -24,6 +28,7 @@ import { SuperbillsModule } from './modules/superbills/superbills.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { IcdModule } from './modules/icd/icd.module';
 import { CptModule } from './modules/cpt/cpt.module';
+import { EligibilityModule } from './modules/eligibility/eligibility.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MedicationsModule } from './modules/medications/medications.module';
 import { PharmaciesModule } from './modules/pharmacies/pharmacies.module';
@@ -31,7 +36,9 @@ import { ProvidersModule } from './modules/providers/providers.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { TrialsModule } from './modules/trials/trials.module';
+import { HealthModule } from './modules/health/health.module';
 import { CommonModule } from './common/common.module';
+import { RedisModule, REDIS_CLIENT } from './common/redis/redis.module';
 import { EncryptionService } from './common/services/encryption.service';
 import { HipaaAuditService } from './common/services/hipaa-audit.service';
 import { PasswordPolicyService } from './common/services/password-policy.service';
@@ -83,6 +90,11 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     // Global common services (TenantWipeService, EncryptionService, etc.)
     CommonModule,
 
+    // Shared Redis client (global) — used by TokenBlacklistService and
+    // future Redis-backed features. Bull still manages its own internal
+    // client via BullModule below.
+    RedisModule,
+
     // Redis / Bull queue
     BullModule.forRootAsync({
       imports: [ConfigModule],
@@ -93,6 +105,26 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
           port: configService.get<number>('REDIS_PORT', 6379),
           password: configService.get<string>('REDIS_PASSWORD', ''),
         },
+      }),
+    }),
+
+    // HIPAA: Distributed rate limiting via @nestjs/throttler backed by Redis.
+    // All backend instances share the same counters, so rate limits are
+    // enforced globally (not per-instance). This prevents brute-force attacks
+    // from bypassing limits by hitting different replicas behind a load balancer.
+    // The shared REDIS_CLIENT is injected so we don't open a second connection.
+    ThrottlerModule.forRootAsync({
+      imports: [RedisModule],
+      inject: [REDIS_CLIENT, ConfigService],
+      useFactory: (redis: Redis, configService: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: configService.get<number>('THROTTLE_TTL', 60) * 1000,
+            limit: configService.get<number>('THROTTLE_LIMIT', 100),
+          },
+        ],
+        storage: new ThrottlerStorageRedisService(redis),
       }),
     }),
 
@@ -119,6 +151,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     WorkflowModule,
     IcdModule,
     CptModule,
+    EligibilityModule,
     IntegrationsModule,
     MedicationsModule,
     PharmaciesModule,
@@ -126,6 +159,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     MessagingModule,
     SubscriptionsModule,
     TrialsModule,
+    HealthModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules
@@ -133,6 +167,10 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     HipaaAuditService,
     PasswordPolicyService,
     TenantWipeService,
+    // HIPAA: Global rate-limit guard — enforces @nestjs/throttler limits on
+    // every endpoint by default. Use @SkipThrottle() to opt out of specific
+    // routes, or @Throttle() to apply stricter limits to sensitive endpoints.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
   exports: [EncryptionService, HipaaAuditService, PasswordPolicyService, TenantWipeService],
 })

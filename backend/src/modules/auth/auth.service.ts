@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from "uuid";
 import { PasswordPolicyService } from "../../common/services/password-policy.service";
 import { UsersService } from "../users/users.service";
 import { User } from "../users/entities/user.entity";
+import { TokenBlacklistService, RevocationContext } from "./token-blacklist.service";
 
 export interface UserRecord {
   id: string;
@@ -58,8 +59,9 @@ export class AuthService implements OnModuleInit {
   private rsaPrivateKey!: crypto.KeyObject;
   private rsaPublicKeyPem!: string;
 
-  // HIPAA: Token blacklist (production should use Redis)
-  private readonly tokenBlacklist = new Set<string>();
+  // HIPAA: Token blacklist — backed by Redis via TokenBlacklistService so
+  // revocation is shared across all backend instances and survives restarts.
+  // (Previously an in-process Set<string>; see token-blacklist.service.ts.)
 
   // HIPAA: Account lockout – max attempts before lockout
   private readonly MAX_LOGIN_ATTEMPTS = 5;
@@ -71,6 +73,7 @@ export class AuthService implements OnModuleInit {
     private readonly configService: ConfigService,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly usersService: UsersService,
+    private readonly tokenBlacklist: TokenBlacklistService,
   ) {}
 
   onModuleInit() {
@@ -132,12 +135,12 @@ export class AuthService implements OnModuleInit {
     const user = await this.findUserByEmail(email);
 
     if (!user) {
-      this.recordFailedLogin(email);
+      await this.recordFailedLogin(email);
       throw new UnauthorizedException("Invalid credentials");
     }
     const isPasswordValid = await bcrypt.compare(actualPassword, user.password);
     if (!isPasswordValid) {
-      this.recordFailedLogin(email);
+      await this.recordFailedLogin(email, user.id);
       throw new UnauthorizedException("Invalid credentials");
     }
 
@@ -238,8 +241,8 @@ export class AuthService implements OnModuleInit {
         throw new UnauthorizedException("Invalid token type");
       }
 
-      // HIPAA: Verify token is not blacklisted
-      if (this.tokenBlacklist.has(refreshToken)) {
+      // HIPAA: Verify token is not blacklisted (Redis-backed, shared across instances)
+      if (await this.tokenBlacklist.isRevoked(refreshToken)) {
         throw new UnauthorizedException("Token has been revoked");
       }
 
@@ -260,6 +263,7 @@ export class AuthService implements OnModuleInit {
    */
   async enableMfa(
     userId: string,
+    context?: RevocationContext,
   ): Promise<{ secret: string; qrCodeUrl: string }> {
     const user = await this.findUserById(userId);
     if (!user) {
@@ -277,6 +281,19 @@ export class AuthService implements OnModuleInit {
 
     // TODO: Save secret to user record in database
     this.logger.log(`MFA enabled for user ${userId}`);
+
+    // HIPAA §164.312(a)(2)(iii) Automatic Logoff:
+    // Revoke all existing sessions after MFA is enabled so the user must
+    // re-authenticate with MFA on all devices. This ensures the new MFA
+    // requirement is enforced immediately, not just on next token refresh.
+    await this.tokenBlacklist.revokeAllForUser(userId, {
+      ...context,
+      userId,
+      userEmail: user.email,
+      userRole: user.role,
+      tenantId: user.tenantId,
+      reason: "mfa_enabled",
+    });
 
     return { secret, qrCodeUrl };
   }
@@ -315,10 +332,20 @@ export class AuthService implements OnModuleInit {
   async logout(
     userId: string,
     refreshToken?: string,
+    context?: RevocationContext,
   ): Promise<{ message: string }> {
-    // HIPAA: Blacklist the refresh token so it cannot be reused
+    // HIPAA: Blacklist the refresh token so it cannot be reused.
+    // TTL is derived from the JWT's own `exp` claim so Redis auto-purges
+    // the entry once the token would have expired naturally.
     if (refreshToken) {
-      this.tokenBlacklist.add(refreshToken);
+      const expSeconds = this.decodeTokenExp(refreshToken);
+      if (expSeconds !== null) {
+        await this.tokenBlacklist.revoke(refreshToken, expSeconds, {
+          ...context,
+          userId,
+          reason: "user_logout",
+        });
+      }
     }
     this.logger.log(`User ${userId} logged out`);
     return { message: "Logged out successfully" };
@@ -350,6 +377,7 @@ export class AuthService implements OnModuleInit {
   async resetPassword(
     token: string,
     newPassword: string,
+    context?: RevocationContext,
   ): Promise<{ message: string }> {
     // TODO: Validate token from database and check expiry
     if (!token) {
@@ -367,10 +395,47 @@ export class AuthService implements OnModuleInit {
 
     void hashedPassword; // placeholder until DB integration
 
+    // HIPAA §164.312(a)(2)(iii) Automatic Logoff:
+    // Revoke ALL existing sessions for the user after a password reset,
+    // forcing re-authentication with the new password. Any sessions that
+    // were active (or potentially compromised) before the reset are cut off.
+    // TODO: Once token validation is implemented, pass the actual userId here.
+    // For now, if context.userId is provided (e.g. from a pre-validated flow),
+    // we revoke all sessions.
+    if (context?.userId) {
+      await this.tokenBlacklist.revokeAllForUser(context.userId, {
+        ...context,
+        reason: "password_reset",
+      });
+    }
+
     return { message: "Password has been reset successfully" };
   }
 
   // ─── Private helpers ─────────────────────────────────────────────
+
+  /**
+   * Decode a JWT's `exp` claim (seconds since epoch) WITHOUT verifying the
+   * signature. Used by `logout` to derive the Redis TTL for the blacklist
+   * entry. Returns null if the token is malformed or has no `exp`.
+   *
+   * Safety: this never trusts the token for authentication — it only reads
+   * a number used as a TTL. A forged `exp` would at worst set a wrong TTL
+   * on a blacklist entry for a token that wouldn't verify anyway.
+   */
+  private decodeTokenExp(token: string): number | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(
+        Buffer.from(parts[1], 'base64url').toString('utf8'),
+      ) as { exp?: unknown };
+      if (typeof payload.exp !== 'number') return null;
+      return payload.exp;
+    } catch {
+      return null;
+    }
+  }
 
   private generateTokens(user: UserRecord): {
     accessToken: string;
@@ -514,7 +579,7 @@ export class AuthService implements OnModuleInit {
   }
 
   /** Record a failed login and lock the account if threshold exceeded. */
-  private recordFailedLogin(email: string): void {
+  private async recordFailedLogin(email: string, userId?: string): Promise<void> {
     const attempt = this.loginAttempts.get(email) || {
       count: 0,
       lastAttempt: 0,
@@ -529,6 +594,19 @@ export class AuthService implements OnModuleInit {
       this.logger.warn(
         `HIPAA: Account locked for email hash ${this.hashEmail(email)} after ${attempt.count} failed attempts`,
       );
+
+      // HIPAA §164.312(a)(2)(iii) Automatic Logoff:
+      // When an account is locked due to repeated failed login attempts
+      // (potential brute-force attack), revoke ALL existing sessions for
+      // the user. This cuts off an attacker who may have obtained a valid
+      // token through other means, and forces the legitimate user to
+      // re-authenticate after the lockout period expires.
+      if (userId) {
+        await this.tokenBlacklist.revokeAllForUser(userId, {
+          userId,
+          reason: "account_lockout",
+        });
+      }
     }
 
     this.loginAttempts.set(email, attempt);

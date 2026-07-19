@@ -47,11 +47,24 @@ export interface ChangePlanResponse {
 }
 
 export interface SubscriptionWebhookEvent {
+  eventId: string;
   providerSubscriptionId: string;
   status: 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
   currentPeriodStart?: Date;
   currentPeriodEnd?: Date;
   trialEnd?: Date | null;
+  invoice?: {
+    id: string;
+    amount: number;
+    currency: string;
+    status: 'paid' | 'open' | 'failed' | 'uncollectible' | 'void';
+    hostedInvoiceUrl?: string | null;
+    paidAt?: Date | null;
+    failureReason?: string | null;
+    paymentMethodId?: string | null;
+    periodStart?: Date | null;
+    periodEnd?: Date | null;
+  } | null;
   rawEvent: Record<string, unknown>;
 }
 
@@ -167,7 +180,7 @@ export interface SubscriptionProvider {
   createSubscription(request: CreateSubscriptionRequest): Promise<CreateSubscriptionResponse>;
   cancelSubscription(request: CancelSubscriptionRequest): Promise<CancelSubscriptionResponse>;
   changePlan(request: ChangePlanRequest): Promise<ChangePlanResponse>;
-  parseWebhook(rawBody: string, signature: string): SubscriptionWebhookEvent;
+  parseWebhook(rawBody: string | Buffer, signature: string): SubscriptionWebhookEvent;
 
   // ── Payment method management (Phase 1, 3) ───────────────────────
   getPaymentMethods(request: GetPaymentMethodRequest): Promise<PaymentMethodDetails[]>;

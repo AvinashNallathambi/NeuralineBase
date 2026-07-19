@@ -27,6 +27,7 @@ import { BillingModule } from '../billing/billing.module';
 import { RemittanceModule } from '../remittance/remittance.module';
 import { AiModule } from '../ai/ai.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
         },
       }),
     }),
+    AuthModule,
     AppointmentsModule,
     PrescriptionsModule,
     LaboratoryModule,

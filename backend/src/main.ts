@@ -8,41 +8,21 @@ import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { AuditInterceptor } from "./common/interceptors/audit.interceptor";
 import { TenantInterceptor } from "./common/interceptors/tenant.interceptor";
-import { Request, Response, NextFunction } from "express";
+import { configureBodyParserWithRawBody } from "./common/middleware/webhook-body-parser.config";
 
-// ── HIPAA: Simple in-memory rate limiter ────────────────────────
-// Production should use @nestjs/throttler with Redis backing.
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
-const RATE_LIMIT_MAX = 100; // max requests per window
-
-function rateLimiter(req: Request, res: Response, next: NextFunction): void {
-  const key = req.ip || req.socket.remoteAddress || "unknown";
-  const now = Date.now();
-  const entry = rateLimitStore.get(key);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimitStore.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return next();
-  }
-
-  entry.count++;
-  if (entry.count > RATE_LIMIT_MAX) {
-    res.status(429).json({
-      statusCode: 429,
-      message: "Too many requests – please try again later",
-    });
-    return;
-  }
-  next();
-}
+// HIPAA: Rate limiting is now handled globally by @nestjs/throttler with
+// Redis-backed storage (see AppModule). The previous in-memory rateLimiter
+// was per-instance only and did not share counters across replicas.
 
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
 
   // HIPAA: Reduce log verbosity in production to avoid PHI leakage
   const isProd = process.env.NODE_ENV === "production";
+  // Disable default body parser so we can install a custom one that captures
+  // raw body bytes for Stripe webhook signature verification.
   const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
     logger: isProd
       ? ["error", "warn", "log"]
       : ["error", "warn", "log", "debug", "verbose"],
@@ -80,12 +60,15 @@ async function bootstrap() {
     allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID"],
   });
 
+  // Custom body parser with raw body capture (required for Stripe webhooks)
+  configureBodyParserWithRawBody(app);
+
   // Security
   app.use(helmet());
   app.use(compression());
 
-  // HIPAA: Rate limiting
-  app.use(rateLimiter);
+  // HIPAA: Rate limiting is now handled by the global ThrottlerGuard
+  // (registered in AppModule via APP_GUARD) with Redis-backed storage.
 
   // Global pipes
   app.useGlobalPipes(

@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Stripe from 'stripe';
 import {
   SubscriptionProvider,
   CreateSubscriptionRequest,
@@ -28,7 +29,10 @@ import {
 /**
  * Stripe subscription provider.
  *
- * Uses the Stripe REST API directly via `fetch` (no SDK dependency).
+ * Uses the Stripe REST API directly via `fetch` for most calls (keeps SDK out
+ * of the request path) but imports the official `stripe` SDK for webhook
+ * signature verification, which is the only safe way to validate webhooks.
+ *
  * Activate by setting STRIPE_API_KEY in .env. Without a key, the module
  * falls back to MockSubscriptionProvider.
  *
@@ -47,10 +51,14 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
   private readonly apiKey: string;
   private readonly webhookSecret: string;
   private readonly baseUrl = 'https://api.stripe.com/v1';
+  private readonly stripeSdk: Stripe | null = null;
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('STRIPE_API_KEY', '');
     this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET', '');
+    if (this.apiKey) {
+      this.stripeSdk = new Stripe(this.apiKey, { apiVersion: '2024-06-20' as any });
+    }
   }
 
   async createSubscription(request: CreateSubscriptionRequest): Promise<CreateSubscriptionResponse> {
@@ -175,9 +183,16 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
     const params = new URLSearchParams();
     params.append(`items[0][id]`, itemId);
     params.append(`items[0][price]`, request.newStripePriceId);
+
+    // Explicit proration behavior:
+    // - Upgrades: create prorations (customer pays difference now)
+    // - Downgrades: no prorations (difference credited to account balance)
     if (request.prorate === false) {
       params.append('proration_behavior', 'none');
+    } else if (request.prorate === true) {
+      params.append('proration_behavior', 'create_prorations');
     }
+    // If prorate is undefined, let Stripe use its default (create_prorations)
 
     const response = await fetch(
       `${this.baseUrl}/subscriptions/${request.providerSubscriptionId}`,
@@ -207,13 +222,29 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
     };
   }
 
-  parseWebhook(rawBody: string, signature: string): SubscriptionWebhookEvent {
-    if (this.webhookSecret && !signature) {
+  parseWebhook(rawBody: string | Buffer, signature: string): SubscriptionWebhookEvent {
+    if (!this.webhookSecret) {
+      throw new BadRequestException(
+        'STRIPE_WEBHOOK_SECRET is not configured. Webhooks cannot be verified.',
+      );
+    }
+    if (!signature) {
       throw new BadRequestException('Missing Stripe-Signature header');
     }
+    if (!this.stripeSdk) {
+      throw new BadRequestException('Stripe SDK not initialized — missing STRIPE_API_KEY');
+    }
 
-    const event = JSON.parse(rawBody) as Record<string, any>;
-    const obj = event.data?.object ?? {};
+    // Verify webhook signature using the official Stripe SDK
+    let event: Stripe.Event;
+    try {
+      event = this.stripeSdk.webhooks.constructEvent(rawBody, signature, this.webhookSecret);
+    } catch (err: any) {
+      this.logger.error(`Webhook signature verification failed: ${err.message}`);
+      throw new BadRequestException(`Invalid webhook signature: ${err.message}`);
+    }
+
+    const obj = event.data?.object as Record<string, any> ?? {};
     const eventType = (event.type ?? '').toString();
 
     let status: SubscriptionWebhookEvent['status'] = 'active';
@@ -227,8 +258,20 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
       status = 'trialing';
     }
 
+    // Extract invoice data from subscription.latest_invoice or invoice object
+    const invoiceObj = this.extractInvoice(event, obj);
+
+    // For invoice events, the subscription ID is in obj.subscription, not obj.id
+    let providerSubscriptionId = obj.id ?? '';
+    if (event.type?.startsWith('invoice.')) {
+      providerSubscriptionId = typeof obj.subscription === 'string'
+        ? obj.subscription
+        : (obj.subscription?.id ?? obj.id ?? '');
+    }
+
     return {
-      providerSubscriptionId: obj.id ?? '',
+      eventId: event.id,
+      providerSubscriptionId,
       status,
       currentPeriodStart: obj.current_period_start
         ? new Date(obj.current_period_start * 1000)
@@ -237,7 +280,77 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
         ? new Date(obj.current_period_end * 1000)
         : undefined,
       trialEnd: obj.trial_end ? new Date(obj.trial_end * 1000) : null,
-      rawEvent: event,
+      invoice: invoiceObj,
+      rawEvent: event as any,
+    };
+  }
+
+  private extractInvoice(
+    event: Stripe.Event,
+    obj: Record<string, any>,
+  ): SubscriptionWebhookEvent['invoice'] {
+    let invoice: Record<string, any> | undefined;
+
+    if (event.type?.startsWith('invoice.')) {
+      invoice = obj;
+    } else if (obj.latest_invoice) {
+      if (typeof obj.latest_invoice === 'object') {
+        invoice = obj.latest_invoice;
+      }
+    }
+
+    if (!invoice) return null;
+
+    const amount = (invoice.total ?? 0) / 100;
+    const currency = invoice.currency ?? 'usd';
+
+    let invoiceStatus: 'paid' | 'open' | 'failed' | 'uncollectible' | 'void' = 'open';
+    switch (invoice.status) {
+      case 'paid':
+        invoiceStatus = 'paid';
+        break;
+      case 'open':
+        invoiceStatus = 'open';
+        break;
+      case 'uncollectible':
+        invoiceStatus = 'uncollectible';
+        break;
+      case 'void':
+        invoiceStatus = 'void';
+        break;
+      default:
+        invoiceStatus = 'open';
+    }
+    if (event.type === 'invoice.payment_failed') {
+      invoiceStatus = 'failed';
+    }
+
+    const periodStart = invoice.period_start
+      ? new Date(invoice.period_start * 1000)
+      : undefined;
+    const periodEnd = invoice.period_end
+      ? new Date(invoice.period_end * 1000)
+      : undefined;
+
+    return {
+      id: invoice.id,
+      amount,
+      currency,
+      status: invoiceStatus,
+      hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+      paidAt: invoice.status === 'paid' && invoice.created
+        ? new Date(invoice.created * 1000)
+        : null,
+      failureReason: invoice.last_finalization_error?.message
+        ? String(invoice.last_finalization_error.message)
+        : null,
+      paymentMethodId: invoice.default_payment_method
+        ? (typeof invoice.default_payment_method === 'string'
+            ? invoice.default_payment_method
+            : invoice.default_payment_method.id)
+        : null,
+      periodStart,
+      periodEnd,
     };
   }
 

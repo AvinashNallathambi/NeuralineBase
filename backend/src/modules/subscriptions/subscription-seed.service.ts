@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { SubscriptionPlan, PlanTier } from './entities/subscription-plan.entity';
 import {
@@ -28,6 +29,7 @@ export class SubscriptionSeedService implements OnModuleInit {
     private planRepository: Repository<SubscriptionPlan>,
     @InjectRepository(Subscription)
     private subscriptionRepository: Repository<Subscription>,
+    private configService: ConfigService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -54,6 +56,15 @@ export class SubscriptionSeedService implements OnModuleInit {
   private async seedPlans(): Promise<boolean> {
     this.logger.log('Seeding default subscription plans...');
 
+    // Load Stripe Price IDs from environment if configured. These are required
+    // for real Stripe subscriptions; in mock mode they can be left empty.
+    const stripePriceSoloMonthly = this.configService.get<string>('STRIPE_PRICE_SOLO_MONTHLY', '');
+    const stripePriceSoloAnnual = this.configService.get<string>('STRIPE_PRICE_SOLO_ANNUAL', '');
+    const stripePriceProfessionalMonthly = this.configService.get<string>('STRIPE_PRICE_PROFESSIONAL_MONTHLY', '');
+    const stripePriceProfessionalAnnual = this.configService.get<string>('STRIPE_PRICE_PROFESSIONAL_ANNUAL', '');
+    const stripePriceEnterpriseMonthly = this.configService.get<string>('STRIPE_PRICE_ENTERPRISE_MONTHLY', '');
+    const stripePriceEnterpriseAnnual = this.configService.get<string>('STRIPE_PRICE_ENTERPRISE_ANNUAL', '');
+
     const plans: Partial<SubscriptionPlan>[] = [
       {
         tier: PlanTier.SOLO,
@@ -61,6 +72,8 @@ export class SubscriptionSeedService implements OnModuleInit {
         description: 'For solo practitioners & cash-pay practices',
         priceMonthlyCents: 9900,
         priceAnnualCents: 8400,
+        stripePriceMonthlyId: stripePriceSoloMonthly || null,
+        stripePriceAnnualId: stripePriceSoloAnnual || null,
         maxProviders: 1,
         maxPatients: null,
         maxLocations: 1,
@@ -77,6 +90,8 @@ export class SubscriptionSeedService implements OnModuleInit {
         description: 'For growing clinics (2–10 providers)',
         priceMonthlyCents: 24900,
         priceAnnualCents: 21200,
+        stripePriceMonthlyId: stripePriceProfessionalMonthly || null,
+        stripePriceAnnualId: stripePriceProfessionalAnnual || null,
         maxProviders: 25,
         maxPatients: null,
         maxLocations: 5,
@@ -93,6 +108,8 @@ export class SubscriptionSeedService implements OnModuleInit {
         description: 'For multi-site practices & health systems',
         priceMonthlyCents: 49900,
         priceAnnualCents: 42400,
+        stripePriceMonthlyId: stripePriceEnterpriseMonthly || null,
+        stripePriceAnnualId: stripePriceEnterpriseAnnual || null,
         maxProviders: null,
         maxPatients: null,
         maxLocations: null,

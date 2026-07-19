@@ -1,12 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { Appeal, AppealType, AppealStatus, AppealOutcome } from './entities/appeal.entity';
 import { AppealStatusHistory } from './entities/appeal-status-history.entity';
 import { AppealAiService, AppealGenerationInput } from './appeal-ai.service';
 import { DenialRecord, DenialWorklistStatus } from '../denials/entities/denial-record.entity';
 import { EncounterClaim } from '../billing/entities/encounter-claim.entity';
 import { ClaimLineItem } from '../billing/entities/claim-line-item.entity';
+import { UnderpaymentRecord, UnderpaymentStatus } from '../underpayments/entities/underpayment-record.entity';
 
 @Injectable()
 export class AppealsService {
@@ -23,6 +24,8 @@ export class AppealsService {
     private readonly claimRepository: Repository<EncounterClaim>,
     @InjectRepository(ClaimLineItem)
     private readonly lineItemRepository: Repository<ClaimLineItem>,
+    @InjectRepository(UnderpaymentRecord)
+    private readonly underpaymentRepository: Repository<UnderpaymentRecord>,
     private readonly appealAiService: AppealAiService,
   ) {}
 
@@ -42,11 +45,32 @@ export class AppealsService {
       }
     }
 
+    // Cross-reference underpayments: if there's an UnderpaymentRecord for
+    // the same claim that hasn't been resolved, link it to this appeal so
+    // staff can dispute both the denial and the underpayment together.
+    let linkedUnderpayment: UnderpaymentRecord | null = null;
+    if (denial.claimId) {
+      linkedUnderpayment = await this.underpaymentRepository.findOne({
+        where: {
+          tenantId,
+          claimId: denial.claimId,
+          status: Not(UnderpaymentStatus.RECOVERED),
+        },
+        order: { varianceAmount: 'DESC' },
+      });
+      if (linkedUnderpayment) {
+        this.logger.log(
+          `Appeal for denial ${denialId} linked to underpayment ${linkedUnderpayment.id} (variance: $${linkedUnderpayment.varianceAmount})`,
+        );
+      }
+    }
+
     const appeal = new Appeal();
     appeal.tenantId = tenantId;
     appeal.denialId = denialId;
     appeal.claimId = denial.claimId || null;
     appeal.claimNumber = denial.claimNumber || claim?.claimNumber || null;
+    appeal.underpaymentId = linkedUnderpayment?.id || null;
     appeal.appealNumber = this.generateAppealNumber();
     appeal.appealType = AppealType.FIRST_LEVEL;
     appeal.status = AppealStatus.DRAFT;
@@ -59,6 +83,19 @@ export class AppealsService {
     appeal.deniedAmount = denial.deniedAmount;
     appeal.deadlineDate = denial.filingDeadline || null;
     appeal.supportingDocuments = [];
+    // If linked to an underpayment, include the variance amount in metadata
+    // so the appeal letter can reference both the denied and underpaid amounts.
+    if (linkedUnderpayment) {
+      appeal.metadata = {
+        linkedUnderpayment: {
+          id: linkedUnderpayment.id,
+          varianceAmount: linkedUnderpayment.varianceAmount,
+          expectedAmount: linkedUnderpayment.expectedAmount,
+          actualPaidAmount: linkedUnderpayment.actualPaidAmount,
+          cptCode: linkedUnderpayment.cptCode,
+        },
+      };
+    }
 
     const saved = await this.appealRepository.save(appeal);
 
@@ -66,8 +103,17 @@ export class AppealsService {
     denial.status = DenialWorklistStatus.APPEALED;
     await this.denialRepository.save(denial);
 
+    // If linked to an underpayment, mark it as disputed
+    if (linkedUnderpayment) {
+      linkedUnderpayment.status = UnderpaymentStatus.DISPUTED;
+      await this.underpaymentRepository.save(linkedUnderpayment);
+    }
+
     // Create status history entry
-    await this.addStatusHistory(saved.id, AppealStatus.DRAFT, null, null, 'Appeal created from denial');
+    const historyNote = linkedUnderpayment
+      ? `Appeal created from denial (linked underpayment ${linkedUnderpayment.id}, variance $${linkedUnderpayment.varianceAmount})`
+      : 'Appeal created from denial';
+    await this.addStatusHistory(saved.id, AppealStatus.DRAFT, null, null, historyNote);
 
     return saved;
   }
@@ -189,6 +235,19 @@ export class AppealsService {
         { id: appeal.denialId },
         { status: DenialWorklistStatus.RESOLVED, resolvedAt: new Date(), resolutionNotes: notes },
       );
+
+      // If this appeal was linked to an underpayment, mark it as recovered
+      if (appeal.underpaymentId) {
+        await this.underpaymentRepository.update(
+          { id: appeal.underpaymentId },
+          {
+            status: UnderpaymentStatus.RECOVERED,
+            recoveredAmount: recoveredAmount ?? null,
+            resolvedAt: new Date(),
+            resolutionNotes: notes || 'Recovered via appeal',
+          },
+        );
+      }
     }
 
     return appeal;

@@ -8,6 +8,7 @@ import { AppealStatusHistory } from './entities/appeal-status-history.entity';
 import { DenialRecord } from '../denials/entities/denial-record.entity';
 import { EncounterClaim } from '../billing/entities/encounter-claim.entity';
 import { ClaimLineItem } from '../billing/entities/claim-line-item.entity';
+import { UnderpaymentRecord } from '../underpayments/entities/underpayment-record.entity';
 import { AiModule } from '../ai/ai.module';
 import { DenialsModule } from '../denials/denials.module';
 
@@ -19,6 +20,7 @@ import { DenialsModule } from '../denials/denials.module';
       DenialRecord,
       EncounterClaim,
       ClaimLineItem,
+      UnderpaymentRecord,
     ]),
     AiModule,
     DenialsModule,

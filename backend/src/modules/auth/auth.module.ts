@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { TokenBlacklistService } from './token-blacklist.service';
 import { UsersModule } from '../users/users.module';
 import { PasswordPolicyService } from '../../common/services/password-policy.service';
 
@@ -26,7 +27,7 @@ import { PasswordPolicyService } from '../../common/services/password-policy.ser
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard, PasswordPolicyService],
-  exports: [AuthService, JwtAuthGuard, RolesGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, RolesGuard, PasswordPolicyService, TokenBlacklistService],
+  exports: [AuthService, JwtAuthGuard, RolesGuard, TokenBlacklistService],
 })
 export class AuthModule {}

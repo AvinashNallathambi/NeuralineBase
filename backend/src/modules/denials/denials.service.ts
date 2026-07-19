@@ -5,6 +5,7 @@ import { DenialRecord, DenialRootCause, DenialPriority, DenialWorklistStatus } f
 import { DenialCategoryEngine } from './denial-category-engine';
 import { ClaimAdjustment } from '../remittance/entities/claim-adjustment.entity';
 import { RemittanceClaim } from '../remittance/entities/remittance-claim.entity';
+import { Remittance } from '../remittance/entities/remittance.entity';
 import { EncounterClaim } from '../billing/entities/encounter-claim.entity';
 import { CarcCode } from '../remittance/entities/carc-code.entity';
 import { RarcCode } from '../remittance/entities/rarc-code.entity';
@@ -20,6 +21,8 @@ export class DenialsService {
     private readonly adjustmentRepository: Repository<ClaimAdjustment>,
     @InjectRepository(RemittanceClaim)
     private readonly remittanceClaimRepository: Repository<RemittanceClaim>,
+    @InjectRepository(Remittance)
+    private readonly remittanceRepository: Repository<Remittance>,
     @InjectRepository(EncounterClaim)
     private readonly claimRepository: Repository<EncounterClaim>,
     @InjectRepository(CarcCode)
@@ -33,6 +36,13 @@ export class DenialsService {
 
   async generateFromRemittance(remittanceId: string, tenantId: string): Promise<number> {
     this.logger.log(`Generating denial records from remittance ${remittanceId}`);
+
+    // Load the remittance to get payer info (previously payerName was hardcoded to null)
+    const remittance = await this.remittanceRepository.findOne({
+      where: { id: remittanceId, tenantId },
+    });
+    const payerName = remittance?.payerName || null;
+    const payerId = remittance?.payerId || null;
 
     // Get all adjustments for this remittance's claims (excluding PR - patient responsibility)
     const remittanceClaims = await this.remittanceClaimRepository.find({
@@ -82,7 +92,9 @@ export class DenialsService {
         denial.adjustmentId = adj.id;
         denial.patientId = rc.patientId || claim?.patientId || null;
         denial.patientName = rc.patientName || claim?.patientName || null;
-        denial.payerName = null;
+        // FIX: populate payer info from the remittance (was hardcoded to null)
+        denial.payerName = payerName;
+        denial.payerId = payerId;
         denial.carcCode = adj.carcCode;
         denial.carcDescription = adj.carcDescription;
         denial.rarcCode = adj.rarcCode || null;

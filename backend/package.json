@@ -22,6 +22,7 @@
     "migration:run": "typeorm migration:run -d src/config/database.config.ts"
   },
   "dependencies": {
+    "@nest-lab/throttler-storage-redis": "^1.2.0",
     "@nestjs/bull": "^10.0.1",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",
@@ -31,6 +32,7 @@
     "@nestjs/platform-express": "^10.3.0",
     "@nestjs/platform-socket.io": "^10.3.0",
     "@nestjs/swagger": "^7.2.0",
+    "@nestjs/throttler": "^6.5.0",
     "@nestjs/typeorm": "^10.0.1",
     "@nestjs/websockets": "^10.3.0",
     "bcryptjs": "^2.4.3",
@@ -46,8 +48,10 @@
     "passport-jwt": "^4.0.1",
     "passport-local": "^1.0.0",
     "pg": "^8.11.3",
+    "raw-body": "^2.5.3",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
+    "stripe": "^22.3.2",
     "swagger-ui-express": "^5.0.0",
     "typeorm": "^0.3.19",
     "uuid": "^9.0.0"

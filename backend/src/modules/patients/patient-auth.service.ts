@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { Patient } from './entities/patient.entity';
+import { TokenBlacklistService, RevocationContext } from '../auth/token-blacklist.service';
 
 interface PatientTokenPayload {
   sub: string;
@@ -30,7 +31,7 @@ interface LoginAttempt {
 export class PatientAuthService {
   private readonly logger = new Logger(PatientAuthService.name);
   private readonly SALT_ROUNDS = 12;
-  private readonly tokenBlacklist = new Set<string>();
+  // HIPAA: Token blacklist — Redis-backed, shared across instances.
   private readonly MAX_LOGIN_ATTEMPTS = 5;
   private readonly LOCKOUT_DURATION_MS = 15 * 60 * 1000;
   private readonly loginAttempts = new Map<string, LoginAttempt>();
@@ -40,6 +41,7 @@ export class PatientAuthService {
     private readonly patientRepository: Repository<Patient>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly tokenBlacklist: TokenBlacklistService,
   ) {}
 
   async login(
@@ -59,13 +61,13 @@ export class PatientAuthService {
     });
 
     if (!patient || !patient.passwordHash || !patient.portalActive) {
-      this.recordFailedLogin(email);
+      await this.recordFailedLogin(email);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isPasswordValid = await bcrypt.compare(password, patient.passwordHash);
     if (!isPasswordValid) {
-      this.recordFailedLogin(email);
+      await this.recordFailedLogin(email, patient.id);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -125,7 +127,7 @@ export class PatientAuthService {
         throw new UnauthorizedException('Invalid token type');
       }
 
-      if (this.tokenBlacklist.has(refreshToken)) {
+      if (await this.tokenBlacklist.isRevoked(refreshToken)) {
         throw new UnauthorizedException('Token has been revoked');
       }
 
@@ -143,9 +145,19 @@ export class PatientAuthService {
     }
   }
 
-  async logout(patientId: string, refreshToken?: string): Promise<{ message: string }> {
+  async logout(
+    patientId: string,
+    refreshToken?: string,
+    context?: RevocationContext,
+  ): Promise<{ message: string }> {
     if (refreshToken) {
-      this.tokenBlacklist.add(refreshToken);
+      const expSeconds = this.decodeTokenExp(refreshToken);
+      if (expSeconds !== null) {
+        await this.tokenBlacklist.revoke(refreshToken, expSeconds, {
+          ...context,
+          userId: patientId,
+        });
+      }
     }
     this.logger.log(`Patient ${patientId} logged out`);
     return { message: 'Logged out successfully' };
@@ -173,7 +185,11 @@ export class PatientAuthService {
     };
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    context?: RevocationContext,
+  ): Promise<{ message: string }> {
     const patient = await this.patientRepository.findOne({
       where: { passwordResetToken: token },
     });
@@ -190,6 +206,17 @@ export class PatientAuthService {
     });
 
     this.logger.log(`Password reset completed for patient ${patient.id}`);
+
+    // HIPAA §164.312(a)(2)(iii) Automatic Logoff:
+    // Revoke ALL existing patient portal sessions after password reset
+    // so any compromised sessions are immediately cut off.
+    await this.tokenBlacklist.revokeAllForUser(patient.id, {
+      ...context,
+      userId: patient.id,
+      tenantId: patient.tenantId,
+      reason: 'patient_password_reset',
+    });
+
     return { message: 'Password has been reset successfully' };
   }
 
@@ -207,6 +234,25 @@ export class PatientAuthService {
   }
 
   // ─── Private helpers ───────────────────────────────────────────
+
+  /**
+   * Decode a JWT's `exp` claim (seconds since epoch) WITHOUT verifying the
+   * signature. Used by `logout` to derive the Redis TTL for the blacklist
+   * entry. Returns null if the token is malformed or has no `exp`.
+   */
+  private decodeTokenExp(token: string): number | null {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(
+        Buffer.from(parts[1], 'base64url').toString('utf8'),
+      ) as { exp?: unknown };
+      if (typeof payload.exp !== 'number') return null;
+      return payload.exp;
+    } catch {
+      return null;
+    }
+  }
 
   private generateTokens(patient: Patient): { accessToken: string; refreshToken: string } {
     const payload = {
@@ -257,7 +303,7 @@ export class PatientAuthService {
     }
   }
 
-  private recordFailedLogin(email: string): void {
+  private async recordFailedLogin(email: string, userId?: string): Promise<void> {
     const attempt = this.loginAttempts.get(email) || { count: 0, lastAttempt: 0, lockedUntil: null };
     attempt.count += 1;
     attempt.lastAttempt = Date.now();
@@ -265,6 +311,14 @@ export class PatientAuthService {
     if (attempt.count >= this.MAX_LOGIN_ATTEMPTS) {
       attempt.lockedUntil = Date.now() + this.LOCKOUT_DURATION_MS;
       this.logger.warn(`HIPAA: Patient account locked after ${attempt.count} failed attempts`);
+
+      // HIPAA §164.312(a)(2)(iii): Revoke all sessions on account lockout
+      if (userId) {
+        await this.tokenBlacklist.revokeAllForUser(userId, {
+          userId,
+          reason: 'patient_account_lockout',
+        });
+      }
     }
 
     this.loginAttempts.set(email, attempt);

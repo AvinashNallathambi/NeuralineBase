@@ -68,6 +68,7 @@ export const CreateEligibilityVerificationModal: React.FC<Props> = ({
 
   return (
     <Drawer
+     size={720}
       title="Verify Insurance Eligibility"
       open={open}
       onClose={onClose}

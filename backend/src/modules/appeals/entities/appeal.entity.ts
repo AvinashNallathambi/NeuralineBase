@@ -60,6 +60,13 @@ export class Appeal {
   @Column({ name: 'claim_number', type: 'varchar', length: 50, nullable: true })
   claimNumber!: string | null;
 
+  // Link to underpayment record (if this appeal is also disputing an underpayment
+  // on the same claim). Populated when an appeal is created from a denial that
+  // shares a claimId with an existing UnderpaymentRecord.
+  @Column({ name: 'underpayment_id', type: 'uuid', nullable: true })
+  @Index()
+  underpaymentId!: string | null;
+
   // Appeal info
   @Column({ name: 'appeal_number', type: 'varchar', length: 50, unique: true })
   appealNumber!: string;
