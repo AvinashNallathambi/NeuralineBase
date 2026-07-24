@@ -99,13 +99,24 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-          password: configService.get<string>('REDIS_PASSWORD', ''),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const isProduction =
+          configService.get<string>('NODE_ENV', 'development') === 'production';
+        const redisTlsEnv = configService.get<string>('REDIS_TLS', '');
+        const useTls =
+          redisTlsEnv !== ''
+            ? redisTlsEnv === 'true'
+            : isProduction;
+
+        return {
+          redis: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+            password: configService.get<string>('REDIS_PASSWORD', ''),
+            tls: useTls ? {} : undefined,
+          },
+        };
+      },
     }),
 
     // HIPAA: Distributed rate limiting via @nestjs/throttler backed by Redis.
