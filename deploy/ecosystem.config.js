@@ -26,6 +26,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 4000,
+        NODE_EXTRA_CA_CERTS: '/opt/neuraline/rds-ca-bundle.pem',
       },
       env_file: '.env',        // PM2 loads .env from this file
       error_file: '/var/log/neuraline/backend-error.log',
