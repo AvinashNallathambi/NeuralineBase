@@ -50,11 +50,9 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-neuraline_redis_dev}
-      - OPENSEARCH_NODE=http://opensearch:9200
       - WHISPER_SERVICE_URL=http://whisper-service:8001
       - OLLAMA_URL=http://ollama:11434
       - OLLAMA_MODEL=qwen2:1.5b
-      - CHROMA_URL=http://chromadb:8000
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
       # HIPAA: Encryption key for PHI at rest (generate with: openssl rand -hex 32)
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:-}
@@ -115,45 +113,6 @@ services:
     restart: unless-stopped
 
   # ──────────────────────────────────────────────
-  # OpenSearch 2.x
-  # ──────────────────────────────────────────────
-  opensearch:
-    image: opensearchproject/opensearch:2.11.1
-    container_name: neuraline-opensearch
-    ports:
-      - '9200:9200'
-      - '9600:9600'
-    environment:
-      - discovery.type=single-node
-      # HIPAA NOTE: Security plugin is disabled for dev.
-      # In production, enable the security plugin and configure TLS.
-      - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-      - cluster.name=neuraline-cluster
-    volumes:
-      - opensearch-data:/usr/share/opensearch/data
-    networks:
-      - neuraline-network
-    restart: unless-stopped
-
-  # ──────────────────────────────────────────────
-  # OpenSearch Dashboards
-  # ──────────────────────────────────────────────
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:2.11.1
-    container_name: neuraline-opensearch-dashboards
-    ports:
-      - '5601:5601'
-    environment:
-      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
-      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
-    depends_on:
-      - opensearch
-    networks:
-      - neuraline-network
-    restart: unless-stopped
-
-  # ──────────────────────────────────────────────
   # Whisper STT – Python FastAPI + faster-whisper
   # ──────────────────────────────────────────────
   whisper-service:
@@ -187,22 +146,6 @@ services:
       - neuraline-network
     restart: unless-stopped
 
-  # ──────────────────────────────────────────────
-  # ChromaDB – Vector database for medical codes
-  # ──────────────────────────────────────────────
-  chromadb:
-    image: chromadb/chroma:latest
-    container_name: neuraline-chromadb
-    ports:
-      - '8000:8000'
-    volumes:
-      - chroma-data:/chroma/chroma
-    environment:
-      - ANONYMIZED_TELEMETRY=false
-    networks:
-      - neuraline-network
-    restart: unless-stopped
-
 # ──────────────────────────────────────────────
 # Networks
 # ──────────────────────────────────────────────
@@ -218,9 +161,5 @@ volumes:
     name: neuraline-postgres-data
   redis-data:
     name: neuraline-redis-data
-  opensearch-data:
-    name: neuraline-opensearch-data
   ollama-data:
     name: neuraline-ollama-data
-  chroma-data:
-    name: neuraline-chroma-data

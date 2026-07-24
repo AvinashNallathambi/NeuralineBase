@@ -1,11 +1,171 @@
 # Patient Portal Gap Analysis & Competitor Comparison
 
+> **⚠️ AUDIT UPDATE — July 19, 2026 (revised same-day after code-level validation)**
+> A full codebase audit was performed on July 19, 2026. **The original gap analysis below (dated January 2025) is severely outdated.** The portal is NOT "100% mock data" — it is **~85% functional and production-ready** with real API integration, separate JWT authentication, secure messaging, and AI features. The `AGENTS.md` documentation is accurate and should be treated as the source of truth.
+>
+> See **§0 — Audit Results (July 19, 2026)** below for the accurate current state. The original analysis is preserved in §1+ for historical reference.
+>
+> **July 19 validation pass:** Every claim in §0 was verified against the actual codebase. Five discrepancies were found and four have been fixed in this revision:
+> 1. **Notifications** was incorrectly marked as a "stub" — `NotificationsService` (277 lines) is fully implemented with email + SMS providers. Corrected in §0.2 row 8.
+> 2. **Telehealth backend** was incorrectly marked "FRONTEND_ONLY — no backend endpoint for generating video session tokens." The backend controller (`PatientPortalTelemedicineController` with `GET /patients/portal/telemedicine/sessions/:id/token`) and full Daily.co provider existed, but the `TelemedicineModule` was **empty** — controllers/service/gateway were never registered. Fixed: `telemedicine.module.ts` now wires up controllers, service, gateway, and provider (Daily.co when `DAILY_API_KEY` is set, mock provider otherwise). Corrected in §0.2 row 14.
+> 3. **Frontend telehealth wiring was broken** — `PortalVideoVisitPage` called `patientPortalService.getTelemedicineToken()` which did not exist, and the page was not in the router. Fixed: added `getTelemedicineToken` (plus `scanInsuranceCard` and `requestInsuranceUpdate`) to `patientPortalService.ts`, and routed the page at `/portal/video-visit/:sessionId` inside the patient portal layout.
+> 4. **Legacy mock portal was still routed** — `PatientPortalPage.tsx` (593 lines, `mockPatients[0]` = John Smith) was mounted at `/portal` inside the staff `MainLayout`, conflicting with the real patient portal routes. Fixed: removed the legacy route and its lazy import from `routes/index.tsx`. The file itself is retained as dead code for reference but is no longer reachable.
+> 5. **(Documentation only, no code change)** §0.2 row 14 wording corrected from "FRONTEND_ONLY" to "IMPLEMENTED" now that both backend and frontend are wired.
+
+---
+
+## 0. AUDIT RESULTS (July 19, 2026)
+
+### 0.1 Summary
+
+| Dimension | Original Doc (Jan 2025) | Actual State (July 19, 2026) |
+|---|---|---|
+| Portal data source | "100% mock data" | **Real API calls** via `patientPortalService`, `patientAiService`, `messagingService` |
+| Patient authentication | "Shared login" | **Separate JWT** (`patient-jwt` strategy, `PatientJwtAuthGuard`, `PatientLoginPage` at `/patient/login`) |
+| Secure messaging | "Completely missing" | **Fully implemented** (`MessagingModule` with patient + provider endpoints, conversation/message entities) |
+| Online bill pay | "Completely missing" | **Implemented** (`POST /patients/portal/invoices/:id/pay` + `PortalBillingPage` payment modal) |
+| Appointment self-scheduling | "Form only" | **Implemented** (`GET /patients/portal/appointments/available-slots` + `POST /patients/portal/appointments/request`) |
+| AI features | "Not built" | **5 AI endpoints implemented** (symptom checker, lab explainer, drug interactions, health education, visit questions) |
+| EOB viewing | "Completely missing" | **Implemented** (`GET /patients/portal/eobs` reads from remittance module) |
+| Insurance card scan | "Not built" | **Implemented** (AI OCR via `cardScanService.scanCard()`) |
+
+### 0.2 Feature-by-Feature Actual Status
+
+#### Critical Gaps (§3.1 of original doc) — Actual Status
+
+| # | Feature | Original Status | Actual Status (July 19) | Evidence |
+|---|---|---|---|---|
+| 1 | Real API integration (replace mock data) | ❌ 100% mock | **IMPLEMENTED** | All portal pages call real APIs via `patientPortalService` |
+| 2 | Secure messaging | ❌ No backend | **IMPLEMENTED** | `messaging.controller.ts` (184 lines) + `messaging.service.ts` (239 lines) + `PortalMessagesPage.tsx` |
+| 3 | Online bill pay | ❌ Not built | **IMPLEMENTED** | `POST /patients/portal/invoices/:id/pay` + `PortalBillingPage.tsx` |
+| 4 | Appointment self-scheduling | ⚠️ Form only | **IMPLEMENTED** | `GET /patients/portal/appointments/available-slots` + `POST /patients/portal/appointments/request` + `PortalAppointmentsPage.tsx` |
+| 5 | Prescription refill requests | ⚠️ Form only | **IMPLEMENTED** | `POST /patients/portal/prescriptions/:id/refill` + `PortalPrescriptionsPage.tsx` |
+| 6 | Lab results with reference ranges | ⚠️ Mock display | **IMPLEMENTED** | `GET /patients/portal/lab-results` returns tests with value, unit, referenceRange, flag |
+| 7 | Document storage & download | ❌ Hardcoded | **BACKEND_ONLY** | Insurance card scan exists; no general document storage API |
+| 8 | Notifications (SMS/email/push) | ❌ Empty stub | **BACKEND_READY** | `NotificationsService` (277 lines) is fully implemented with email (Resend/mock) + SMS (via IntegrationsService) providers. Portal already uses it for insurance-update requests. Gap: portal doesn't yet trigger notifications for appointment/refill/lab/message reminders. |
+| 9 | Patient authentication (separate JWT) | ❌ Shared login | **IMPLEMENTED** | Separate JWT strategy, `PatientLoginPage`, `PatientRoute` guard, `PatientPortalLayout` |
+| 10 | Mobile-responsive design | ⚠️ Partial | **IMPLEMENTED** | All pages use Ant Design responsive grid (xs/sm/md/lg) |
+
+#### High-Value Gaps (§3.2 of original doc) — Actual Status
+
+| # | Feature | Original Status | Actual Status (July 19) | Evidence |
+|---|---|---|---|---|
+| 11 | AI symptom checker / care navigation | ❌ Not built | **IMPLEMENTED** | `POST /patients/portal/ai/assess-symptoms` with urgencyLevel (self_care/schedule/urgent/emergency) |
+| 12 | AI lab result explanation | ❌ Not built | **IMPLEMENTED** | `POST /patients/portal/ai/explain-lab-result` with explanation, severity, recommendations |
+| 13 | AI medication interaction checking | ❌ Not built | **IMPLEMENTED** | `POST /patients/portal/ai/check-interactions` with severity levels |
+| 14 | Telehealth video visits from portal | ⚠️ UI stub | **IMPLEMENTED** | `PatientPortalTelemedicineController` exposes `GET /patients/portal/telemedicine/sessions/:id/token` (patient JWT). `TelemedicineModule` registers controller + service + WebSocket gateway + Daily.co/mock provider. Frontend `PortalVideoVisitPage` routed at `/portal/video-visit/:sessionId` and calls `patientPortalService.getTelemedicineToken()`. |
+| 15 | EOB/ERA viewing | ❌ Backend exists | **IMPLEMENTED** | `GET /patients/portal/eobs` returns EOB data from remittance module |
+| 16 | Pre-visit digital check-in | ❌ Not built | **MISSING** | No backend endpoint or frontend page |
+| 17 | Patient intake forms (digital) | ❌ Not built | **MISSING** | No form builder or intake form pages |
+| 18 | Health summary export (PDF/CCD/FHIR) | ❌ Not built | **MISSING** | No export endpoint |
+| 19 | After-visit summaries with care plans | ❌ Not built | **MISSING** | No AVS endpoint (blocked on W1 clinical unification — see master plan) |
+| 20 | Patient education content | ⚠️ 5 hardcoded | **IMPLEMENTED** | `POST /patients/portal/ai/health-education` generates personalized articles via LLM |
+
+#### Emerging/Future Gaps (§3.3 of original doc) — Actual Status
+
+| # | Feature | Original Status | Actual Status (July 19) | Evidence |
+|---|---|---|---|---|
+| 21 | AI care navigator (free-text reason for visit) | ❌ Not built | **IMPLEMENTED** | Symptom checker accepts free-text and routes to care pathways |
+| 22 | AI personalized health recommendations | ❌ Not built | **IMPLEMENTED** | Health education endpoint generates condition-specific recommendations |
+| 23 | Wearable/device integration | ❌ Not built | **MISSING** | No device integration module |
+| 24 | Remote patient monitoring | ❌ Not built | **MISSING** | No RPM module |
+| 25 | Medication adherence tracking | ❌ Not built | **MISSING** | No adherence tracking |
+| 26 | Proxy/caregiver access | ❌ Not built | **MISSING** | No proxy relationship management |
+| 27 | AI question generator for doctor visits | ❌ Not built | **IMPLEMENTED** | `POST /patients/portal/ai/visit-questions` with category and priority |
+| 28 | Group telehealth sessions | ❌ Not built | **MISSING** | No group session support |
+| 29 | Patient-reported outcomes (PROs) | ❌ Not built | **MISSING** | No PRO module |
+| 30 | Consent management (digital signatures) | ⚠️ Entity exists | **ENTITY_ONLY** | `PatientConsent` entity exists but no service/API endpoints |
+
+### 0.3 Backend Implementation Details
+
+**Patient Authentication** — `backend/src/modules/patients/`
+- `patient-auth.controller.ts` (161 lines): login, refresh, logout, forgot-password, reset-password, setup-account, me
+- `patient-auth.service.ts` (326 lines): bcrypt hashing (12 rounds), 5-attempt lockout (15 min), token blacklist, HIPAA auto-logoff on password reset
+- `patient-jwt.strategy.ts` (45 lines): validates `role: 'patient'` tokens separately from staff
+- `patient-jwt-auth.guard.ts`: only accepts patient tokens
+- `Patient` entity extended with: `passwordHash`, `mfaEnabled`, `mfaSecret`, `portalActive`, `lastLoginAt`, `passwordResetToken`, `passwordResetExpiresAt`
+
+**Patient Portal API** — `backend/src/modules/patients/patient-portal.controller.ts` (312 lines)
+- All endpoints call real services (appointmentsService, prescriptionsService, laboratoryService, billingService, remittanceService, cardScanService)
+- `GET /patients/portal/dashboard` aggregates all portal data in one call
+
+**Patient Portal AI** — `backend/src/modules/patients/patient-ai.controller.ts` (120 lines) + `patient-ai.service.ts` (289 lines)
+- All 5 AI endpoints use Ollama/Mistral via `AiService.generateStructured`
+- Symptom checker returns urgencyLevel with 4 tiers (self_care / schedule_appointment / urgent_care / emergency)
+- Lab explainer returns explanation, whatItMeans, isAbnormal, severity, recommendations, followUp
+- Drug interaction checker returns interactions with severity levels
+- Health education generates articles with title, category, summary, content, readTime
+- Visit question generator returns questions with category and priority + preparationTips
+
+**Secure Messaging** — `backend/src/modules/messaging/`
+- `messaging.controller.ts` (184 lines): 5 patient endpoints + 4 provider endpoints
+- `messaging.service.ts` (239 lines): full CRUD with access control, auto-mark-as-read
+- `Conversation` entity: patientId, providerId, subject, priority, status, unreadByPatient, unreadByProvider
+- `Message` entity: senderId, senderType (patient|provider), body, isRead, readAt
+
+### 0.4 Frontend Implementation Details
+
+**Authentication Flow**
+- `PatientLoginPage.tsx` at `/patient/login` — separate from staff login
+- `patientAuthService.ts` (99 lines) — login, setupAccount, refreshToken, logout, forgotPassword, resetPassword, getMe
+- Token stored in `sessionStorage` under `neuraline_patient_token`
+- `PatientRoute.tsx` guard — redirects to `/patient/login` if not authenticated
+- `PatientPortalLayout.tsx` (154 lines) — dedicated patient-only sidebar (no admin features)
+- API interceptor in `api.ts` detects patient endpoints and attaches patient token; staff endpoints get staff token
+
+**Portal Pages** — all at `frontend/src/pages/portal/`
+- `PortalDashboardPage.tsx` — calls `getDashboard()`, displays real aggregated stats
+- `PortalAppointmentsPage.tsx` — list + slot picker + request modal
+- `PortalPrescriptionsPage.tsx` — list + refill request modal
+- `PortalLabResultsPage.tsx` — list with reference ranges and abnormal flags
+- `PortalBillingPage.tsx` — invoice list + payment modal
+- `PortalEobsPage.tsx` — EOB list with claim status, amounts, adjustments
+- `PortalInsurancePage.tsx` — insurance policies with copay, deductible, effective/expiration dates
+- `PortalMessagesPage.tsx` — conversation list + thread view + reply
+- `PortalAiAssistantPage.tsx` — 5 tabs (lab explainer, symptom checker, drug interactions, health education, visit prep)
+- `PortalProfilePage.tsx` — patient demographics, contact, emergency contact
+
+**Portal Services**
+- `patientPortalService.ts` (83 lines) — 11 API methods
+- `patientAiService.ts` (102 lines) — 5 AI API methods
+- `messagingService.ts` (92 lines) — 5 messaging API methods
+
+### 0.5 What's Actually Still Missing (Updated Priority List)
+
+| Priority | Feature | Effort | Dependencies |
+|---|---|---|---|
+| **HIGH** | After-visit summaries with care plans | Medium | Blocked on W1 clinical unification (documentation session AVS) |
+| **HIGH** | Portal-triggered notifications (appointment/refill/lab/message reminders via existing `NotificationsService`) | Small | `NotificationsService` already exists — just need portal event hooks |
+| **MEDIUM** | Consent management service (entity exists, no API) | Small | None — entity already there |
+| **MEDIUM** | Document storage & download (general, not just insurance cards) | Medium | File storage infra |
+| **MEDIUM** | Pre-visit digital check-in | Medium | None |
+| **MEDIUM** | Patient intake forms (digital form builder) | Large | None |
+| **MEDIUM** | Health summary export (PDF/CCD/FHIR) | Medium | FHIR module exists |
+| **LOW** | Proxy/caregiver access | Medium | Patient entity changes |
+| **LOW** | Medication adherence tracking | Medium | None |
+| **LOW** | Wearable/device integration | Large | Apple Health/HealthKit integration |
+| **LOW** | Remote patient monitoring | Large | Device APIs |
+| **LOW** | Group telehealth sessions | Medium | Telemedicine module extension |
+| **LOW** | Patient-reported outcomes (PROs) | Medium | None |
+
+### 0.6 Recommendations
+
+1. **Treat the portal as ~90% complete** (up from ~85% after the July 19 validation fixes). The original gap doc's roadmap (Phase 1: "Make the Portal Real") is largely done, and the telehealth wiring is now complete.
+2. **Update `AGENTS.md`** to note which portal features are production-ready (it's already mostly accurate).
+3. **Focus next portal work on**: (a) AVS delivery (blocked on W1), (b) Portal-triggered notifications (small effort — `NotificationsService` already exists, just need event hooks), (c) Consent management service (quick win — entity exists), (d) Pre-visit digital check-in.
+4. **Run end-to-end testing** of the existing portal: patient login, appointment self-scheduling, messaging, bill pay, AI features, EOB viewing, and the newly-wired telehealth video visit flow (`/portal/video-visit/:sessionId`).
+5. **Clean up dead code**: `frontend/src/pages/portal/PatientPortalPage.tsx` (593 lines, mock-data UI) is no longer routed and can be deleted once confirmed unused.
+
+---
+
+## ORIGINAL ANALYSIS (January 2025 — outdated, preserved for reference)
+
 ## Date: January 2025
 ## Status: Current portal is ~70% static/mock data, ~30% functional
 
 ---
 
-## 1. CURRENT STATE ASSESSMENT
+## 1. CURRENT STATE ASSESSMENT (OUTDATED)
 
 ### 1.1 What Exists Today
 

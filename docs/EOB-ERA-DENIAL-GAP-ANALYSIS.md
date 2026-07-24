@@ -1,11 +1,156 @@
 # EOB / ERA / Denial Analysis — Gap Analysis Report
 
+> **⚠️ AUDIT UPDATE — July 19, 2026**
+> A full codebase audit was performed on July 19, 2026. **The original gap analysis below (dated July 12) is significantly outdated.** The codebase has **substantially implemented** the EOB/ERA/Denials/Remittance/Appeals/Underpayments ecosystem. **17 out of 19** major capabilities listed in the gap matrix are now IMPLEMENTED with real backend + real frontend, working end-to-end.
+>
+> See **§0 — Audit Results (July 19, 2026)** below for the accurate current state. The original analysis is preserved in §1+ for historical reference.
+
+---
+
+## 0. AUDIT RESULTS (July 19, 2026)
+
+### 0.1 Summary
+
+| Dimension | Original Doc (July 12) | Actual State (July 19) |
+|---|---|---|
+| EOB parsing & storage | "CRITICAL — Missing" | **IMPLEMENTED** — `EOB` entity + `RemittanceService.importEob()` |
+| ERA 835 parsing | "CRITICAL — Missing" | **IMPLEMENTED** — `x12-parser-835.service.ts` (328 lines) parses ISA/GS/BPR/TRN/N1/CLP/CAS/NM1/DTM/SVD/SVC/SE |
+| Automated payment posting | "CRITICAL — Missing" | **IMPLEMENTED** — `RemittanceService.autoPostPayments()` with transactional integrity |
+| CARC/RARC code engine | "CRITICAL — Missing" | **IMPLEMENTED** — `CarcCode` (253+ codes) + `RarcCode` (918+ codes) entities + `DenialCategoryEngine` |
+| Denial reason classification | "HIGH — Free-text only" | **IMPLEMENTED** — `DenialRecord` has structured `carcCode`, `rarcCode`, `rootCauseCategory` enum (16 categories) |
+| Appeal management workflow | "HIGH — Missing" | **IMPLEMENTED** — `Appeal` entity with 5 appeal types + 8-state workflow + `AppealStatusHistory` audit trail |
+| GenAI appeal letter generation | "HIGH — Missing" | **IMPLEMENTED** — `AppealAiService.generateAppealLetter()` using Ollama/Mistral (temp 0.3, 4096 tokens) |
+| Denial analytics dashboard | "HIGH — Missing" | **IMPLEMENTED** — `DenialsService.getAnalytics()` with root cause, payer, priority, monthly trends, CARC codes, appeal success rate, recovery rate |
+| Underpayment detection | "MEDIUM — Missing" | **IMPLEMENTED** — `PayerContract` + `UnderpaymentRecord` entities + `UnderpaymentsService.detectUnderpayments()` with contract-aware reconciliation |
+| Denial worklist / triage | "HIGH — Missing" | **IMPLEMENTED** — `DenialsService.getWorklist()` with priority sorting + `DenialsPage.tsx` worklist tab |
+| Root cause analytics | "HIGH — Missing" | **IMPLEMENTED** — `DenialCategoryEngine` deterministic CARC/RARC → root cause mapping (16 categories) |
+| Payer performance benchmarking | "MEDIUM — Missing" | **IMPLEMENTED** — `DenialsService.getPayerPerformance()` + frontend scorecard |
+| Agentic AI (autonomous RCM) | "LOW — Missing" | **IMPLEMENTED** — `RcmAutomationService.runFullPipeline()` orchestrates auto-post → denials → underpayments → AI scoring → auto-appeals |
+| Claim status inquiry (276/277) | "MEDIUM — Missing" | **MISSING** — No X12 276/277 parser (eligibility uses 270/271 via Stedi) |
+| Voice AI for payer calls | "LOW — Missing" | **MISSING** — Whisper service exists but not integrated for payer IVR |
+| Contract intelligence (NLP) | "MEDIUM — Missing" | **PARTIALLY IMPLEMENTED** — Manual contract upload + expected payment calculation; no NLP PDF parsing |
+
+### 0.2 Module Inventory (All Real Implementations)
+
+#### Remittance Module (`backend/src/modules/remittance/`)
+- `remittance.controller.ts` (108 lines, 14 endpoints)
+- `remittance.service.ts` (519 lines) — ERA import, EOB import, auto-payment posting, claim matching
+- `x12-parser-835.service.ts` (328 lines) — Full X12 835 segment parser
+- **Entities:** `Remittance`, `RemittanceClaim`, `RemittanceServiceLine`, `ClaimAdjustment`, `EOB`, `CarcCode`, `RarcCode`
+
+#### Denials Module (`backend/src/modules/denials/`)
+- `denials.controller.ts` (154 lines, 17 endpoints)
+- `denials.service.ts` (514 lines) — worklist, analytics, stats, payer performance, aging
+- `denial-ai.service.ts` (425 lines) — recovery scoring, NLP analysis, clustering, prioritization
+- `denial-category-engine.ts` (201 lines) — CARC/RARC → root cause mapping
+- `denial-deadline.processor.ts` + `denial-scheduler.service.ts` — SLA deadline tracking
+- **Entity:** `DenialRecord` (177 lines) — structured CARC/RARC + rootCauseCategory enum
+
+#### Appeals Module (`backend/src/modules/appeals/`)
+- `appeals.controller.ts` (85 lines, 8 endpoints)
+- `appeals.service.ts` (332 lines) — createFromDenial, generateAppealLetter, predictSuccess, submit, updateStatus
+- `appeal-ai.service.ts` (173 lines) — GenAI letter generation + success prediction
+- **Entities:** `Appeal` (160 lines, 5 types, 8-state workflow), `AppealStatusHistory`
+
+#### Underpayments Module (`backend/src/modules/underpayments/`)
+- `underpayments.controller.ts` (69 lines, 7 endpoints)
+- `underpayments.service.ts` (261 lines) — contract management, expected payment calculation, underpayment detection
+- **Entities:** `UnderpaymentRecord` (113 lines), `PayerContract` (70 lines, fee schedules by CPT/payer)
+
+#### Automation Module (`backend/src/modules/automation/`)
+- `automation.controller.ts` (64 lines, 4 endpoints)
+- `rcm-automation.service.ts` (188 lines) — `runFullPipeline()` orchestrates: auto-post → denials → underpayments → AI scoring → auto-appeals
+- `denial-prevention.service.ts` — pre-submission denial prevention
+
+### 0.3 API Endpoint Summary
+
+**Remittance** (`/api/v1/remittance`): 14 endpoints — ERA import, EOB import, repost, list, stats, detail, claims, CARC/RARC code lookup
+**Denials** (`/api/v1/denials`): 17 endpoints — generate from remittance, worklist, stats, analytics, aging, payer performance, AI scoring (single + batch), NLP analysis, clustering, prioritization, SLA deadline check
+**Appeals** (`/api/v1/appeals`): 8 endpoints — create from denial, generate letter, predict success, submit, list, stats, detail, update status
+**Underpayments** (`/api/v1/underpayments`): 7 endpoints — contract CRUD, detect, list, stats, detail, update status
+**Automation** (`/api/v1/automation`): 4 endpoints — pipeline run, pipeline status, prevention assess, prevention quick-check
+
+### 0.4 Frontend Implementation
+
+| Page | Path | Status |
+|---|---|---|
+| Denials | `frontend/src/pages/denials/DenialsPage.tsx` (810 lines) | **IMPLEMENTED** — worklist, analytics dashboard, aging report, payer performance, AI scoring |
+| Appeals | `frontend/src/pages/appeals/AppealsPage.tsx` (436 lines) | **IMPLEMENTED** — appeal list, AI letter generation, success prediction, status tracking |
+| Underpayments | `frontend/src/pages/underpayments/UnderpaymentsPage.tsx` (379 lines) | **IMPLEMENTED** — underpayment records, contract management, variance analytics |
+| Billing | `frontend/src/pages/billing/BillingPage.tsx` | **IMPLEMENTED** — claims list, invoicing, eligibility |
+
+**Services:** `denialsService.ts`, `appealsService.ts`, `underpaymentsService.ts`, `remittanceService.ts`, `automationService.ts` — all implemented with real API methods.
+
+### 0.5 Data Model Relationships
+
+```
+Remittance (ERA/EOB file)
+├── RemittanceClaim (per-claim data)
+│   ├── RemittanceServiceLine (per-service-line)
+│   │   └── ClaimAdjustment (CAS segment)
+│   │       ├── CarcCode (lookup, 253+ codes)
+│   │       └── RarcCode (lookup, 918+ codes)
+│   └── ClaimAdjustment (claim-level)
+├── EOB (patient-facing EOB document)
+└── [auto-matched to EncounterClaim]
+
+DenialRecord (generated from ClaimAdjustment)
+├── EncounterClaim (matched claim)
+├── DenialCategoryEngine (root cause mapping)
+└── [linked to Appeal]
+
+Appeal (created from DenialRecord)
+├── DenialRecord (source denial)
+├── AppealStatusHistory (audit trail)
+├── AppealAiService (letter generation)
+└── [optionally linked to UnderpaymentRecord]
+
+UnderpaymentRecord (detected from RemittanceServiceLine)
+├── PayerContract (contracted rate)
+├── EncounterClaim (matched claim)
+└── [optionally linked to Appeal]
+```
+
+### 0.6 What's Actually Still Missing (Updated Priority List)
+
+| Priority | Feature | Effort | Notes |
+|---|---|---|---|
+| **MEDIUM** | Claim status inquiry (276/277) | Medium | X12 276/277 parser + Stedi integration (270/271 already uses Stedi) |
+| **MEDIUM** | Contract intelligence (NLP contract PDF parsing) | Large | Manual contract upload exists; NLP extraction of rates from PDF contracts is missing |
+| **LOW** | Voice AI for payer calls | Large | Whisper service exists (port 8001) but not integrated for payer IVR navigation |
+| **LOW** | Real-time adjudication | Large | Currently batch-based (ERA import); real-time would require payer API integration |
+| **LOW** | Anomaly detection | Medium | No anomaly detection service for unusual denial patterns |
+| **LOW** | Predictive payer behavior modeling | Medium | Analytics exist but no forward-looking predictive modeling |
+
+### 0.7 Additional AI Capabilities Already Implemented (Not in Original Gap Doc)
+
+| Capability | Location | Status |
+|---|---|---|
+| AI denial recovery scoring | `DenialAiService.scoreRecovery()` | **IMPLEMENTED** — predicts recovery probability per denial |
+| Batch AI scoring | `DenialAiService.scoreBatch()` | **IMPLEMENTED** — scores multiple denials at once |
+| NLP denial letter parsing | `DenialAiService.analyzeDenialText()` | **IMPLEMENTED** — extracts codes from unstructured denial letters |
+| AI denial clustering | `DenialAiService.clusterDenials()` | **IMPLEMENTED** — groups similar denials for batch processing |
+| AI worklist prioritization | `DenialAiService.prioritizeWorklist()` | **IMPLEMENTED** — AI-ordered worklist based on recovery potential |
+| AI appeal success prediction | `AppealAiService.predictAppealSuccess()` | **IMPLEMENTED** — predicts overturn probability (0-100%) |
+| Pre-submission denial prevention | `DenialPreventionService` | **IMPLEMENTED** — assesses claim denial risk before submission |
+
+### 0.8 Recommendations
+
+1. **Treat the EOB/ERA/denials ecosystem as ~90% complete**, not 10% complete. The original gap doc's Phase 1-3 roadmap is largely done.
+2. **Focus next RCM work on**: (a) Claim status inquiry 276/277 (medium effort, high value for AR teams), (b) Contract NLP parsing (large effort, high value for underpayment detection), (c) Production testing with real payer ERA files.
+3. **Run end-to-end testing**: import a real ERA 835 file, verify auto-posting, verify denial generation, verify appeal letter generation, verify underpayment detection.
+4. **Update `AGENTS.md`** to document the remittance/denials/appeals/underpayments/automation modules (currently not fully documented there).
+
+---
+
+## ORIGINAL ANALYSIS (July 12 — outdated, preserved for reference)
+
 > Generated: 2026-07-12
 > Purpose: Identify gaps in Neuraline EMR's EOB/ERA/Denial Analysis workflow vs. market competitors, and define a phased implementation roadmap.
 
 ---
 
-## 1. Current State Assessment
+## 1. Current State Assessment (OUTDATED)
 
 ### 1.1 What Exists Today (Implemented)
 

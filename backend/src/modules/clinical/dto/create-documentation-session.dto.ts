@@ -10,7 +10,7 @@ export class CreateDocumentationSessionDto {
   encounterId?: string;
 
   @IsOptional()
-  @IsUUID()
+  @IsString()
   providerId?: string;
 
   @IsEnum(DocumentationConsentStatus)

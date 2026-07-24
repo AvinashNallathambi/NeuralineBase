@@ -72,6 +72,16 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # ──────────────────────────────────────────────
+# AWS Provisioning (secrets + keys — NEVER commit)
+# ──────────────────────────────────────────────
+neuraline-secrets.txt
+neuraline-aws-ids.txt
+neuraline-key.pem
+*-secrets.txt
+*-aws-ids.txt
+*.pem
+
+# ──────────────────────────────────────────────
 # Misc
 # ──────────────────────────────────────────────
 *.tgz

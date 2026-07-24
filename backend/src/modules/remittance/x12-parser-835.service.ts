@@ -137,11 +137,12 @@ export class X12Parser835 {
 
         case 'N1':
           // Name — N101 identifies entity (PR=payer, PE=payee)
+          // N1*PR*NAME*ID_QUALIFIER*ID  →  seg[1]=PR, seg[2]=NAME, seg[3]=QUAL, seg[4]=ID
           if (seg[1] === 'PR' && seg[2]) {
             result.payerName = seg[2];
-            // N108/N109 for payer identifier
-            if (seg[4] && seg[5]) {
-              result.payerIdentifier = seg[5];
+            // N103/N104 for payer identifier (qualifier + ID)
+            if (seg[3] && seg[4]) {
+              result.payerIdentifier = seg[4];
             }
           } else if (seg[1] === 'PE' && seg[2]) {
             result.payeeName = seg[2];
@@ -214,33 +215,60 @@ export class X12Parser835 {
           }
           break;
 
-        case 'SVD':
-          // Service Line Adjudication — starts a new service line
+        case 'SVC':
+          // Service Line Pricing — starts a new service line (X12 835 standard
+          // order: SVC comes before SVD). Contains the submitted/billed amount.
+          // SVC*HC:99213:25*1200.00*900.00*1
+          //   seg[1] = composite procedure ID (SVC01): HC:99213:25
+          //   seg[2] = submitted/billed amount (SVC02)
+          //   seg[3] = allowed amount (SVC03)
           if (currentServiceLine && currentClaim) {
             currentClaim.serviceLines.push(currentServiceLine);
           }
           currentServiceLine = {
-            serviceIdQualifier: seg[1] || 'HC',
-            cptCode: seg[2] || '',
-            paidAmount: this.parseAmount(seg[3]),
-            billedAmount: 0, // Not in SVD; derived from SVC or other segments
-            units: this.parseAmount(seg[4]) || 1,
-            modifiers: [seg[5], seg[6], seg[7], seg[8]].filter(Boolean) as string[],
+            serviceIdQualifier: 'HC',
+            cptCode: '',
+            paidAmount: 0,
+            billedAmount: this.parseAmount(seg[2]),
+            units: 1,
+            modifiers: [],
             adjustments: [],
           };
+          if (seg[1]) {
+            const svcParts = seg[1].split(':');
+            if (svcParts[0]) currentServiceLine.serviceIdQualifier = svcParts[0];
+            if (svcParts[1]) currentServiceLine.cptCode = svcParts[1];
+            // svcParts[2+] = modifiers
+            currentServiceLine.modifiers = svcParts.slice(2).filter(Boolean);
+          }
           break;
 
-        case 'SVC':
-          // Service Line Pricing — contains billed amount
-          if (currentServiceLine) {
-            // SVC03 = submitted (billed) amount
-            if (seg[3]) {
-              currentServiceLine.billedAmount = this.parseAmount(seg[3]);
+        case 'SVD':
+          // Service Line Adjudication — provides paid amount, units, modifiers.
+          // In standard 835 order, SVD comes after SVC (which created the line).
+          // If SVD comes first (non-standard), it creates the line instead.
+          if (!currentServiceLine) {
+            currentServiceLine = {
+              serviceIdQualifier: seg[1] || 'HC',
+              cptCode: seg[2] || '',
+              paidAmount: this.parseAmount(seg[3]),
+              billedAmount: 0,
+              units: this.parseAmount(seg[4]) || 1,
+              modifiers: [seg[5], seg[6], seg[7], seg[8]].filter(Boolean) as string[],
+              adjustments: [],
+            };
+          } else {
+            // Update existing line (created by SVC) with adjudication data
+            currentServiceLine.paidAmount = this.parseAmount(seg[3]);
+            if (this.parseAmount(seg[4]) > 0) {
+              currentServiceLine.units = this.parseAmount(seg[4]);
             }
-            // SVC04-07 = modifiers
-            if (seg[2]) {
-              const svcParts = seg[2].split(':');
-              if (svcParts[0]) currentServiceLine.cptCode = svcParts[0];
+            const svdMods = [seg[5], seg[6], seg[7], seg[8]].filter(Boolean) as string[];
+            if (svdMods.length > 0 && currentServiceLine.modifiers.length === 0) {
+              currentServiceLine.modifiers = svdMods;
+            }
+            if (seg[2] && !currentServiceLine.cptCode) {
+              currentServiceLine.cptCode = seg[2];
             }
           }
           break;

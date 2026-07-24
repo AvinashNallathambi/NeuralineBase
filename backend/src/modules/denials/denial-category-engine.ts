@@ -174,6 +174,10 @@ export class DenialCategoryEngine {
     deniedAmount: number,
     filingDeadline?: Date | null,
   ): 'low' | 'medium' | 'high' | 'critical' {
+    // Patient responsibility denials are never worth appealing (the patient
+    // owes the money, not the payer) — always low priority regardless of amount.
+    if (rootCause === DenialRootCause.PATIENT_RESPONSIBILITY) return 'low';
+
     // Critical: high-value denials with approaching deadline
     if (filingDeadline) {
       const daysLeft = Math.floor((filingDeadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -194,8 +198,7 @@ export class DenialCategoryEngine {
     // Medium: moderate value
     if (deniedAmount > 200) return 'medium';
 
-    // Low: small amounts or patient responsibility
-    if (rootCause === DenialRootCause.PATIENT_RESPONSIBILITY) return 'low';
+    // Low: small amounts
     return 'low';
   }
 }

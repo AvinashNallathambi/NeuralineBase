@@ -62,7 +62,7 @@ export class Invoice {
   })
   invoiceType!: InvoiceType;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'provider_name', type: 'varchar', length: 255 })

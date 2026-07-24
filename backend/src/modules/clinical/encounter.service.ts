@@ -1,4 +1,6 @@
 import {
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -11,6 +13,7 @@ import { Encounter, EncounterStatus, EncounterType } from './entities/encounter.
 import { CreateEncounterDto } from './dto/create-encounter.dto';
 import { UpdateEncounterDto } from './dto/update-encounter.dto';
 import { ClinicalTemplate } from './entities/clinical-template.entity';
+import { DocumentationService } from './documentation.service';
 
 export interface PaginationOptions {
   page: number;
@@ -41,6 +44,8 @@ export class EncounterService {
     private readonly encounterRepository: Repository<Encounter>,
     @InjectRepository(ClinicalTemplate)
     private readonly clinicalTemplateRepository: Repository<ClinicalTemplate>,
+    @Inject(forwardRef(() => DocumentationService))
+    private readonly documentationService: DocumentationService,
   ) {}
 
   async create(tenantId: string, createEncounterDto: CreateEncounterDto): Promise<Encounter> {
@@ -198,12 +203,17 @@ export class EncounterService {
       throw new ForbiddenException('Encounter is locked and cannot be modified. Reopen the encounter first.');
     }
 
-    const fieldsToSkip = new Set(['startTime', 'endTime', 'arrivalTime', 'durationMinutes', 'diagnoses', 'allergies', 'vitals', 'treatmentPlan', 'orders', 'attachments', 'soapNote']);
+    const fieldsToSkip = new Set(['startTime', 'endTime', 'arrivalTime', 'durationMinutes', 'diagnoses', 'allergies', 'vitals', 'treatmentPlan', 'orders', 'attachments', 'soapNote', 'documentationSessionId']);
 
     for (const [key, value] of Object.entries(updateEncounterDto)) {
       if (value !== undefined && !fieldsToSkip.has(key)) {
         (encounter as unknown as Record<string, unknown>)[key] = value;
       }
+    }
+
+    // Handle documentationSessionId separately (direct assignment, no merge)
+    if (updateEncounterDto.documentationSessionId !== undefined) {
+      encounter.documentationSessionId = updateEncounterDto.documentationSessionId;
     }
 
     if (updateEncounterDto.startTime) {
@@ -268,7 +278,24 @@ export class EncounterService {
       },
     ];
 
-    return this.encounterRepository.save(encounter);
+    const saved = await this.encounterRepository.save(encounter);
+
+    // Sync SOAP note back to the linked documentation session if present.
+    // This keeps the encounter editor and documentation panel in sync when
+    // SOAP is edited from either surface.
+    if (updateEncounterDto.soapNote !== undefined && saved.documentationSessionId) {
+      try {
+        await this.documentationService.syncFromEncounter(
+          tenantId || saved.tenantId,
+          saved.documentationSessionId,
+          saved.soapNote,
+        );
+      } catch (err) {
+        this.logger.warn(`Failed to sync SOAP to documentation session ${saved.documentationSessionId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    return saved;
   }
 
   async remove(id: string, tenantId?: string): Promise<void> {

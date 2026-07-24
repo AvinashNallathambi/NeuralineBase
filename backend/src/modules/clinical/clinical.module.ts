@@ -19,10 +19,13 @@ import { DocumentationEvidence } from './entities/documentation-evidence.entity'
 import { DocumentationSuggestion } from './entities/documentation-suggestion.entity';
 import { DenialRecord } from '../denials/entities/denial-record.entity';
 import { UnderpaymentRecord } from '../underpayments/entities/underpayment-record.entity';
+import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
+import { InsurancePayer } from '../billing/entities/insurance-payer.entity';
 import { ClinicalTemplateController } from './clinical-template.controller';
 import { ClinicalTemplateService } from './clinical-template.service';
 import { ClinicalTemplateSeedService } from './clinical-template-seed';
 import { AiModule } from '../ai/ai.module';
+import { MessagingModule } from '../messaging/messaging.module';
 
 @Module({
   imports: [
@@ -36,8 +39,11 @@ import { AiModule } from '../ai/ai.module';
       DocumentationSuggestion,
       DenialRecord,
       UnderpaymentRecord,
+      PatientInsurance,
+      InsurancePayer,
     ]),
     AiModule,
+    MessagingModule,
   ],
   controllers: [
     EncounterController,

@@ -27,7 +27,7 @@ export class Conversation {
   @Column({ name: 'patient_name', type: 'varchar', length: 255 })
   patientName!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid', nullable: true })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100, nullable: true })
   providerId!: string | null;
 
   @Column({ name: 'provider_name', type: 'varchar', length: 255, nullable: true })

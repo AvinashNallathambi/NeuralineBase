@@ -58,6 +58,9 @@ const NewEncounterPage = lazyWithRetry(
 const EncounterDetailPage = lazyWithRetry(
   () => import("../pages/clinical/EncounterDetailPage"),
 );
+const DocumentationSessionListPage = lazyWithRetry(
+  () => import("../pages/clinical/DocumentationSessionListPage"),
+);
 const PrescriptionPage = lazyWithRetry(
   () => import("../pages/prescriptions/PrescriptionPage"),
 );
@@ -110,9 +113,6 @@ const SettingsPage = lazyWithRetry(
 const AdminTrialsPage = lazyWithRetry(
   () => import("../pages/admin/AdminTrialsPage"),
 );
-const PatientPortalPage = lazyWithRetry(
-  () => import("../pages/portal/PatientPortalPage"),
-);
 const LoginPage = lazyWithRetry(() => import("../pages/auth/LoginPage"));
 const RegisterPage = lazyWithRetry(() => import("../pages/auth/RegisterPage"));
 const ForgotPasswordPage = lazyWithRetry(
@@ -132,6 +132,7 @@ const PortalInsurancePage = lazyWithRetry(() => import("../pages/portal/PortalIn
 const PortalProfilePage = lazyWithRetry(() => import("../pages/portal/PortalProfilePage"));
 const PortalMessagesPage = lazyWithRetry(() => import("../pages/portal/PortalMessagesPage"));
 const PortalAiAssistantPage = lazyWithRetry(() => import("../pages/portal/PortalAiAssistantPage"));
+const PortalVideoVisitPage = lazyWithRetry(() => import("../pages/portal/PortalVideoVisitPage"));
 
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
@@ -283,6 +284,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <EncounterDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/clinical/documentation-sessions",
+        element: (
+          <LazyPage>
+            <DocumentationSessionListPage />
           </LazyPage>
         ),
       },
@@ -518,14 +527,6 @@ const router = createBrowserRouter([
           </LazyPage>
         ),
       },
-      {
-        path: "/portal",
-        element: (
-          <LazyPage>
-            <PatientPortalPage />
-          </LazyPage>
-        ),
-      },
     ],
   },
 
@@ -622,6 +623,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PortalAiAssistantPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/portal/video-visit/:sessionId",
+        element: (
+          <LazyPage>
+            <PortalVideoVisitPage />
           </LazyPage>
         ),
       },

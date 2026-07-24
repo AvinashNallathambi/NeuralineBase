@@ -23,6 +23,8 @@ import {
   Input,
   message,
   Modal,
+  Spin,
+  Form,
 } from 'antd';
 import {
   ArrowLeftOutlined,
@@ -42,6 +44,12 @@ import {
   InboxOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  LockOutlined,
+  SafetyOutlined,
+  KeyOutlined,
+  PoweroffOutlined,
+  CopyOutlined,
+  ExclamationCircleOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -53,6 +61,7 @@ import ProblemListSection from '../../components/patients/ProblemListSection';
 import EditPatientModal from '../../components/patients/EditPatientModal';
 import { PatientInsuranceManager } from '../../components/patients/PatientInsuranceManager';
 import { patientService } from '../../services/patientService';
+import type { PortalStatus, EnablePortalResult } from '../../services/patientService';
 import type { EncounterVitals } from '../../services/encounterService';
 
 const { Title, Text, Paragraph } = Typography;
@@ -103,6 +112,12 @@ const PatientDetailPage: React.FC = () => {
   const [vitalsLoading, setVitalsLoading] = useState(false);
   const [documents, setDocuments] = useState<Array<{ id: string; name: string; type: string; size: string; date: string; documentType?: string }>>([]);
   const [uploading, setUploading] = useState(false);
+  const [portalStatus, setPortalStatus] = useState<PortalStatus | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalActionLoading, setPortalActionLoading] = useState(false);
+  const [enableResult, setEnableResult] = useState<EnablePortalResult | null>(null);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetForm] = Form.useForm();
 
   // Fetch patients and appointments on mount
   React.useEffect(() => {
@@ -127,6 +142,23 @@ const PatientDetailPage: React.FC = () => {
   useEffect(() => {
     fetchVitals();
   }, [fetchVitals]);
+
+  const fetchPortalStatus = useCallback(async () => {
+    if (!id) return;
+    setPortalLoading(true);
+    try {
+      const data = await patientService.getPortalStatus(id);
+      setPortalStatus(data);
+    } catch {
+      setPortalStatus(null);
+    } finally {
+      setPortalLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchPortalStatus();
+  }, [fetchPortalStatus]);
 
   const patient = useMemo(() => patients.find((p) => p.id === id), [id, patients]);
 
@@ -861,6 +893,331 @@ const PatientDetailPage: React.FC = () => {
   // ── Tab: Problem List ──
   const ProblemListTab = () => <ProblemListSection patientId={patient.id} />;
 
+  // ── Tab: Portal Access ──
+  const handleEnablePortal = async () => {
+    setPortalActionLoading(true);
+    setEnableResult(null);
+    try {
+      const result = await patientService.enablePortal(patient.id);
+      setEnableResult(result);
+      await fetchPortalStatus();
+      if (result.emailSent) {
+        message.success('Portal access enabled. Invitation email sent to patient.');
+      } else {
+        message.success('Portal access enabled. Copy the invitation link and share it with the patient.');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Failed to enable portal access';
+      message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+    } finally {
+      setPortalActionLoading(false);
+    }
+  };
+
+  const handleDisablePortal = async () => {
+    Modal.confirm({
+      title: 'Disable Portal Access?',
+      icon: <ExclamationCircleOutlined />,
+      content:
+        'The patient will be immediately logged out and will not be able to log in again. Their password and MFA will be cleared. They will need a new invitation to regain access.',
+      okText: 'Disable Access',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setPortalActionLoading(true);
+        try {
+          await patientService.disablePortal(patient.id, 'Disabled by staff from patient detail page');
+          await fetchPortalStatus();
+          setEnableResult(null);
+          message.success('Portal access disabled. All active sessions have been revoked.');
+        } catch (err: any) {
+          const msg = err.response?.data?.message || err.message || 'Failed to disable portal access';
+          message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+        } finally {
+          setPortalActionLoading(false);
+        }
+      },
+    });
+  };
+
+  const handleResetPassword = async (values: { mode: 'email' | 'temp'; temporaryPassword?: string }) => {
+    setPortalActionLoading(true);
+    try {
+      if (values.mode === 'temp' && values.temporaryPassword) {
+        await patientService.resetPortalPassword(patient.id, {
+          temporaryPassword: values.temporaryPassword,
+          sendEmail: false,
+        });
+        message.success('Temporary password set. Share it with the patient securely and ask them to change it after logging in.');
+      } else {
+        const result = await patientService.resetPortalPassword(patient.id, { sendEmail: true });
+        if (result.emailSent) {
+          message.success('Password reset email sent to the patient.');
+        } else {
+          message.warning('Password reset token issued, but the email could not be sent. Share the reset link manually if needed.');
+        }
+      }
+      setResetModalOpen(false);
+      resetForm.resetFields();
+      await fetchPortalStatus();
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || 'Failed to reset password';
+      message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+    } finally {
+      setPortalActionLoading(false);
+    }
+  };
+
+  const PortalTab = () => {
+    if (portalLoading) {
+      return (
+        <Card>
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin />
+          </div>
+        </Card>
+      );
+    }
+
+    if (!portalStatus) {
+      return (
+        <Card>
+          <Empty description="Unable to load portal status" />
+        </Card>
+      );
+    }
+
+    const active = portalStatus.portalActive;
+    const hasPassword = portalStatus.hasPassword;
+    const invitationPending = portalStatus.invitationPending;
+
+    return (
+      <div>
+        <Card
+          title={
+            <Space>
+              <SafetyOutlined />
+              <span>Patient Portal Access</span>
+            </Space>
+          }
+          extra={
+            <Tag color={active ? 'green' : 'default'} style={{ fontSize: 13, padding: '4px 12px' }}>
+              {active ? 'ACTIVE' : 'DISABLED'}
+            </Tag>
+          }
+        >
+          {!portalStatus.email && (
+            <Alert
+              type="warning"
+              showIcon
+              message="No email on file"
+              description="This patient must have an email address before portal access can be enabled. Update the patient's demographics first."
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          <Descriptions column={2} bordered size="small">
+            <Descriptions.Item label="Portal Status">
+              <Tag color={active ? 'green' : 'default'}>
+                {active ? 'Active' : 'Disabled'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Password Set">
+              <Tag color={hasPassword ? 'blue' : 'default'}>
+                {hasPassword ? 'Yes' : 'No'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="MFA Enabled">
+              <Tag color={portalStatus.mfaEnabled ? 'gold' : 'default'}>
+                {portalStatus.mfaEnabled ? 'Yes' : 'No'}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="Last Login">
+              {portalStatus.lastLoginAt
+                ? dayjs(portalStatus.lastLoginAt).format('MMM D, YYYY h:mm A')
+                : 'Never'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Email on File">
+              {portalStatus.email || 'None'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Invitation Pending">
+              {invitationPending ? (
+                <Space>
+                  <Tag color="orange">Pending</Tag>
+                  {portalStatus.invitationExpiresAt && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      expires {dayjs(portalStatus.invitationExpiresAt).format('MMM D, YYYY')}
+                    </Text>
+                  )}
+                </Space>
+              ) : (
+                <Tag color="default">No</Tag>
+              )}
+            </Descriptions.Item>
+          </Descriptions>
+
+          <Divider />
+
+          <Space wrap>
+            {!active && (
+              <Button
+                type="primary"
+                icon={<PoweroffOutlined />}
+                loading={portalActionLoading}
+                onClick={handleEnablePortal}
+                disabled={!portalStatus.email}
+              >
+                Enable Portal Access
+              </Button>
+            )}
+            {active && (
+              <>
+                <Button
+                  danger
+                  icon={<LockOutlined />}
+                  loading={portalActionLoading}
+                  onClick={handleDisablePortal}
+                >
+                  Disable Portal Access
+                </Button>
+                <Button
+                  icon={<KeyOutlined />}
+                  loading={portalActionLoading}
+                  onClick={() => {
+                    setEnableResult(null);
+                    setResetModalOpen(true);
+                  }}
+                >
+                  Reset Password
+                </Button>
+                {invitationPending && (
+                  <Button
+                    type="primary"
+                    icon={<PoweroffOutlined />}
+                    loading={portalActionLoading}
+                    onClick={handleEnablePortal}
+                  >
+                    Re-issue Invitation
+                  </Button>
+                )}
+              </>
+            )}
+          </Space>
+
+          {enableResult && (
+            <Alert
+              type="success"
+              showIcon
+              icon={<SafetyOutlined />}
+              style={{ marginTop: 16 }}
+              message="Portal invitation issued"
+              description={
+                <div>
+                  <Paragraph style={{ marginBottom: 8 }}>
+                    {enableResult.emailSent
+                      ? 'An invitation email has been sent to the patient. Alternatively, share this link directly:'
+                      : 'The invitation email could not be sent. Share this link with the patient directly:'}
+                  </Paragraph>
+                  <Input.Group compact>
+                    <Input
+                      style={{ width: 'calc(100% - 90px)' }}
+                      value={enableResult.invitationUrl}
+                      readOnly
+                    />
+                    <Button
+                      type="primary"
+                      icon={<CopyOutlined />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(enableResult.invitationUrl);
+                        message.success('Invitation link copied to clipboard');
+                      }}
+                    >
+                      Copy
+                    </Button>
+                  </Input.Group>
+                  <Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+                    This link expires in 7 days. The patient will use it to choose their own password.
+                  </Paragraph>
+                </div>
+              }
+            />
+          )}
+        </Card>
+
+        {/* Reset Password Modal */}
+        <Modal
+          title="Reset Patient Portal Password"
+          open={resetModalOpen}
+          onCancel={() => {
+            setResetModalOpen(false);
+            resetForm.resetFields();
+          }}
+          footer={null}
+        >
+          <Form
+            form={resetForm}
+            layout="vertical"
+            onFinish={handleResetPassword}
+            initialValues={{ mode: 'email' }}
+          >
+            <Form.Item name="mode" label="Reset method" rules={[{ required: true }]}>
+              <Select
+                options={[
+                  { value: 'email', label: 'Send password reset link to patient email' },
+                  { value: 'temp', label: 'Set a temporary password manually' },
+                ]}
+              />
+            </Form.Item>
+
+            <Form.Item
+              noStyle
+              shouldUpdate={(prev, next) => prev.mode !== next.mode}
+            >
+              {({ getFieldValue }) =>
+                getFieldValue('mode') === 'temp' ? (
+                  <Form.Item
+                    name="temporaryPassword"
+                    label="Temporary password"
+                    rules={[
+                      { required: true, message: 'Please enter a temporary password' },
+                      { min: 8, message: 'Password must be at least 8 characters' },
+                    ]}
+                    extra="The patient should change this after their first login."
+                  >
+                    <Input.Password placeholder="Enter a temporary password" />
+                  </Form.Item>
+                ) : (
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="A password reset link will be emailed to the patient. The link is valid for 1 hour."
+                    style={{ marginBottom: 16 }}
+                  />
+                )
+              }
+            </Form.Item>
+
+            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+              <Space>
+                <Button
+                  onClick={() => {
+                    setResetModalOpen(false);
+                    resetForm.resetFields();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="primary" htmlType="submit" loading={portalActionLoading}>
+                  Reset Password
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        </Modal>
+      </div>
+    );
+  };
+
   // ── Tabs definition ──
   const tabItems = [
     { key: 'overview', label: 'Overview', children: <OverviewTab /> },
@@ -871,6 +1228,7 @@ const PatientDetailPage: React.FC = () => {
     { key: 'documents', label: 'Documents', children: <DocumentsTab /> },
     { key: 'vitals', label: 'Vitals', children: <VitalsTab /> },
     { key: 'billing', label: 'Billing', children: <BillingTab /> },
+    { key: 'portal', label: <span><SafetyOutlined /> Portal</span>, children: <PortalTab /> },
   ];
 
   return (

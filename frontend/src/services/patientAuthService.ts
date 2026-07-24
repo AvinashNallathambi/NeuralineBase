@@ -41,8 +41,11 @@ class PatientAuthServiceClass {
     return data;
   }
 
-  async setupAccount(patientId: string, password: string, tenantId: string): Promise<{ message: string }> {
-    const response = await api.post(`${this.baseUrl}/${patientId}/setup-account?tenantId=${tenantId}`, { password });
+  async setupAccount(patientId: string, password: string, tenantId: string, invitationToken: string): Promise<{ message: string }> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/setup-account?tenantId=${tenantId}`, {
+      password,
+      token: invitationToken,
+    });
     return response.data;
   }
 

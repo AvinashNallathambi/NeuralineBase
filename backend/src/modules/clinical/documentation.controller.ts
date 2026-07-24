@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Request,
   UploadedFile,
   UseGuards,
@@ -16,7 +17,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateDocumentationSessionDto } from './dto/create-documentation-session.dto';
 import { UpdateDocumentationNoteDto } from './dto/update-documentation-note.dto';
-import { DocumentationService } from './documentation.service';
+import { DocumentationService, DocumentationSessionListFilters } from './documentation.service';
+import { DocumentationSessionStatus } from './entities/documentation-session.entity';
 
 interface AuthenticatedRequest {
   user: { id: string; email: string; tenantId: string; role: string };
@@ -33,10 +35,46 @@ export class DocumentationController {
     return this.documentationService.createSession(req.user.tenantId, req.user, dto);
   }
 
+  @Get('sessions')
+  @Roles('admin', 'doctor', 'nurse')
+  list(
+    @Query() query: {
+      patientId?: string;
+      providerId?: string;
+      status?: string;
+      encounterId?: string;
+      page?: string;
+      limit?: string;
+    },
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const filters: DocumentationSessionListFilters = {
+      patientId: query.patientId,
+      providerId: query.providerId,
+      status: query.status as DocumentationSessionStatus | undefined,
+      encounterId: query.encounterId,
+      page: query.page ? Number(query.page) : 1,
+      limit: query.limit ? Number(query.limit) : 20,
+    };
+    return this.documentationService.listForTenant(req.user.tenantId, filters);
+  }
+
   @Get('sessions/:id')
   @Roles('admin', 'doctor', 'nurse')
   findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.documentationService.findOne(req.user.tenantId, id);
+  }
+
+  @Get('sessions/:id/intelligence')
+  @Roles('admin', 'doctor', 'nurse')
+  getWithIntelligence(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.documentationService.getWithIntelligence(req.user.tenantId, id);
+  }
+
+  @Post('encounters/:encounterId/resume')
+  @Roles('admin', 'doctor', 'nurse')
+  findOrCreateForEncounter(@Param('encounterId') encounterId: string, @Request() req: AuthenticatedRequest) {
+    return this.documentationService.findOrCreateForEncounter(req.user.tenantId, req.user, encounterId);
   }
 
   @Get('sessions/:id/versions')
@@ -92,5 +130,11 @@ export class DocumentationController {
   @Roles('admin', 'doctor')
   sign(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.documentationService.sign(req.user.tenantId, req.user, id);
+  }
+
+  @Post('sessions/:id/send-avs')
+  @Roles('admin', 'doctor', 'nurse')
+  sendAfterVisitSummary(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.documentationService.sendAfterVisitSummary(req.user.tenantId, req.user, id);
   }
 }

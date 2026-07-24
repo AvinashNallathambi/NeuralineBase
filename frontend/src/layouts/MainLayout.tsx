@@ -67,6 +67,7 @@ const menuItems = [
       { key: 'patients', icon: <TeamOutlined />, label: 'Patient List' },
       { key: 'patient-groups', icon: <ApartmentOutlined />, label: 'Patient Groups' },
       { key: 'clinical', icon: <FileTextOutlined />, label: 'Clinical' },
+      { key: 'clinical/documentation-sessions', icon: <FileTextOutlined />, label: 'Documentation Sessions' },
       { key: 'prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
       { key: 'laboratory', icon: <ExperimentOutlined />, label: 'Laboratory' },
       { key: 'ai-encounter', icon: <RobotOutlined />, label: 'AI Encounter' },

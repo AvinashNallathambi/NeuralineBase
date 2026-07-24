@@ -507,7 +507,7 @@ const NewEncounterPage: React.FC = () => {
     const transcript = [values.subjective, values.objective, values.assessment, values.plan]
       .filter(Boolean).join('\n\n');
     if (!transcript.trim()) {
-      message.warning('Please enter some clinical notes first');
+      message.warning('Please enter some clinical notes first, or save the encounter and use the Documentation tab for AI-assisted note generation from audio.');
       return;
     }
     setAiLoading(true);
@@ -527,7 +527,7 @@ const NewEncounterPage: React.FC = () => {
         plan: soap.plan,
       });
       setIsDirty(true);
-      message.success('AI-generated SOAP note applied');
+      message.success('AI-generated SOAP note applied. Save the encounter and switch to the Documentation tab for audio, quality scoring, and AI action drafts.');
     } catch (err: any) {
       message.error(err?.response?.data?.message || err.message || 'AI Assist failed');
     } finally {

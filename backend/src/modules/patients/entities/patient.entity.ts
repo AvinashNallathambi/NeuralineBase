@@ -74,6 +74,18 @@ export class Patient {
   @Column({ name: 'password_reset_expires_at', type: 'timestamptz', nullable: true })
   passwordResetExpiresAt!: Date | null;
 
+  // ─── Portal Admin / Invitation Fields ────────────────────────────
+  // One-time token issued by an admin when enabling portal access.
+  // The patient must present this token (plus their tenantId) to
+  // `POST /patients/auth/:patientId/setup-account` in order to set
+  // their initial password. Null once the account has been set up or
+  // if portal access has been disabled.
+  @Column({ name: 'portal_invitation_token', type: 'varchar', length: 255, nullable: true })
+  portalInvitationToken!: string | null;
+
+  @Column({ name: 'portal_invitation_expires_at', type: 'timestamptz', nullable: true })
+  portalInvitationExpiresAt!: Date | null;
+
   @Column({ name: 'address', type: 'jsonb', nullable: true })
   address!: {
     street1: string;

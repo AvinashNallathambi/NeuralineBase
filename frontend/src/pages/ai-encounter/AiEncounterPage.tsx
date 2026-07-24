@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Card,
@@ -32,8 +32,8 @@ import {
 import { useNavigate } from 'react-router-dom';
 import AudioRecorder from '../../components/AudioRecorder';
 import { documentationService, DocumentationSession } from '../../services/documentationService';
-import { useProviderStore } from '../../store/dataStore';
 import { usePatientStore } from '../../store/dataStore';
+import { providerService, Provider } from '../../services/providerService';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -54,8 +54,15 @@ interface CodeSuggestion {
 
 const AiEncounterPage: React.FC = () => {
   const navigate = useNavigate();
-  const { providers } = useProviderStore();
-  const { patients } = usePatientStore();
+  const { patients, fetchPatients } = usePatientStore();
+  const [providers, setProviders] = useState<Provider[]>([]);
+
+  useEffect(() => {
+    if (patients.length === 0) {
+      fetchPatients({ limit: 100 });
+    }
+    providerService.findAll().then(setProviders).catch(() => {});
+  }, [patients.length, fetchPatients]);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -235,6 +242,24 @@ const AiEncounterPage: React.FC = () => {
       return;
     }
     navigate(`/superbills/new?encounterId=${documentationSession.encounterId}`);
+  };
+
+  const handleSubmitClaim = async () => {
+    if (!documentationSession?.encounterId) {
+      message.warning('Apply the note to an encounter before submitting a claim.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { billingService } = await import('../../services/billingService');
+      const res = await billingService.createClaim({ encounterId: documentationSession.encounterId } as any);
+      message.success('Claim created. Redirecting to claim detail...');
+      navigate(`/billing/${res.data.id}`);
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || 'Failed to create claim');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Render step content ────────────────────────────────────────────
@@ -561,7 +586,7 @@ const AiEncounterPage: React.FC = () => {
         >
           Generate Superbill
         </Button>
-        <Button icon={<SendOutlined />} size="large">
+        <Button icon={<SendOutlined />} size="large" onClick={handleSubmitClaim} loading={loading}>
           Submit Claim Directly
         </Button>
       </Space>
@@ -578,6 +603,13 @@ const AiEncounterPage: React.FC = () => {
 
   return (
     <div style={{ padding: 24 }}>
+      <Alert
+        type="info"
+        showIcon
+        message="This wizard is being replaced by the unified encounter editor."
+        description="After starting, you'll be redirected to the new Documentation tab where you can record audio, edit SOAP, view quality scores, and manage AI action drafts — all in one place."
+        style={{ marginBottom: 16 }}
+      />
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
           <Title level={3} style={{ margin: 0 }}>

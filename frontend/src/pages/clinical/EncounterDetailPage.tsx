@@ -8,6 +8,7 @@ import {
   Row,
   Col,
   Alert,
+  Tabs,
   Divider,
   Spin,
   Modal,
@@ -56,7 +57,7 @@ import {
   EllipsisOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import {
@@ -71,6 +72,8 @@ import { billingService, PatientInsurance } from '../../services/billingService'
 import { aiService } from '../../services/aiService';
 import VitalsFormSection from '../../components/clinical/VitalsFormSection';
 import IcdSearchInput from '../../components/icd/IcdSearchInput';
+import DocumentationPanel from '../../components/clinical/DocumentationPanel';
+import type { DocumentationSoapNote } from '../../services/documentationService';
 import type { ColumnsType } from 'antd/es/table';
 
 dayjs.extend(relativeTime);
@@ -119,6 +122,7 @@ const sectionTitleStyle: React.CSSProperties = {
 const EncounterDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -127,6 +131,7 @@ const EncounterDetailPage: React.FC = () => {
   const [patient, setPatient] = useState<any | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [activeTab, setActiveTab] = useState<string>(searchParams.get('tab') === 'documentation' ? 'documentation' : 'chart');
 
   const [diagnoses, setDiagnoses] = useState<EncounterDiagnosis[]>([]);
   const [diagCode, setDiagCode] = useState('');
@@ -450,31 +455,20 @@ const EncounterDetailPage: React.FC = () => {
   };
 
   const handleAiAssist = async () => {
-    const values = form.getFieldsValue();
-    const transcript = [values.subjective, values.objective, values.assessment, values.plan]
-      .filter(Boolean).join('\n\n');
-    if (!transcript.trim()) {
-      message.warning('Please enter some clinical notes first');
-      return;
-    }
+    if (!encounter) return;
     setAiLoading(true);
     try {
-      const res = await aiService.generateSoap({
-        transcript,
-        patientContext: {
-          name: patient ? `${patient.firstName} ${patient.lastName}` : undefined,
-          chiefComplaint: encounter?.chiefComplaint || values.chiefComplaint,
-        },
-      });
-      const soap = res.data;
-      form.setFieldsValue({
-        subjective: soap.subjective,
-        objective: soap.objective,
-        assessment: soap.assessment,
-        plan: soap.plan,
-      });
+      const { documentationService } = await import('../../services/documentationService');
+      const session = await documentationService.findOrCreateForEncounter(encounter.id);
+      if (!session.data.transcript?.trim()) {
+        message.info('Open the Documentation tab to record audio or paste a transcript, then generate a SOAP note.');
+        setActiveTab('documentation');
+        return;
+      }
+      const updated = await documentationService.generateNote(session.data.id);
+      form.setFieldsValue(updated.data.soapNote);
       setIsDirty(true);
-      message.success('AI-generated SOAP note applied');
+      message.success('AI-generated SOAP note applied. Review in the Documentation tab.');
     } catch (err: any) {
       message.error(err?.response?.data?.message || err.message || 'AI Assist failed');
     } finally {
@@ -1144,39 +1138,68 @@ const EncounterDetailPage: React.FC = () => {
             {/* ─── Section 2: Vitals Grid ─── */}
         <VitalsFormSection titleStyle={sectionTitleStyle} onWeightHeightChange={markDirty} />
 
-        {/* ─── Section 3: SOAP Notes ─── */}
-        <Card
-          title={<span style={sectionTitleStyle}><FileTextOutlined /> SOAP Notes</span>}
+        {/* ─── Section 3: SOAP Notes (Tabbed: Chart / Documentation) ─── */}
+        <Tabs
+          activeKey={activeTab}
+          onChange={setActiveTab}
           size="small"
           style={{ marginBottom: 16 }}
-          extra={
-            <Tooltip title="AI will analyze current notes and improve SOAP format">
-              <Button
-                icon={<ThunderboltOutlined />}
-                onClick={handleAiAssist}
-                loading={aiLoading}
-                disabled={!canEdit}
-                style={{ borderColor: '#722ed1', color: '#722ed1' }}
-                size="small"
-              >
-                AI Assist
-              </Button>
-            </Tooltip>
-          }
-        >
-          <Form.Item name="subjective" label="Subjective (S) — Patient History & Complaints">
-            <TextArea rows={4} showCount placeholder="History of present illness, review of systems, patient's subjective complaints..." />
-          </Form.Item>
-          <Form.Item name="objective" label="Objective (O) — Physical Examination Findings">
-            <TextArea rows={4} showCount placeholder="Vital signs, physical exam findings, diagnostic results, observations..." />
-          </Form.Item>
-          <Form.Item name="assessment" label="Assessment (A) — Clinical Impression & Diagnoses">
-            <TextArea rows={4} showCount placeholder="Clinical diagnoses, differential diagnoses, clinical reasoning..." />
-          </Form.Item>
-          <Form.Item name="plan" label="Plan (P) — Treatment Plan">
-            <TextArea rows={4} showCount placeholder="Medications prescribed, procedures, referrals, patient education, follow-up..." />
-          </Form.Item>
-        </Card>
+          items={[
+            {
+              key: 'chart',
+              label: <span><FileTextOutlined /> SOAP Notes</span>,
+              children: (
+                <Card
+                  size="small"
+                  extra={
+                    <Tooltip title="AI will analyze current notes and improve SOAP format">
+                      <Button
+                        icon={<ThunderboltOutlined />}
+                        onClick={handleAiAssist}
+                        loading={aiLoading}
+                        disabled={!canEdit}
+                        style={{ borderColor: '#722ed1', color: '#722ed1' }}
+                        size="small"
+                      >
+                        AI Assist
+                      </Button>
+                    </Tooltip>
+                  }
+                >
+                  <Form.Item name="subjective" label="Subjective (S) — Patient History & Complaints">
+                    <TextArea rows={4} showCount placeholder="History of present illness, review of systems, patient's subjective complaints..." />
+                  </Form.Item>
+                  <Form.Item name="objective" label="Objective (O) — Physical Examination Findings">
+                    <TextArea rows={4} showCount placeholder="Vital signs, physical exam findings, diagnostic results, observations..." />
+                  </Form.Item>
+                  <Form.Item name="assessment" label="Assessment (A) — Clinical Impression & Diagnoses">
+                    <TextArea rows={4} showCount placeholder="Clinical diagnoses, differential diagnoses, clinical reasoning..." />
+                  </Form.Item>
+                  <Form.Item name="plan" label="Plan (P) — Treatment Plan">
+                    <TextArea rows={4} showCount placeholder="Medications prescribed, procedures, referrals, patient education, follow-up..." />
+                  </Form.Item>
+                </Card>
+              ),
+            },
+            {
+              key: 'documentation',
+              label: <span><ThunderboltOutlined /> Documentation</span>,
+              children: encounter ? (
+                <DocumentationPanel
+                  encounterId={encounter.id}
+                  patientId={encounter.patientId}
+                  providerId={encounter.providerId}
+                  encounterStatus={encounter.status}
+                  canEdit={canEdit}
+                  onSoapChange={(soap: DocumentationSoapNote) => {
+                    form.setFieldsValue(soap);
+                    setIsDirty(true);
+                  }}
+                />
+              ) : null,
+            },
+          ]}
+        />
 
         {/* ─── Section 4a: Diagnoses ─── */}
         <Card

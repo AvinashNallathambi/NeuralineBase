@@ -72,7 +72,7 @@ export class TelemedicineSession {
   @Column({ name: 'patient_id', type: 'uuid' })
   patientId!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'room_id', type: 'varchar', length: 100, unique: true })

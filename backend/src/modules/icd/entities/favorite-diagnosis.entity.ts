@@ -24,7 +24,7 @@ export class FavoriteDiagnosis {
   @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid', nullable: true })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100, nullable: true })
   providerId!: string | null;
 
   @Column({ name: 'code', type: 'varchar', length: 20 })

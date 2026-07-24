@@ -9,7 +9,7 @@ export class DocumentationPreference {
   @Column({ name: 'tenant_id', type: 'uuid' })
   tenantId!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ name: 'preferred_language', type: 'varchar', length: 20, default: 'en' })

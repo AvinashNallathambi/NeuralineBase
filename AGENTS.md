@@ -49,8 +49,24 @@ To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env` 
 
 ## Backend Modules
 - **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions
-- **Stubs (empty)**: Appointments, Clinical, Notifications, Reports, Telemedicine, Users
+- **Stubs (empty)**: Appointments, Clinical, Notifications, Telemedicine, Users
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
+
+## Specialty Support
+Neuraline is a **multi-specialty, specialty-agnostic EMR**. The `specialty` column on clinical templates and the `department`/`specialization` columns on providers are free-text `varchar`, so any specialty can be added at runtime without a schema change.
+
+### Shared Specialty Taxonomy
+- **Backend**: `backend/src/modules/clinical/specialties.ts` — exports `CLINICAL_SPECIALTIES`, `CLINICAL_DEPARTMENTS`, `CUSTOM_SPECIALTY_SENTINEL`
+- **Frontend**: `frontend/src/constants/specialties.ts` — mirrors the backend list and exports `SPECIALTY_OPTIONS` (includes the `Custom` sentinel) for selectors
+- Keep both files in sync. Supported specialties: General Medicine, Primary Care, Family Medicine, Internal Medicine, Pediatrics, Cardiology, Pulmonology, Neurology, Endocrinology, Behavioral Health, Urgent Care, Telehealth
+
+### Seeded Clinical Templates
+`backend/src/modules/clinical/clinical-template-seed.ts` seeds default templates on first boot for the seed tenant (`00000000-0000-0000-0000-000000000000`). Seeding is skipped if any templates already exist for that tenant.
+- **Primary Care / General Medicine**: Annual Physical, Follow-Up Visit, Diabetic Management
+- **Urgent Care**: Urgent Care (acute care workup)
+- **Behavioral Health**: Mental Health Assessment (CPT 90791, ICD-10 F32.9)
+- **Telehealth**: Telehealth Visit
+- **Cardiology**: Hypertension Follow-Up, Atrial Fibrillation Follow-Up, CHF Management, Chest Pain Evaluation, Post-MI Follow-Up (each with SOAP, vitals, diagnoses, meds, orders/labs/imaging, treatment plan, and CPT/ICD-10 billing codes)
 
 ## Subscriptions Module
 The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS billing, payment method management, and dunning:
@@ -538,3 +554,50 @@ The AI module (`backend/src/modules/ai/`) includes these additional endpoints be
 - `POST /cdi-review` — Clinical Documentation Improvement review (missing elements, quality score, audit risk)
 - `POST /drug-dosing` — AI-powered drug dosing recommendations (renal/hepatic adjustments, warnings, alternatives)
 - `POST /referral-letter` — Generate a referral letter to a specialist
+
+## Reports Module
+The reports module (`backend/src/modules/reports/`) provides real-time analytics, AI-powered insights, predictive risk scoring, and multi-format export. All endpoints are JWT-guarded with role-based access.
+
+### Services
+- **ReportsService**: Core report queries using raw SQL against encounter_claims, appointments, encounters, prescriptions, lab_orders, patient_problems, providers, denial_records, claim_adjustments, and payments tables. All queries are tenant-scoped.
+- **ReportAiService**: AI-powered features including narrative insights, natural-language report builder, no-show risk prediction, denial risk prediction, revenue leakage detection, and anomaly detection.
+- **ReportExportService**: Multi-format export (CSV, Excel-compatible CSV, printable HTML/PDF, JSON) with report flattening.
+
+### API Endpoints (all under `/api/v1/reports`)
+**Core Reports:**
+- `GET /revenue` — Revenue report: KPIs (total revenue, collections rate, avg per visit, outstanding balance), revenue by month, revenue by payer, payment method breakdown, claim status breakdown
+- `GET /appointments` — Appointments report: KPIs (total, completion rate, no-show rate, telehealth), appointments by day of week, type distribution, no-show trend, utilization by provider
+- `GET /clinical` — Clinical report: KPIs (encounters, avg duration, prescriptions, labs, unique diagnoses), top diagnoses (ICD-10), encounters by type, prescription trends, lab orders by status
+- `GET /providers` — Provider performance: comparison table (patients seen, encounters, revenue, utilization), productivity chart
+- `GET /rcm` — RCM & Denials report: KPIs (total billed, denial rate, avg days in A/R, over 90 days), A/R aging buckets, denials by reason/payer, claims by status, top denial codes (CARC)
+- `GET /patient-flags` — Patient flag distribution: by severity, category, type, resolution stats
+- `GET /dashboard` — Executive dashboard: all report categories in one call
+
+**Export:**
+- `GET /export/:reportType?format=csv|excel|pdf|json` — Export any report as downloadable file
+
+**AI-Powered Reports:**
+- `POST /ai/insights` — AI narrative insights for a report tab (summary, bullets with severity, recommended actions). Falls back to rule-based insights if AI unavailable.
+- `POST /ai/ask` — Natural-language report builder: ask a question in plain English, AI interprets it, fetches relevant data, and generates commentary
+- `GET /ai/no-show-risk?days=7` — Predict no-show risk for upcoming appointments (rule-based scoring using patient history, lead time, day/time, telehealth)
+- `GET /ai/denial-risk` — Predict denial risk for unsubmitted claims (payer denial history, claim value, aging, draft status)
+- `GET /ai/revenue-leakage` — Revenue leakage report: coverage gaps, secondary claim opportunities, underpayments, denials at risk, old A/R. AI-generated executive summary and prioritized actions.
+- `GET /ai/anomalies` — Anomaly detection: compares last 7 days vs 30-day baseline for denial count and no-show rate
+
+### Query Parameters
+All core report endpoints accept:
+- `dateRange`: last7, last30, last90, thisMonth, thisQuarter, thisYear, lastYear, custom
+- `startDate`, `endDate`: ISO strings (when dateRange=custom)
+- `providerId`, `payerId`, `department`: optional filters
+
+### Frontend
+- **ReportsPage** (`frontend/src/pages/reports/ReportsPage.tsx`): Full analytics dashboard with:
+  - 6 tabs: Revenue, Appointments, Clinical, Provider Performance, RCM & Denials, AI Analytics
+  - Date range selector (7 presets + custom range picker)
+  - KPI cards with color-coded metrics
+  - Interactive charts (line, bar, pie, area) using Recharts
+  - AI Insights panel with severity-coded bullets and recommended actions
+  - Anomaly alerts banner
+  - Export dropdown (CSV, Excel, PDF)
+  - AI Analytics tab: natural-language report builder, revenue leakage analyzer, no-show risk table, denial risk table
+- **reportsService.ts** (`frontend/src/services/reportsService.ts`): Frontend service with typed interfaces for all report endpoints

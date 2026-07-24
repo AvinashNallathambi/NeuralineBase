@@ -60,7 +60,7 @@ export class DocumentationSession {
   @Column({ name: 'patient_id', type: 'uuid' })
   patientId!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   providerId!: string;
 
   @Column({ type: 'enum', enum: DocumentationSessionStatus, default: DocumentationSessionStatus.DRAFT })

@@ -77,6 +77,42 @@ class PatientPortalService {
     const response = await api.get(`${this.baseUrl}/insurance`);
     return response.data;
   }
+
+  async scanInsuranceCard(
+    frontImage: File,
+    backImage?: File,
+  ): Promise<{
+    extractedData: any;
+    confidence: Record<string, number>;
+    matchedPayerId?: string;
+  }> {
+    const formData = new FormData();
+    formData.append('frontImage', frontImage);
+    if (backImage) formData.append('backImage', backImage);
+    const response = await api.post(`${this.baseUrl}/insurance/card-scan`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  async requestInsuranceUpdate(data: {
+    extractedData: any;
+    confidence: Record<string, number>;
+    matchedPayerId?: string;
+    notes?: string;
+  }): Promise<{ status: string; message: string }> {
+    const response = await api.post(`${this.baseUrl}/insurance/request-update`, data);
+    return response.data;
+  }
+
+  async getTelemedicineToken(sessionId: string): Promise<{
+    token: string;
+    roomUrl: string;
+    roomId: string;
+  }> {
+    const response = await api.get(`/patients/portal/telemedicine/sessions/${sessionId}/token`);
+    return response.data;
+  }
 }
 
 export const patientPortalService = new PatientPortalService();

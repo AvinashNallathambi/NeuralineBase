@@ -45,7 +45,7 @@ export class Encounter {
   @Index()
   patientId!: string;
 
-  @Column({ name: 'provider_id', type: 'uuid' })
+  @Column({ name: 'provider_id', type: 'varchar', length: 100 })
   @Index()
   providerId!: string;
 
@@ -262,6 +262,10 @@ export class Encounter {
 
   @Column({ name: 'is_locked', type: 'boolean', default: false })
   isLocked!: boolean;
+
+  @Column({ name: 'documentation_session_id', type: 'uuid', nullable: true })
+  @Index()
+  documentationSessionId!: string | null;
 
   @Column({ name: 'audit_trail', type: 'jsonb', default: [] })
   auditTrail!: Array<{

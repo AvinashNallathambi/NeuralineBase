@@ -20,7 +20,12 @@ export const getDatabaseConfig = (
   synchronize: configService.get<boolean>('DB_SYNCHRONIZE', false),
   logging: configService.get<boolean>('DB_LOGGING', true),
   ssl: configService.get<boolean>('DB_SSL', false)
-    ? { rejectUnauthorized: false }
+    ? {
+        rejectUnauthorized: configService.get<boolean>(
+          'DB_SSL_REJECT_UNAUTHORIZED',
+          true,
+        ),
+      }
     : false,
   autoLoadEntities: true,
 });
@@ -37,6 +42,11 @@ const dataSourceOptions: DataSourceOptions = {
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false,
   logging: true,
+  ssl: process.env.DB_SSL === 'true'
+    ? {
+        rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== 'false',
+      }
+    : false,
 };
 
 export default new DataSource(dataSourceOptions);

@@ -8,15 +8,20 @@ import { PatientsService } from './patients.service';
 import { PatientAuthController } from './patient-auth.controller';
 import { PatientPortalController } from './patient-portal.controller';
 import { PatientAiController } from './patient-ai.controller';
+import { PatientPortalAdminController } from './patient-portal-admin.controller';
 import { PatientAuthService } from './patient-auth.service';
 import { PatientAiService } from './patient-ai.service';
+import { PatientPortalAdminService } from './patient-portal-admin.service';
 import { PatientJwtStrategy } from './patient-jwt.strategy';
 import { PatientJwtAuthGuard } from './patient-jwt-auth.guard';
 import { PatientGroupsController } from './patient-groups.controller';
 import { PatientGroupsService } from './patient-groups.service';
 import { PatientGroupAiService } from './patient-groups-ai.service';
+import { PatientFlagsController } from './patient-flags.controller';
+import { PatientFlagsService } from './patient-flags.service';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem } from './entities/patient-problem.entity';
+import { PatientFlag, PatientFlagAcknowledgement } from './entities/patient-flag.entity';
 import { PatientGroup, PatientGroupAuditLog } from './entities/patient-group.entity';
 import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
 import { InsurancePayer } from '../billing/entities/insurance-payer.entity';
@@ -31,7 +36,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Patient, PatientProblem, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
+    TypeOrmModule.forFeature([Patient, PatientProblem, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -52,8 +57,8 @@ import { AuthModule } from '../auth/auth.module';
     AiModule,
     NotificationsModule,
   ],
-  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientGroupsController],
-  providers: [PatientsService, PatientAuthService, PatientAiService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService],
-  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService],
+  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientPortalAdminController, PatientGroupsController, PatientFlagsController],
+  providers: [PatientsService, PatientAuthService, PatientAiService, PatientPortalAdminService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
+  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientPortalAdminService, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
 })
 export class PatientsModule {}

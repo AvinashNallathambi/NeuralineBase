@@ -33,7 +33,7 @@ import { clinicalTemplateService } from '../../services/clinicalTemplateService'
 import { useAuthStore } from '../../store';
 import ClinicalTemplateCard from './ClinicalTemplateCard';
 import NewTemplateCard from './NewTemplateCard';
-import ClinicalTemplateFormModal from './ClinicalTemplateFormModal';
+import ClinicalTemplateFormDrawer from './ClinicalTemplateFormDrawer';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -332,7 +332,7 @@ const ClinicalTemplateGallery: React.FC = () => {
         </Row>
       )}
 
-      <ClinicalTemplateFormModal
+      <ClinicalTemplateFormDrawer
         open={formOpen}
         template={editingTemplate}
         onClose={() => setFormOpen(false)}

@@ -206,6 +206,222 @@ const SEED_TEMPLATES: DeepPartial<ClinicalTemplate>[] = [
     },
     billingCodes: [{ codeType: 'CPT', code: '99213', description: 'Established patient office visit', isPrimary: true }],
   }),
+  // ---------------- Cardiology ----------------
+  baseTemplate({
+    name: 'Hypertension Follow-Up',
+    specialty: 'Cardiology',
+    visitType: 'Follow-Up',
+    description: 'Routine hypertension management and titration visit',
+    icon: 'HeartOutlined',
+    department: 'Cardiology',
+    tags: ['cardiology', 'hypertension', 'chronic'],
+    chiefComplaint: 'High blood pressure follow-up',
+    soapTemplate: {
+      subjective: 'Patient with known hypertension returns for follow-up. Reports home BP logs, adherence, and any side effects.',
+      objective: 'BP elevated on today\'s reading. Cardiac exam regular rate and rhythm, no murmurs. No edema. No signs of end-organ damage.',
+      assessment: 'Essential hypertension. Assess control and adjust regimen as needed.',
+      plan: 'Review home BP log. Titrate antihypertensive. Reinforce sodium restriction and weight management. Recheck labs.',
+    },
+    vitalsTemplate: { bloodPressure: '150/92', heartRate: '78', respiratoryRate: '16', oxygenSaturation: '98%' },
+    diagnosisTemplate: [{ code: 'I10', description: 'Essential (primary) hypertension', isPrimary: true, type: 'chronic', status: 'active' }],
+    medicationTemplate: [
+      { name: 'Lisinopril', dosage: '20 mg', frequency: 'Daily', route: 'oral', instructions: 'Take in the morning' },
+      { name: 'Amlodipine', dosage: '5 mg', frequency: 'Daily', route: 'oral', instructions: 'Take in the evening' },
+    ],
+    ordersTemplate: {
+      labs: [
+        { name: 'Basic Metabolic Panel', priority: 'routine' },
+        { name: 'Urinalysis', priority: 'routine' },
+      ],
+      imaging: [{ name: 'Echocardiogram', modality: 'TTE', bodyPart: 'heart', priority: 'routine' }],
+    },
+    treatmentPlanTemplate: {
+      goals: ['BP < 130/80 mmHg', 'Sodium < 1500 mg/day'],
+      interventions: ['DASH diet', '150 min/week aerobic exercise', 'Home BP monitoring twice daily'],
+      patientEducation: ['Take medications consistently', 'Avoid NSAIDs which can raise BP'],
+      followUp: 'Follow up in 4 weeks with home BP log.',
+    },
+    billingCodes: [
+      { codeType: 'CPT', code: '99213', description: 'Established patient office visit, low complexity', isPrimary: true },
+      { codeType: 'ICD10', code: 'I10', description: 'Essential (primary) hypertension' },
+    ],
+  }),
+  baseTemplate({
+    name: 'Atrial Fibrillation Follow-Up',
+    specialty: 'Cardiology',
+    visitType: 'Follow-Up',
+    description: 'Atrial fibrillation management, rate/rhythm control and anticoagulation review',
+    icon: 'HeartOutlined',
+    department: 'Cardiology',
+    tags: ['cardiology', 'arrhythmia', 'afib', 'chronic', 'anticoagulation'],
+    chiefComplaint: 'Atrial fibrillation follow-up',
+    soapTemplate: {
+      subjective: 'Patient with atrial fibrillation returns for follow-up. Reports palpitations, exercise tolerance, bleeding symptoms, and medication adherence.',
+      objective: 'Irregularly irregular pulse. Cardiac exam no murmurs. No signs of heart failure. INR/anticoagulation review.',
+      assessment: 'Persistent atrial fibrillation. Assess rate control, rhythm strategy, and stroke prevention.',
+      plan: 'Review rate vs. rhythm control strategy. Assess CHA2DS2-VASc and HAS-BLED. Adjust anticoagulation. Consider cardiology EP referral if symptomatic.',
+    },
+    vitalsTemplate: { bloodPressure: '128/78', heartRate: '88', respiratoryRate: '16', oxygenSaturation: '98%' },
+    diagnosisTemplate: [
+      { code: 'I48.91', description: 'Unspecified atrial fibrillation', isPrimary: true, type: 'chronic', status: 'active' },
+    ],
+    medicationTemplate: [
+      { name: 'Metoprolol Succinate', dosage: '50 mg', frequency: 'Daily', route: 'oral', instructions: 'Take with food' },
+      { name: 'Apixaban', dosage: '5 mg', frequency: 'Twice daily', route: 'oral', instructions: 'Take with or without food' },
+    ],
+    ordersTemplate: {
+      labs: [
+        { name: 'Basic Metabolic Panel', priority: 'routine' },
+        { name: 'PT/INR', priority: 'routine', notes: 'If on warfarin' },
+        { name: 'Thyroid Stimulating Hormone', priority: 'routine' },
+      ],
+      imaging: [{ name: 'Echocardiogram', modality: 'TTE', bodyPart: 'heart', priority: 'routine' }],
+      procedures: [{ name: 'Electrocardiogram (ECG)', cptCode: '93000', description: '12-lead ECG' }],
+    },
+    treatmentPlanTemplate: {
+      goals: ['Resting HR 60-80 bpm', 'Stroke prevention per CHA2DS2-VASc'],
+      interventions: ['Stroke risk stratification', 'Rate control with beta-blocker', 'Anticoagulation adherence'],
+      patientEducation: ['Report signs of stroke (FAST)', 'Monitor for bleeding', 'Avoid excessive alcohol'],
+      followUp: 'Follow up in 3 months or sooner if symptomatic.',
+    },
+    billingCodes: [
+      { codeType: 'CPT', code: '99214', description: 'Established patient office visit, moderate complexity', isPrimary: true },
+      { codeType: 'CPT', code: '93000', description: 'Electrocardiogram, routine ECG with at least 12 leads' },
+      { codeType: 'ICD10', code: 'I48.91', description: 'Unspecified atrial fibrillation' },
+    ],
+  }),
+  baseTemplate({
+    name: 'CHF Management',
+    specialty: 'Cardiology',
+    visitType: 'Follow-Up',
+    description: 'Chronic heart failure management, volume status and GDMT optimization',
+    icon: 'HeartOutlined',
+    department: 'Cardiology',
+    tags: ['cardiology', 'heart failure', 'chronic', 'GDMT'],
+    chiefComplaint: 'Heart failure follow-up',
+    soapTemplate: {
+      subjective: 'Patient with heart failure returns for follow-up. Reports dyspnea, orthopnea, edema, weight, and exercise tolerance.',
+      objective: 'Assess volume status, JVP, lung sounds, lower extremity edema. Weight trend reviewed.',
+      assessment: 'Chronic heart failure. Assess NYHA class, volume status, and GDMT optimization.',
+      plan: 'Adjust diuretics based on volume status. Optimize GDMT (beta-blocker, ACEi/ARB/ARNI, MRA, SGLT2i). Reinforce daily weights and sodium restriction.',
+    },
+    vitalsTemplate: { bloodPressure: '118/72', heartRate: '72', respiratoryRate: '18', oxygenSaturation: '96%', weight: '180 lb' },
+    diagnosisTemplate: [
+      { code: 'I50.9', description: 'Heart failure, unspecified', isPrimary: true, type: 'chronic', status: 'active' },
+    ],
+    medicationTemplate: [
+      { name: 'Carvedilol', dosage: '12.5 mg', frequency: 'Twice daily', route: 'oral', instructions: 'Take with food' },
+      { name: 'Lisinopril', dosage: '20 mg', frequency: 'Daily', route: 'oral', instructions: 'Take in the morning' },
+      { name: 'Furosemide', dosage: '40 mg', frequency: 'Daily', route: 'oral', instructions: 'Take in the morning' },
+      { name: 'Spironolactone', dosage: '25 mg', frequency: 'Daily', route: 'oral', instructions: 'Take with food' },
+    ],
+    ordersTemplate: {
+      labs: [
+        { name: 'Basic Metabolic Panel', priority: 'routine' },
+        { name: 'BNP or NT-proBNP', priority: 'routine' },
+        { name: 'Complete Blood Count', priority: 'routine' },
+      ],
+      imaging: [{ name: 'Echocardiogram', modality: 'TTE', bodyPart: 'heart', priority: 'routine' }],
+    },
+    treatmentPlanTemplate: {
+      goals: ['Euvolemia', 'NYHA class I-II', 'GDMT at target doses'],
+      interventions: ['Daily weights — call if >2 lb/day or >5 lb/week', 'Sodium < 2000 mg/day', 'Fluid restriction if indicated'],
+      patientEducation: ['Recognize worsening HF signs', 'Adhere to GDMT', 'Avoid NSAIDs'],
+      followUp: 'Follow up in 2 weeks; sooner if weight gain or symptoms worsen.',
+    },
+    billingCodes: [
+      { codeType: 'CPT', code: '99214', description: 'Established patient office visit, moderate complexity', isPrimary: true },
+      { codeType: 'ICD10', code: 'I50.9', description: 'Heart failure, unspecified' },
+    ],
+  }),
+  baseTemplate({
+    name: 'Chest Pain Evaluation',
+    specialty: 'Cardiology',
+    visitType: 'Urgent',
+    description: 'Acute chest pain risk stratification and workup',
+    icon: 'HeartOutlined',
+    department: 'Cardiology',
+    tags: ['cardiology', 'chest pain', 'acute', 'urgent'],
+    chiefComplaint: 'Chest pain',
+    soapTemplate: {
+      subjective: 'Patient presents with chest pain. Characterize onset, duration, quality, radiation, aggravators/relievers, associated symptoms, and cardiac risk factors.',
+      objective: 'Vital signs, cardiac and pulmonary exam. Assess for signs of instability.',
+      assessment: 'Chest pain — risk stratify using HEART score. Rule out ACS, PE, aortic dissection.',
+      plan: 'ECG, cardiac biomarkers, consider chest X-ray and CT angiography. Admit if high-risk.',
+    },
+    vitalsTemplate: { bloodPressure: '140/88', heartRate: '96', respiratoryRate: '20', oxygenSaturation: '97%', painScore: 6, painLocation: 'substernal' },
+    diagnosisTemplate: [
+      { code: 'R07.9', description: 'Chest pain, unspecified', isPrimary: true, type: 'acute', status: 'active' },
+    ],
+    ordersTemplate: {
+      labs: [
+        { name: 'Troponin I', priority: 'stat', notes: 'Serial at 0 and 3 hours' },
+        { name: 'Complete Blood Count', priority: 'stat' },
+        { name: 'Basic Metabolic Panel', priority: 'stat' },
+        { name: 'D-dimer', priority: 'stat', notes: 'If PE suspected and low risk' },
+      ],
+      imaging: [
+        { name: 'Chest X-Ray', modality: 'XR', bodyPart: 'chest', priority: 'stat' },
+        { name: 'CT Angiography Chest', modality: 'CTA', bodyPart: 'chest', priority: 'stat', notes: 'If PE or dissection suspected' },
+      ],
+      procedures: [{ name: 'Electrocardiogram (ECG)', cptCode: '93000', description: '12-lead ECG within 10 minutes of arrival' }],
+    },
+    treatmentPlanTemplate: {
+      interventions: ['Aspirin 325 mg chewed if ACS suspected and no contraindication', 'Continuous cardiac monitoring', 'IV access'],
+      patientEducation: ['Return immediately if pain worsens, syncope, or shortness of breath'],
+      followUp: 'If discharged: follow up in 48-72 hours. If high HEART score: admit for observation.',
+    },
+    billingCodes: [
+      { codeType: 'CPT', code: '99284', description: 'Emergency department visit, moderate complexity', isPrimary: true },
+      { codeType: 'CPT', code: '93000', description: 'Electrocardiogram, routine ECG with at least 12 leads' },
+      { codeType: 'ICD10', code: 'R07.9', description: 'Chest pain, unspecified' },
+    ],
+  }),
+  baseTemplate({
+    name: 'Post-MI Follow-Up',
+    specialty: 'Cardiology',
+    visitType: 'Follow-Up',
+    description: 'Post-myocardial infarction recovery and secondary prevention visit',
+    icon: 'HeartOutlined',
+    department: 'Cardiology',
+    tags: ['cardiology', 'MI', 'post-MI', 'secondary prevention', 'chronic'],
+    chiefComplaint: 'Follow-up after heart attack',
+    soapTemplate: {
+      subjective: 'Patient status post myocardial infarction returns for follow-up. Reports chest pain, dyspnea, exercise tolerance, medication adherence, and cardiac rehab participation.',
+      objective: 'Vital signs stable. Cardiac exam unremarkable. Post-MI wound/vascular access site assessment if recent PCI.',
+      assessment: 'Status post MI. Assess recovery, secondary prevention therapy, and cardiac rehabilitation.',
+      plan: 'Optimize dual antiplatelet therapy, statin, beta-blocker, ACEi. Refer to cardiac rehab. Reinforce lifestyle modification.',
+    },
+    vitalsTemplate: { bloodPressure: '124/76', heartRate: '68', respiratoryRate: '16', oxygenSaturation: '98%' },
+    diagnosisTemplate: [
+      { code: 'I25.2', description: 'Old myocardial infarction', isPrimary: true, type: 'chronic', status: 'active' },
+    ],
+    medicationTemplate: [
+      { name: 'Aspirin', dosage: '81 mg', frequency: 'Daily', route: 'oral', instructions: 'Take with food' },
+      { name: 'Clopidogrel', dosage: '75 mg', frequency: 'Daily', route: 'oral', instructions: 'Take at same time daily' },
+      { name: 'Atorvastatin', dosage: '80 mg', frequency: 'Daily', route: 'oral', instructions: 'Take in the evening' },
+      { name: 'Metoprolol Succinate', dosage: '50 mg', frequency: 'Daily', route: 'oral', instructions: 'Take with food' },
+    ],
+    ordersTemplate: {
+      labs: [
+        { name: 'Lipid Panel', priority: 'routine' },
+        { name: 'Basic Metabolic Panel', priority: 'routine' },
+        { name: 'Hemoglobin A1c', priority: 'routine' },
+      ],
+      imaging: [{ name: 'Echocardiogram', modality: 'TTE', bodyPart: 'heart', priority: 'routine' }],
+      referrals: [{ specialty: 'Cardiac Rehabilitation', reason: 'Structured exercise and secondary prevention program', urgency: 'routine' }],
+    },
+    treatmentPlanTemplate: {
+      goals: ['LDL < 70 mg/dL', 'BP < 130/80', 'Complete cardiac rehab program'],
+      interventions: ['Mediterranean diet', 'Cardiac rehab 36 sessions', 'Smoking cessation if applicable', 'Stress management'],
+      patientEducation: ['Recognize recurrent ischemia symptoms', 'Adhere to DAPT duration', 'Statins reduce recurrent events'],
+      followUp: 'Follow up in 4 weeks; repeat lipid panel in 6-12 weeks.',
+    },
+    billingCodes: [
+      { codeType: 'CPT', code: '99214', description: 'Established patient office visit, moderate complexity', isPrimary: true },
+      { codeType: 'ICD10', code: 'I25.2', description: 'Old myocardial infarction' },
+    ],
+  }),
 ];
 
 @Injectable()

@@ -182,6 +182,57 @@ class PatientService {
     });
     return response.data;
   }
+
+  // ─── Portal Admin (staff-only) ──────────────────────────────────
+
+  async getPortalStatus(patientId: string): Promise<PortalStatus> {
+    const response = await api.get(`${this.baseUrl}/${patientId}/portal/status`);
+    return response.data;
+  }
+
+  async enablePortal(patientId: string): Promise<EnablePortalResult> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/portal/enable`);
+    return response.data;
+  }
+
+  async disablePortal(patientId: string, reason?: string): Promise<{ revokedSessions: boolean }> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/portal/disable`, { reason });
+    return response.data;
+  }
+
+  async resetPortalPassword(
+    patientId: string,
+    options: { temporaryPassword?: string; sendEmail?: boolean } = {},
+  ): Promise<ResetPasswordResult> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/portal/reset-password`, {
+      temporaryPassword: options.temporaryPassword,
+      sendEmail: options.sendEmail,
+    });
+    return response.data;
+  }
+}
+
+export interface PortalStatus {
+  portalActive: boolean;
+  hasPassword: boolean;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
+  invitationPending: boolean;
+  invitationExpiresAt: string | null;
+  email: string | null;
+}
+
+export interface EnablePortalResult {
+  invitationToken: string;
+  invitationUrl: string;
+  emailSent: boolean;
+}
+
+export interface ResetPasswordResult {
+  temporaryPasswordSet: boolean;
+  resetToken?: string;
+  resetUrl?: string;
+  emailSent: boolean;
 }
 
 export const patientService = new PatientService();

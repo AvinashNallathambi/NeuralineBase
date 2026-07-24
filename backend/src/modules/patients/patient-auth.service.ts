@@ -12,6 +12,9 @@ import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { Patient } from './entities/patient.entity';
 import { TokenBlacklistService, RevocationContext } from '../auth/token-blacklist.service';
+import { HipaaAuditService } from '../../common/services/hipaa-audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType, NotificationPriority } from '../notifications/entities/notification.entity';
 
 interface PatientTokenPayload {
   sub: string;
@@ -42,6 +45,8 @@ export class PatientAuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly tokenBlacklist: TokenBlacklistService,
+    private readonly hipaaAuditService: HipaaAuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async login(
@@ -89,6 +94,7 @@ export class PatientAuthService {
     patientId: string,
     password: string,
     tenantId: string,
+    invitationToken?: string,
   ): Promise<{ message: string }> {
     const patient = await this.patientRepository.findOne({
       where: { id: patientId, tenantId },
@@ -106,11 +112,44 @@ export class PatientAuthService {
       throw new BadRequestException('Patient must have an email on file');
     }
 
+    // SECURITY: Require a valid invitation token issued by an admin.
+    // This prevents anyone who merely knows a patient UUID from
+    // activating portal access and setting a password.
+    if (!invitationToken) {
+      throw new BadRequestException(
+        'An invitation token is required to set up a portal account. Please contact your provider to receive an invitation link.',
+      );
+    }
+
+    if (!patient.portalInvitationToken || patient.portalInvitationToken !== invitationToken) {
+      throw new BadRequestException('Invalid invitation token');
+    }
+
+    if (
+      patient.portalInvitationExpiresAt &&
+      patient.portalInvitationExpiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'This invitation link has expired. Please contact your provider to request a new one.',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(password, this.SALT_ROUNDS);
 
     await this.patientRepository.update(patientId, {
       passwordHash: hashedPassword,
       portalActive: true,
+      portalInvitationToken: null,
+      portalInvitationExpiresAt: null,
+    });
+
+    await this.hipaaAuditService.log({
+      tenantId,
+      userId: patientId,
+      action: 'PATIENT_PORTAL_ACCOUNT_SETUP',
+      resourceType: 'patient_portal_access',
+      resourceId: patientId,
+      description: 'Patient completed portal account setup using invitation token',
     });
 
     this.logger.log(`Patient ${patientId} portal account set up`);
@@ -168,21 +207,78 @@ export class PatientAuthService {
       where: { email: email.toLowerCase(), tenantId },
     });
 
-    if (patient && patient.portalActive) {
-      const resetToken = uuidv4();
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    // Always return the same message to avoid leaking which emails exist.
+    const genericMessage = 'If an account with that email exists, a password reset link has been sent';
 
-      await this.patientRepository.update(patient.id, {
-        passwordResetToken: resetToken,
-        passwordResetExpiresAt: expiresAt,
-      });
-
-      this.logger.log(`Password reset requested for patient ${patient.id}`);
+    if (!patient || !patient.portalActive || !patient.email) {
+      return { message: genericMessage };
     }
 
-    return {
-      message: 'If an account with that email exists, a password reset link has been sent',
-    };
+    const resetToken = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.patientRepository.update(patient.id, {
+      passwordResetToken: resetToken,
+      passwordResetExpiresAt: expiresAt,
+    });
+
+    // Send the reset email via the notification system.
+    const resetUrl = this.buildPatientResetUrl(resetToken);
+    try {
+      await this.notificationsService.notify({
+        tenantId,
+        type: NotificationType.GENERAL,
+        title: 'Password Reset — Patient Portal',
+        message: `Hello ${patient.firstName},\n\nWe received a request to reset your patient portal password. Please choose a new password by visiting the link below.\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you did not request a password reset, you can safely ignore this email.`,
+        priority: NotificationPriority.HIGH,
+        sendEmail: true,
+        emailTo: patient.email,
+        emailToName: `${patient.firstName} ${patient.lastName}`,
+        emailHtmlBody: this.buildResetEmailHtml(patient.firstName, resetUrl),
+        metadata: {
+          kind: 'portal_forgot_password',
+          patientId: patient.id,
+          resetToken,
+          resetExpiresAt: expiresAt.toISOString(),
+        },
+      });
+    } catch (err) {
+      // Don't leak the failure to the caller — the reset token is still
+      // stored in the DB and the patient could contact support.
+      this.logger.error(`Failed to send forgot-password email to ${patient.email}: ${(err as Error).message}`);
+    }
+
+    this.logger.log(`Password reset requested for patient ${patient.id}`);
+    return { message: genericMessage };
+  }
+
+  private buildPatientResetUrl(token: string): string {
+    const base = process.env.PORTAL_BASE_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
+    return `${base}/patient/reset-password?token=${token}`;
+  }
+
+  private buildResetEmailHtml(firstName: string, resetUrl: string): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <h2 style="color: #0D7C8A;">Password Reset — Patient Portal</h2>
+        <p>Hello ${firstName},</p>
+        <p>We received a request to reset your patient portal password. Please choose a new password to regain access to your account.</p>
+        <p style="margin: 24px 0;">
+          <a href="${resetUrl}"
+             style="background: #0D7C8A; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            Choose New Password
+          </a>
+        </p>
+        <p style="color: #666; font-size: 13px;">
+          This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email.
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #999; font-size: 12px;">
+          If the button above doesn't work, copy and paste this link into your browser:<br />
+          ${resetUrl}
+        </p>
+      </div>
+    `;
   }
 
   async resetPassword(

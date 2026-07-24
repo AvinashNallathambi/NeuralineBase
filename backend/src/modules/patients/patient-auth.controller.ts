@@ -40,6 +40,10 @@ class SetupAccountDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  token!: string; // invitation token issued by an admin via POST /patients/:id/portal/enable
 }
 
 class RefreshTokenDto {
@@ -142,13 +146,13 @@ export class PatientAuthController {
 
   @Post(':patientId/setup-account')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set up patient portal account (first-time setup)' })
+  @ApiOperation({ summary: 'Set up patient portal account (requires invitation token)' })
   async setupAccount(
     @Param('patientId') patientId: string,
     @Body() dto: SetupAccountDto,
     @Query('tenantId') tenantId: string,
   ) {
-    return this.patientAuthService.setupAccount(patientId, dto.password, tenantId);
+    return this.patientAuthService.setupAccount(patientId, dto.password, tenantId, dto.token);
   }
 
   @Get('me')

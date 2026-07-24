@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
-import { Modal, Form, Input, Select, Switch, message, Tabs, Row, Col, Button } from 'antd';
+import { Drawer, Form, Input, Select, Switch, message, Tabs, Row, Col, Button, Space } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
 import type { ClinicalTemplate, CreateClinicalTemplateDto, ClinicalTemplateStatus } from '../../types';
 import { clinicalTemplateService } from '../../services/clinicalTemplateService';
+import { SPECIALTY_OPTIONS } from '../../constants/specialties';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -17,17 +18,6 @@ interface Props {
   onClose: () => void;
   onSuccess: () => void;
 }
-
-const SPECIALTY_OPTIONS = [
-  'General Medicine',
-  'Primary Care',
-  'Cardiology',
-  'Pulmonology',
-  'Behavioral Health',
-  'Urgent Care',
-  'Telehealth',
-  'Custom',
-];
 
 const VISIT_TYPE_OPTIONS = [
   'Annual Physical',
@@ -49,7 +39,59 @@ const ENCOUNTER_TYPE_OPTIONS = [
   'nursing_facility',
 ];
 
-const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, onSuccess }) => {
+/**
+ * Fixed pixel width for the delete-button column in every dynamic form row.
+ * Keeping this constant ensures all delete buttons align in a straight
+ * vertical line on the right edge, regardless of how many input columns
+ * precede them or what their fr proportions are.
+ */
+const DELETE_COL_WIDTH = 40;
+
+/**
+ * Gap (in pixels) between grid columns in a dynamic form row.
+ */
+const GRID_COL_GAP = 8;
+
+/**
+ * Builds a CSS Grid style for a dynamic form row.
+ *
+ * @param columns - fr values for each input column (NOT including the delete column)
+ * @returns a React.CSSProperties object ready to spread on the row wrapper div
+ */
+const gridRowStyle = (...columns: string[]): React.CSSProperties => ({
+  display: 'grid',
+  gridTemplateColumns: `${columns.join(' ')} ${DELETE_COL_WIDTH}px`,
+  columnGap: GRID_COL_GAP,
+  alignItems: 'end',
+  marginBottom: 16,
+});
+
+/**
+ * Style applied to every Form.Item inside a grid row so that the grid's
+ * own marginBottom controls row spacing instead of the Form.Item default.
+ */
+const gridItemStyle: React.CSSProperties = { marginBottom: 0 };
+
+/**
+ * Tighter row gap for the Orders tab, where rows are short (2 inputs)
+ * and the default 16px gap feels too airy.
+ */
+const gridRowStyleTight = (...columns: string[]): React.CSSProperties => ({
+  display: 'grid',
+  gridTemplateColumns: `${columns.join(' ')} ${DELETE_COL_WIDTH}px`,
+  columnGap: GRID_COL_GAP,
+  alignItems: 'end',
+  marginBottom: 8,
+});
+
+/**
+ * Style for the "+ Add ..." buttons. The top margin separates the button
+ * from the last input row; the bottom margin separates consecutive
+ * Add-button sections (Labs / Imaging / Referrals) for visual hierarchy.
+ */
+const addButtonStyle: React.CSSProperties = { marginTop: 24, marginBottom: 16 };
+
+const ClinicalTemplateFormDrawer: React.FC<Props> = ({ open, template, onClose, onSuccess }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState('basic');
@@ -175,15 +217,22 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
   };
 
   return (
-    <Modal
+    <Drawer
       open={open}
       title={isEdit ? 'Edit Template' : 'Create Template'}
-      onCancel={onClose}
-      onOk={handleSubmit}
-      confirmLoading={loading}
-      okText={isEdit ? 'Save' : 'Create'}
-      width={720}
+      onClose={onClose}
+      width={760}
       destroyOnHidden
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Space>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button type="primary" loading={loading} onClick={handleSubmit}>
+              {isEdit ? 'Save' : 'Create'}
+            </Button>
+          </Space>
+        </div>
+      }
     >
       <Form form={form} layout="vertical">
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
@@ -312,21 +361,17 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={8}>
-                        <Form.Item {...field} name={[field.name, 'code']} label={index === 0 ? 'Code' : ''}>
-                          <Input placeholder="ICD-10" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={12}>
-                        <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''}>
-                          <Input placeholder="Description" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyle('2fr', '3fr')}>
+                      <Form.Item {...field} name={[field.name, 'code']} label={index === 0 ? 'Code' : ''} style={gridItemStyle}>
+                        <Input placeholder="ICD-10" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''} style={gridItemStyle}>
+                        <Input placeholder="Description" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
                   <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>
                     Add Diagnosis
@@ -341,27 +386,23 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={16}>
-                        <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Lab Order' : ''}>
-                          <Input placeholder="Lab name" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Form.Item {...field} name={[field.name, 'priority']} label={index === 0 ? 'Priority' : ''}>
-                          <Select placeholder="Priority">
-                            <Option value="routine">Routine</Option>
-                            <Option value="stat">STAT</Option>
-                            <Option value="asap">ASAP</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyleTight('4fr', '1fr')}>
+                      <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Lab Order' : ''} style={gridItemStyle}>
+                        <Input placeholder="Lab name" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'priority']} label={index === 0 ? 'Priority' : ''} style={gridItemStyle}>
+                        <Select placeholder="Priority">
+                          <Option value="routine">Routine</Option>
+                          <Option value="stat">STAT</Option>
+                          <Option value="asap">ASAP</Option>
+                        </Select>
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ priority: 'routine' })}>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ priority: 'routine' })} style={addButtonStyle}>
                     Add Lab
                   </Button>
                 </>
@@ -372,23 +413,19 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={16}>
-                        <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Imaging Order' : ''}>
-                          <Input placeholder="Imaging name" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Form.Item {...field} name={[field.name, 'modality']} label={index === 0 ? 'Modality' : ''}>
-                          <Input placeholder="Modality" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyleTight('4fr', '1fr')}>
+                      <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Imaging Order' : ''} style={gridItemStyle}>
+                        <Input placeholder="Imaging name" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'modality']} label={index === 0 ? 'Modality' : ''} style={gridItemStyle}>
+                        <Input placeholder="Modality" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ priority: 'routine' })}>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ priority: 'routine' })} style={addButtonStyle}>
                     Add Imaging
                   </Button>
                 </>
@@ -399,23 +436,19 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={10}>
-                        <Form.Item {...field} name={[field.name, 'specialty']} label={index === 0 ? 'Specialty' : ''}>
-                          <Input placeholder="Specialty" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={10}>
-                        <Form.Item {...field} name={[field.name, 'reason']} label={index === 0 ? 'Reason' : ''}>
-                          <Input placeholder="Reason" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyleTight('1fr', '1fr')}>
+                      <Form.Item {...field} name={[field.name, 'specialty']} label={index === 0 ? 'Specialty' : ''} style={gridItemStyle}>
+                        <Input placeholder="Specialty" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'reason']} label={index === 0 ? 'Reason' : ''} style={gridItemStyle}>
+                        <Input placeholder="Reason" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ urgency: 'routine' })}>
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ urgency: 'routine' })} style={addButtonStyle}>
                     Add Referral
                   </Button>
                 </>
@@ -428,31 +461,23 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={6}>
-                        <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Medication' : ''}>
-                          <Input placeholder="Name" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={5}>
-                        <Form.Item {...field} name={[field.name, 'dosage']} label={index === 0 ? 'Dosage' : ''}>
-                          <Input placeholder="Dosage" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={5}>
-                        <Form.Item {...field} name={[field.name, 'frequency']} label={index === 0 ? 'Frequency' : ''}>
-                          <Input placeholder="Frequency" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Form.Item {...field} name={[field.name, 'route']} label={index === 0 ? 'Route' : ''}>
-                          <Input placeholder="Route" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyle('6fr', '5fr', '5fr', '4fr')}>
+                      <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Medication' : ''} style={gridItemStyle}>
+                        <Input placeholder="Name" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'dosage']} label={index === 0 ? 'Dosage' : ''} style={gridItemStyle}>
+                        <Input placeholder="Dosage" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'frequency']} label={index === 0 ? 'Frequency' : ''} style={gridItemStyle}>
+                        <Input placeholder="Frequency" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'route']} label={index === 0 ? 'Route' : ''} style={gridItemStyle}>
+                        <Input placeholder="Route" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
                   <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>
                     Add Medication
@@ -467,21 +492,17 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={12}>
-                        <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Procedure' : ''}>
-                          <Input placeholder="Procedure name" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={8}>
-                        <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''}>
-                          <Input placeholder="Description" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={4}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyle('3fr', '2fr')}>
+                      <Form.Item {...field} name={[field.name, 'name']} label={index === 0 ? 'Procedure' : ''} style={gridItemStyle}>
+                        <Input placeholder="Procedure name" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''} style={gridItemStyle}>
+                        <Input placeholder="Description" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
                   <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>
                     Add Procedure
@@ -509,31 +530,25 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
               {(fields, { add, remove }) => (
                 <>
                   {fields.map((field, index) => (
-                    <Row gutter={8} key={field.key} align="bottom" style={{ marginBottom: 8 }}>
-                      <Col xs={6}>
-                        <Form.Item {...field} name={[field.name, 'codeType']} label={index === 0 ? 'Type' : ''}>
-                          <Select placeholder="Type">
-                            <Option value="CPT">CPT</Option>
-                            <Option value="ICD10">ICD10</Option>
-                            <Option value="HCPCS">HCPCS</Option>
-                            <Option value="SNOMED">SNOMED</Option>
-                          </Select>
-                        </Form.Item>
-                      </Col>
-                      <Col xs={6}>
-                        <Form.Item {...field} name={[field.name, 'code']} label={index === 0 ? 'Code' : ''}>
-                          <Input placeholder="Code" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={10}>
-                        <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''}>
-                          <Input placeholder="Description" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={2}>
-                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger />
-                      </Col>
-                    </Row>
+                    <div key={field.key} style={gridRowStyle('3fr', '3fr', '5fr')}>
+                      <Form.Item {...field} name={[field.name, 'codeType']} label={index === 0 ? 'Type' : ''} style={gridItemStyle}>
+                        <Select placeholder="Type">
+                          <Option value="CPT">CPT</Option>
+                          <Option value="ICD10">ICD10</Option>
+                          <Option value="HCPCS">HCPCS</Option>
+                          <Option value="SNOMED">SNOMED</Option>
+                        </Select>
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'code']} label={index === 0 ? 'Code' : ''} style={gridItemStyle}>
+                        <Input placeholder="Code" />
+                      </Form.Item>
+                      <Form.Item {...field} name={[field.name, 'description']} label={index === 0 ? 'Description' : ''} style={gridItemStyle}>
+                        <Input placeholder="Description" />
+                      </Form.Item>
+                      <Form.Item label=" " style={gridItemStyle}>
+                        <Button icon={<DeleteOutlined />} onClick={() => remove(field.name)} danger block />
+                      </Form.Item>
+                    </div>
                   ))}
                   <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({})}>
                     Add Billing Code
@@ -548,8 +563,8 @@ const ClinicalTemplateFormModal: React.FC<Props> = ({ open, template, onClose, o
           </TabPane>
         </Tabs>
       </Form>
-    </Modal>
+    </Drawer>
   );
 };
 
-export default ClinicalTemplateFormModal;
+export default ClinicalTemplateFormDrawer;
