@@ -28,11 +28,9 @@ export class SubscriptionInvoice {
   id!: string;
 
   @Column({ name: 'tenant_id', type: 'uuid' })
-  @Index()
   tenantId!: string;
 
   @Column({ name: 'subscription_id', type: 'uuid' })
-  @Index()
   subscriptionId!: string;
 
   @Column({ name: 'invoice_number', type: 'varchar', length: 50, unique: true })

@@ -33,7 +33,6 @@ export class Subscription {
   id!: string;
 
   @Column({ name: 'tenant_id', type: 'uuid' })
-  @Index()
   tenantId!: string;
 
   @Column({ name: 'plan_tier', type: 'varchar', length: 50 })
