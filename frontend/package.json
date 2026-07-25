@@ -19,6 +19,7 @@
     "@stripe/react-stripe-js": "^6.8.0",
     "@stripe/stripe-js": "^9.10.0",
     "@tanstack/react-query": "^5.100.14",
+    "@testing-library/dom": "^10.4.1",
     "@types/simple-peer": "^9.11.9",
     "@vercel/node": "^5.8.12",
     "antd": "^6.4.3",

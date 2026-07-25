@@ -148,6 +148,7 @@ describe('AuthService — login', () => {
   });
 
   it('should clear failed attempts after successful login', async () => {
+    // This test does 9 bcrypt comparisons which can be slow on CI
     usersService.findByEmailWithPassword!.mockResolvedValue(mockUser);
 
     // 2 failed attempts
@@ -171,7 +172,7 @@ describe('AuthService — login', () => {
     await expect(
       service.login('test@neuraline.health', 'TestPass@2025'),
     ).rejects.toThrow(/Account locked/);
-  });
+  }, 30000);
 });
 
 /**

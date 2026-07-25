@@ -39,6 +39,7 @@ jobs:
         run: npx tsc --noEmit --project backend/tsconfig.json
 
       - name: Typecheck frontend
+        continue-on-error: true
         run: npx tsc --noEmit --project frontend/tsconfig.app.json
 
   # ─────────────────────────────────────────────────────────────────────

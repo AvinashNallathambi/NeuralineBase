@@ -38,15 +38,52 @@ function buildService(session: Record<string, any>) {
     sign: jest.fn(),
   };
   const hipaaAuditService = { log: jest.fn().mockResolvedValue(undefined) };
+  const evidenceRepository = {
+    findOne: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockImplementation((value) => value),
+    save: jest.fn().mockResolvedValue(undefined),
+    find: jest.fn().mockResolvedValue([]),
+  };
+  const suggestionRepository = {
+    findOne: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockImplementation((value) => value),
+    save: jest.fn().mockResolvedValue(undefined),
+    find: jest.fn().mockResolvedValue([]),
+  };
+  const patientInsuranceRepository = {
+    find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn().mockResolvedValue(null),
+  };
+  const intelligenceService = {
+    analyzeDocumentation: jest.fn().mockResolvedValue({}),
+    generateSuggestions: jest.fn().mockResolvedValue([]),
+  };
+  const actionsService = {
+    getActions: jest.fn().mockResolvedValue([]),
+    createAction: jest.fn(),
+  };
+  const revenueService = {
+    getRevenueContext: jest.fn().mockResolvedValue({}),
+  };
+  const messagingService = {
+    sendNotification: jest.fn().mockResolvedValue(undefined),
+  };
 
   return {
     service: new DocumentationService(
       sessionRepository as any,
       versionRepository as any,
+      evidenceRepository as any,
+      suggestionRepository as any,
+      patientInsuranceRepository as any,
       transcriptionService as any,
       aiService as any,
       encounterService as any,
       hipaaAuditService as any,
+      intelligenceService as any,
+      actionsService as any,
+      revenueService as any,
+      messagingService as any,
     ),
     sessionRepository,
     versionRepository,
