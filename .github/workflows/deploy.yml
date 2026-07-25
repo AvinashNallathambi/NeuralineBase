@@ -7,6 +7,11 @@ on:
   # Manual: click "Run workflow" button in GitHub Actions UI
   workflow_dispatch:
     inputs:
+      skip_ci:
+        description: 'Skip CI checks (deploy immediately)'
+        required: false
+        default: false
+        type: boolean
       environment:
         description: 'Deployment environment'
         required: true
@@ -23,7 +28,7 @@ concurrency:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
-  # Gate 1: Verify CI passed on this commit
+  # Gate 1: Verify CI passed on this commit (skippable for manual deploys)
   # ─────────────────────────────────────────────────────────────────────────
   verify-ci:
     name: Verify CI Passed
@@ -33,7 +38,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Skip CI check (manual deploy with skip_ci=true)
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_ci == true
+        run: |
+          echo "⏭️ CI check skipped (manual deploy with skip_ci=true)"
+          echo "::set-output name=passed::true"
+
       - name: Wait for CI to finish and check result
+        if: !(github.event_name == 'workflow_dispatch' && inputs.skip_ci == true)
         id: check
         uses: actions/github-script@v7
         with:
@@ -59,7 +71,7 @@ jobs:
                   core.setOutput('passed', 'true');
                   return;
                 } else {
-                  core.setFailed(`❌ CI failed with conclusion: ${ciSuite.conclusion}. Fix the failing checks before deploying.`);
+                  core.setFailed(`❌ CI failed with conclusion: ${ciSuite.conclusion}. Fix the failing checks before deploying, or use manual deploy with "Skip CI checks" enabled.`);
                   core.setOutput('passed', 'false');
                   return;
                 }
@@ -69,7 +81,7 @@ jobs:
               await new Promise(r => setTimeout(r, sleepMs));
             }
 
-            core.setFailed('❌ CI did not complete within 10 minutes. Deploy aborted.');
+            core.setFailed('❌ CI did not complete within 10 minutes. Deploy aborted. Use manual deploy with "Skip CI checks" if needed.');
             core.setOutput('passed', 'false');
 
   # ─────────────────────────────────────────────────────────────────────────
@@ -95,6 +107,7 @@ jobs:
             echo "=== Neuraline EMR Deploy ==="
             echo "Commit: ${{ github.sha }}"
             echo "Triggered by: ${{ github.actor }}"
+            echo "Event: ${{ github.event_name }}"
             echo ""
 
             cd /opt/neuraline
