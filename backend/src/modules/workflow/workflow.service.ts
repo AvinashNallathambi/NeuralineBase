@@ -24,6 +24,11 @@ export interface PaginatedResult<T> {
 export class WorkflowService {
   private readonly logger = new Logger(WorkflowService.name);
 
+  // Seed tenant hosts the default workflow templates (e.g. the default
+  // appointment workflow) that are shared with all other tenants as a
+  // fallback when they haven't defined their own.
+  private static readonly SEED_TENANT_ID = '00000000-0000-0000-0000-000000000000';
+
   constructor(
     @InjectRepository(WorkflowTemplate)
     private readonly templateRepository: Repository<WorkflowTemplate>,
@@ -101,14 +106,51 @@ export class WorkflowService {
     return template;
   }
 
+  // Like findTemplateById, but also resolves templates owned by the seed
+  // tenant. Used by instance operations (transition, available transitions,
+  // complete, cancel) so a real tenant's instance can reference a shared
+  // seed-tenant template. Update/delete operations intentionally use the
+  // stricter findTemplateById to prevent tenants from mutating shared
+  // seed templates.
+  private async findTemplateByIdForInstance(
+    tenantId: string,
+    id: string,
+  ): Promise<WorkflowTemplate> {
+    const template = await this.templateRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (template) return template;
+    if (tenantId !== WorkflowService.SEED_TENANT_ID) {
+      const seedTemplate = await this.templateRepository.findOne({
+        where: { id, tenantId: WorkflowService.SEED_TENANT_ID },
+      });
+      if (seedTemplate) return seedTemplate;
+    }
+    throw new NotFoundException(`Workflow template "${id}" not found`);
+  }
+
   async findActiveTemplateForEntity(
     tenantId: string,
     entityType: string,
   ): Promise<WorkflowTemplate | null> {
-    return this.templateRepository.findOne({
+    // First, look for a tenant-specific active template.
+    const tenantTemplate = await this.templateRepository.findOne({
       where: { tenantId, entityType, isActive: true },
       order: { version: 'DESC' },
     });
+    if (tenantTemplate) return tenantTemplate;
+
+    // Fall back to the seed tenant's default template so every tenant gets
+    // the default workflow (e.g. the seeded "Default Appointment Workflow")
+    // without having to create one manually. This keeps the scheduler
+    // workflow-driven instead of falling back to hardcoded UI state machines.
+    if (tenantId !== WorkflowService.SEED_TENANT_ID) {
+      return this.templateRepository.findOne({
+        where: { tenantId: WorkflowService.SEED_TENANT_ID, entityType, isActive: true },
+        order: { version: 'DESC' },
+      });
+    }
+    return null;
   }
 
   async updateTemplate(
@@ -142,7 +184,10 @@ export class WorkflowService {
     userId?: string,
     userName?: string,
   ): Promise<WorkflowInstance> {
-    const template = await this.findTemplateById(tenantId, dto.templateId);
+    // Resolve the template, falling back to the seed tenant's shared default
+    // templates so real tenants can start instances from seeded workflows
+    // (e.g. the Default Appointment Workflow) without owning a copy.
+    const template = await this.findTemplateByIdForInstance(tenantId, dto.templateId);
 
     const stepNames = template.steps.map((s) => s.name);
     if (!stepNames.includes(dto.currentStep)) {
@@ -234,7 +279,7 @@ export class WorkflowService {
     userName: string,
   ): Promise<WorkflowInstance> {
     const instance = await this.findInstanceByEntity(tenantId, entityType, entityId);
-    const template = await this.findTemplateById(tenantId, instance.templateId);
+    const template = await this.findTemplateByIdForInstance(tenantId, instance.templateId);
 
     if (instance.status !== 'active') {
       throw new BadRequestException(
@@ -287,7 +332,7 @@ export class WorkflowService {
     entityId: string,
   ): Promise<WorkflowStepConfig[]> {
     const instance = await this.findInstanceByEntity(tenantId, entityType, entityId);
-    const template = await this.findTemplateById(tenantId, instance.templateId);
+    const template = await this.findTemplateByIdForInstance(tenantId, instance.templateId);
 
     const currentStepConfig = template.steps.find(
       (s) => s.name === instance.currentStep,

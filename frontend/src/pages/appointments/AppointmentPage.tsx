@@ -471,7 +471,8 @@ const AppointmentPage: React.FC = () => {
           meetingLink: values.isTelehealth
             ? `https://telehealth.neuraline.health/room/apt-${Date.now()}`
             : undefined,
-          reminders: true,
+          reminders: values.remindersEnabled !== false,
+          remindersEnabled: values.remindersEnabled !== false,
           createdAt: new Date().toISOString(),
         };
         addAppointment(newAppt);
@@ -1584,6 +1585,9 @@ const AppointmentPage: React.FC = () => {
               </Space>
             </div>
           )}
+          <Form.Item name="remindersEnabled" label="Send Reminders" valuePropName="checked" initialValue={true} tooltip="Email/SMS reminders to the patient before the appointment">
+            <Switch />
+          </Form.Item>
           <Form.Item name="reason" label="Reason for Visit">
             <TextArea rows={3} placeholder="Brief description of the visit reason..." />
           </Form.Item>

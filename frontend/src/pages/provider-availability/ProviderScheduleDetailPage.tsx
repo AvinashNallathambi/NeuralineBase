@@ -42,9 +42,8 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 import type { ColumnsType } from 'antd/es/table';
 
 dayjs.extend(customParseFormat);
-import { useProviderStore } from '../../store/dataStore';
 import { providerAvailabilityService } from '../../services/providerAvailabilityService';
-import userService, { type RolePermission } from '../../services/userService';
+import userService, { type RolePermission, type StaffUser } from '../../services/userService';
 import type { ProviderAvailability, ProviderAvailabilityOverride, OverrideType, AppointmentType } from '../../types';
 
 const { Title, Text } = Typography;
@@ -100,8 +99,8 @@ const overlaps = (a: ProviderAvailability, b: ProviderAvailability): boolean => 
 const ProviderScheduleDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { id: providerId } = useParams<{ id: string }>();
-  const { providers } = useProviderStore();
 
+  const [provider, setProvider] = useState<StaffUser | null>(null);
   const [schedules, setSchedules] = useState<ProviderAvailability[]>([]);
   const [overrides, setOverrides] = useState<ProviderAvailabilityOverride[]>([]);
   const [roles, setRoles] = useState<RolePermission[]>([]);
@@ -115,19 +114,24 @@ const ProviderScheduleDetailPage: React.FC = () => {
   const [scheduleForm] = Form.useForm();
   const [overrideForm] = Form.useForm();
 
-  const provider = providers.find((p) => p.id === providerId);
-
   const loadData = async () => {
     if (!providerId) return;
     setLoading(true);
     setError(null);
     try {
       // Load each independently so one failure doesn't block the others
-      const [availabilityResult, overridesResult, rolesResult] = await Promise.allSettled([
+      const [providerResult, availabilityResult, overridesResult, rolesResult] = await Promise.allSettled([
+        userService.getById(providerId),
         providerAvailabilityService.findAvailabilityByProvider(providerId),
         providerAvailabilityService.findOverridesByProvider(providerId),
         userService.getRoleDefinitions(),
       ]);
+
+      if (providerResult.status === 'fulfilled') {
+        setProvider(providerResult.value);
+      } else {
+        console.error('Failed to load provider:', providerResult.reason);
+      }
 
       if (availabilityResult.status === 'fulfilled') {
         setSchedules(availabilityResult.value);
@@ -184,13 +188,21 @@ const ProviderScheduleDetailPage: React.FC = () => {
     [providerSchedules]
   );
 
-  if (!provider) {
+  if (!provider && !loading) {
     return (
       <div style={{ padding: 24 }}>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/provider-availability')}>
           Back
         </Button>
         <Empty description="Provider not found" style={{ marginTop: 48 }} />
+      </div>
+    );
+  }
+
+  if (!provider) {
+    return (
+      <div style={{ padding: 24, textAlign: 'center' }}>
+        <Spin size="large" />
       </div>
     );
   }
@@ -622,7 +634,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
             {providerName}
           </Title>
           <Text type="secondary">
-            {provider.specialization || provider.department} &middot;{' '}
+            {provider.department || '—'} &middot;{' '}
             {roles.find((r) => r.key === provider.role)?.label ||
               provider.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
           </Text>
@@ -756,9 +768,6 @@ const ProviderScheduleDetailPage: React.FC = () => {
                         {roles.find((r) => r.key === provider.role)?.label ||
                           provider.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                       </Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="Specialization">
-                      {provider.specialization || '—'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Department">
                       {provider.department || '—'}

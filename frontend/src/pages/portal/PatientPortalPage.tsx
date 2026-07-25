@@ -68,7 +68,7 @@ const healthArticles = [
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 const PatientPortalPage: React.FC = () => {
-  const { appointments: mockAppointments } = useAppointmentStore();
+  const { appointments } = useAppointmentStore();
   const { messages: mockMessages } = useMessageStore();
   const { prescriptions: mockPrescriptions } = usePrescriptionStore();
   const { labOrders: mockLabOrders } = useLabStore();
@@ -77,7 +77,7 @@ const PatientPortalPage: React.FC = () => {
 
   // ─── Simulated patient context ──────────────────────────────────────────────────
   const currentPatient = mockPatients[0]; // John Smith
-  const patientAppointments = mockAppointments.filter((a) => a.patientId === currentPatient.id);
+  const patientAppointments = appointments.filter((a) => a.patientId === currentPatient.id);
   const upcomingAppointments = patientAppointments.filter(
     (a) => a.status === 'scheduled' || a.status === 'confirmed'
   );

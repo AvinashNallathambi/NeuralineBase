@@ -46,14 +46,16 @@ async function bootstrap() {
 
   // HIPAA: Reduce log verbosity in production to avoid PHI leakage
   const isProd = process.env.NODE_ENV === "production";
-  // Disable default body parser so we can install a custom one that captures
-  // raw body bytes for Stripe webhook signature verification.
+
+  // Use Pino logger from LoggerModule (configured in app.module.ts).
+  // Pino provides structured JSON logging with PHI redaction.
+  const { Logger: PinoLogger } = await import("nestjs-pino");
   const app = await NestFactory.create(AppModule, {
     bodyParser: false,
-    logger: isProd
-      ? ["error", "warn", "log"]
-      : ["error", "warn", "log", "debug", "verbose"],
+    // Pino handles logging — disable NestJS default logger
+    logger: false,
   });
+  app.useLogger(app.get(PinoLogger));
 
   const configService = app.get(ConfigService);
 

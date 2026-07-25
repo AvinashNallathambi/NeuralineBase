@@ -6,6 +6,10 @@ import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import Redis from 'ioredis';
+import { LoggerModule } from 'nestjs-pino';
+import * as pino from 'pino';
+import * as fs from 'fs';
+import * as path from 'path';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { PatientsModule } from './modules/patients/patients.module';
@@ -51,6 +55,105 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env', '.env.local'],
+    }),
+
+    // ── Pino structured logging (HIPAA-compliant JSON logs) ───────────────
+    // - Development: pretty-printed colored console output
+    // - Production: JSON to console (PM2 captures) + JSON to file
+    // - PHI is never logged (redact configured below)
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const isProd = configService.get<string>('NODE_ENV') === 'production';
+        const logLevel = configService.get<string>('LOG_LEVEL', isProd ? 'info' : 'debug');
+        const logDir = configService.get<string>('LOG_DIR', '/var/log/neuraline');
+
+        // Build transport targets — in production, write JSON to both
+        // console (PM2 captures) and a rotating file. In development,
+        // pretty-print to console for readability.
+        const targets: any[] = [];
+
+        if (isProd) {
+          // Console output (PM2 captures this → backend-out.log)
+          targets.push({
+            target: 'pino/file',
+            level: logLevel,
+            options: {},
+          });
+
+          // File output with daily rotation (keeps 7 days)
+          try {
+            if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+            targets.push({
+              target: 'pino-roll',
+              level: logLevel,
+              options: {
+                file: path.join(logDir, 'backend.json'),
+                frequency: 'daily',
+                mkdir: true,
+                size: '50m',
+                limit: { count: 7 },
+              },
+            });
+          } catch {
+            // Can't create log dir (e.g., Windows dev) — skip file logging
+          }
+        } else {
+          // Development: pretty console output
+          targets.push({
+            target: 'pino-pretty',
+            level: logLevel,
+            options: {
+              colorize: true,
+              translateTime: 'SYS:HH:MM:ss.l',
+              ignore: 'pid,hostname,req,res,responseTime',
+              singleLine: true,
+            },
+          });
+        }
+
+        return {
+          pinoHttp: {
+            level: logLevel,
+            transport: {
+              targets,
+            },
+            // HIPAA: Redact sensitive fields from logs
+            redact: {
+              paths: [
+                'req.headers.authorization',
+                'req.headers.cookie',
+                'req.body.password',
+                'req.body.encryptedPassword',
+                'req.body.email',
+                'res.headers.authorization',
+                '*.password',
+                '*.passwordHash',
+                '*.mfaSecret',
+                '*.token',
+                '*.refreshToken',
+                '*.accessToken',
+              ],
+              remove: true,
+            },
+            // Don't log health check requests (noise reduction)
+            autoLogging: {
+              ignore: (req: any) => req.url === '/api/v1/health' || req.url === '/api/v1/health/redis',
+            },
+            // Custom log message for HTTP requests
+            customLogLevel: (req: any, res: any, err: any) => {
+              if (err || res.statusCode >= 500) return 'error';
+              if (res.statusCode >= 400) return 'warn';
+              return 'info';
+            },
+            customSuccessMessage: (req: any, res: any) =>
+              `${req.method} ${req.url} → ${res.statusCode}`,
+            customErrorMessage: (req: any, res: any, err: any) =>
+              `${req.method} ${req.url} → ${res.statusCode} ${err.message}`,
+          },
+        };
+      },
     }),
 
     // Database connection

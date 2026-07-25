@@ -54,7 +54,6 @@ import {
 import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import type { Patient, Allergy, MedicalHistory, Appointment, Claim } from '../../types';
-import { mockPatients, mockAppointments, mockClaims } from '../../data/mockData';
 import { usePatientStore, useAppointmentStore, useBillingStore } from '../../store/dataStore';
 import type { ColumnsType } from 'antd/es/table';
 import ProblemListSection from '../../components/patients/ProblemListSection';

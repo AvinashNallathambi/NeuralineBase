@@ -61,8 +61,7 @@ import {
   ExclamationCircleOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { mockUsers, mockAuditLog } from '../../data/mockData';
-import type { User } from '../../types';
+import { mockAuditLog } from '../../data/mockData';
 import { useIntegrations } from '../../hooks/useIntegrations';
 import { integrationService, type Integration, type IntegrationCategory } from '../../services/integrationService';
 import IntegrationConfigDrawer from './IntegrationConfigDrawer';
@@ -76,6 +75,7 @@ import subscriptionService, {
   type PaymentOptimizationSuggestion,
 } from '../../services/subscriptionService';
 import UpdatePaymentMethodModal from './UpdatePaymentMethodModal';
+import UsersRolesTab from './UsersRolesTab';
 
 const { Title, Text, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -1374,8 +1374,6 @@ const BillingSettingsTabContent: React.FC = () => {
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 const SettingsPage: React.FC = () => {
-  const [inviteModalVisible, setInviteModalVisible] = useState(false);
-
   const handleSave = (section: string) => {
     message.success(`${section} settings saved successfully.`);
   };
@@ -1533,110 +1531,7 @@ const SettingsPage: React.FC = () => {
   );
 
   // ─── Users & Roles Tab ────────────────────────────────────────────────────────
-  const roleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'red';
-      case 'doctor': return 'blue';
-      case 'nurse': return 'green';
-      case 'receptionist': return 'purple';
-      case 'billing_staff': return 'orange';
-      default: return 'default';
-    }
-  };
-
-  const userColumns = [
-    {
-      title: 'User',
-      key: 'user',
-      render: (_: unknown, record: User) => (
-        <Space>
-          <Avatar size={32} icon={<UserOutlined />} style={{ backgroundColor: '#0D7C8A' }} />
-          <div>
-            <Text strong>{record.firstName} {record.lastName}</Text>
-            <br />
-            <Text type="secondary" style={{ fontSize: 12 }}>{record.email}</Text>
-          </div>
-        </Space>
-      ),
-    },
-    {
-      title: 'Role',
-      dataIndex: 'role',
-      key: 'role',
-      render: (role: string) => <Tag color={roleColor(role)}>{role.replace('_', ' ').toUpperCase()}</Tag>,
-    },
-    { title: 'Department', dataIndex: 'department', key: 'department' },
-    {
-      title: 'MFA',
-      dataIndex: 'mfaEnabled',
-      key: 'mfa',
-      render: (v: boolean) => v ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <CloseCircleOutlined style={{ color: '#d9d9d9' }} />,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'isActive',
-      key: 'status',
-      render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? 'Active' : 'Inactive'} />,
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: () => (
-        <Space>
-          <Button type="text" size="small" icon={<EditOutlined />} />
-          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-        </Space>
-      ),
-    },
-  ];
-
-  const UsersTab = (
-    <Card
-      bordered={false}
-      style={{ borderRadius: 12 }}
-      title={
-        <Space>
-          <TeamOutlined />
-          <Text strong>Staff Members</Text>
-        </Space>
-      }
-      extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteModalVisible(true)} style={{ borderRadius: 8 }}>
-          Invite User
-        </Button>
-      }
-    >
-      <Table dataSource={mockUsers} columns={userColumns} rowKey="id" pagination={false} size="middle" />
-      <Modal
-        title="Invite New User"
-        open={inviteModalVisible}
-        onCancel={() => setInviteModalVisible(false)}
-        onOk={() => { setInviteModalVisible(false); message.success('Invitation sent!'); }}
-        okText="Send Invitation"
-      >
-        <Form layout="vertical">
-          <Form.Item label="Email Address" rules={[{ required: true, type: 'email' }]}>
-            <Input placeholder="user@neuraline.health" />
-          </Form.Item>
-          <Form.Item label="Role">
-            <Select
-              placeholder="Select role"
-              options={[
-                { label: 'Doctor', value: 'doctor' },
-                { label: 'Nurse', value: 'nurse' },
-                { label: 'Receptionist', value: 'receptionist' },
-                { label: 'Billing Staff', value: 'billing_staff' },
-                { label: 'Admin', value: 'admin' },
-              ]}
-            />
-          </Form.Item>
-          <Form.Item label="Department">
-            <Input placeholder="e.g., Primary Care" />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Card>
-  );
+  const UsersTab = <UsersRolesTab />;
 
   // ─── Security Tab ─────────────────────────────────────────────────────────────
   const activeSessions = [

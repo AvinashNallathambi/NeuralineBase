@@ -40,7 +40,7 @@ import {
   CalendarOutlined,
 } from '@ant-design/icons';
 import type { Appointment, Message as MessageType } from '../../types';
-import { useAppointmentStore, useMessageStore } from '../../store/dataStore';
+import { useAppointmentStore } from '../../store/dataStore';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -62,11 +62,10 @@ const chatMessages = [
 
 // ─── Component ──────────────────────────────────────────────────────────────────
 const TelemedicinePage: React.FC = () => {
-  const { appointments: mockAppointments } = useAppointmentStore();
-  const { messages: mockMessages } = useMessageStore();
+  const { appointments } = useAppointmentStore();
 
   // ─── Helper data ────────────────────────────────────────────────────────────────
-  const telehealthAppointments = mockAppointments.filter((a) => a.isTelehealth);
+  const telehealthAppointments = appointments.filter((a) => a.isTelehealth);
   const todayTelehealthAppointments = telehealthAppointments.filter(
     (a) => a.status === 'confirmed' || a.status === 'scheduled'
   );

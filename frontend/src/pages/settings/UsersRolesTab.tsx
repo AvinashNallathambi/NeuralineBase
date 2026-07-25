@@ -21,6 +21,7 @@ import {
   Divider,
   Row,
   Col,
+  Alert,
 } from 'antd';
 import {
   UserOutlined,
@@ -37,7 +38,7 @@ import {
   MailOutlined,
   PhoneOutlined,
 } from '@ant-design/icons';
-import userService, { type StaffUser, type RolePermission, type PermissionModule } from '../../services/userService';
+import userService, { type StaffUser, type RolePermission, type PermissionModule, type UserLimits } from '../../services/userService';
 
 const { Text } = Typography;
 
@@ -153,6 +154,7 @@ const UsersRolesTab: React.FC = () => {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [roles, setRoles] = useState<RolePermission[]>([]);
   const [modules, setModules] = useState<PermissionModule[]>([]);
+  const [limits, setLimits] = useState<UserLimits | null>(null);
   const [loading, setLoading] = useState(true);
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -164,14 +166,16 @@ const UsersRolesTab: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersData, rolesData, modulesData] = await Promise.all([
+      const [usersData, rolesData, modulesData, limitsData] = await Promise.all([
         userService.getAll(),
         userService.getRoleDefinitions(),
         userService.getPermissionModules(),
+        userService.getLimits().catch(() => null),
       ]);
       setUsers(usersData);
       setRoles(rolesData);
       setModules(modulesData);
+      setLimits(limitsData);
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Failed to load users');
     } finally {
@@ -363,11 +367,41 @@ const UsersRolesTab: React.FC = () => {
           bordered={false}
           style={{ borderRadius: 12 }}
           extra={
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setInviteModalVisible(true)} style={{ borderRadius: 8 }}>
-              Add User
-            </Button>
+            <Space>
+              {limits && limits.maxProviders !== null && (
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  {limits.currentCount} / {limits.maxProviders} users
+                </Text>
+              )}
+              <Tooltip title={limits && !limits.canAddMore ? 'User limit reached for your plan. Upgrade to add more.' : undefined}>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => setInviteModalVisible(true)}
+                  style={{ borderRadius: 8 }}
+                  disabled={limits ? !limits.canAddMore : false}
+                >
+                  Add User
+                </Button>
+              </Tooltip>
+            </Space>
           }
         >
+          {limits && !limits.canAddMore && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16, borderRadius: 8 }}
+              message={`You've reached the user limit for the ${limits.planName} plan`}
+              description={
+                <span>
+                  Your {limits.planName} plan allows {limits.maxProviders === null ? 'unlimited' : limits.maxProviders} users.{' '}
+                  You currently have {limits.currentCount} active users.{' '}
+                  Upgrade your subscription in Settings → Billing to add more team members.
+                </span>
+              }
+            />
+          )}
           <Table
             dataSource={users}
             columns={columns}

@@ -39,6 +39,13 @@ export class UsersController {
     return users.map((u) => this.usersService.sanitize(u));
   }
 
+  @Get('limits')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get subscription user limits for the tenant' })
+  async getLimits(@Request() req: AuthenticatedRequest) {
+    return this.usersService.getSubscriptionLimits(req.user.tenantId);
+  }
+
   @Get(':id')
   @Roles('admin')
   @ApiOperation({ summary: 'Get a single user by ID' })

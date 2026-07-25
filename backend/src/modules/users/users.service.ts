@@ -3,8 +3,11 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
   Logger,
   OnModuleInit,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -12,6 +15,7 @@ import * as bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { User } from './entities/user.entity';
 import { ROLE_DEFINITIONS, getRoleDefinition } from './role-permissions';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 const DEV_TENANT_ID = '00000000-0000-0000-0000-000000000000';
 const SALT_ROUNDS = 12;
@@ -23,6 +27,8 @@ export class UsersService implements OnModuleInit {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @Inject(forwardRef(() => SubscriptionsService))
+    private readonly subscriptionsService: SubscriptionsService,
   ) {}
 
   async onModuleInit() {
@@ -89,6 +95,20 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException(`Invalid role: ${data.role}`);
     }
 
+    // ─── Subscription limit enforcement ──────────────────────────────
+    const currentCount = await this.userRepository.count({
+      where: { tenantId, isActive: true },
+    });
+    const canAdd = await this.subscriptionsService.canAddProvider(tenantId, currentCount);
+    if (!canAdd) {
+      const { plan } = await this.subscriptionsService.getSubscriptionWithPlan(tenantId);
+      const limit = plan.maxProviders === null ? 'unlimited' : String(plan.maxProviders);
+      throw new ForbiddenException(
+        `You've reached the user limit for the ${plan.name} plan (${limit} users). ` +
+        `Please upgrade your subscription to add more users.`,
+      );
+    }
+
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
     const user = this.userRepository.create({
@@ -109,6 +129,44 @@ export class UsersService implements OnModuleInit {
     const saved = await this.userRepository.save(user);
     this.logger.log(`User created: ${saved.id} (${saved.email}) role=${saved.role}`);
     return saved;
+  }
+
+  /**
+   * Returns the current user count and subscription plan limits for the tenant.
+   * Used by the frontend to show usage and disable the Add User button when
+   * the limit is reached.
+   */
+  async getSubscriptionLimits(tenantId: string): Promise<{
+    currentCount: number;
+    maxProviders: number | null;
+    canAddMore: boolean;
+    planName: string;
+    planTier: string;
+  }> {
+    const currentCount = await this.userRepository.count({
+      where: { tenantId, isActive: true },
+    });
+
+    try {
+      const { plan } = await this.subscriptionsService.getSubscriptionWithPlan(tenantId);
+      const canAddMore = await this.subscriptionsService.canAddProvider(tenantId, currentCount);
+      return {
+        currentCount,
+        maxProviders: plan.maxProviders,
+        canAddMore,
+        planName: plan.name,
+        planTier: plan.tier,
+      };
+    } catch {
+      // If subscription lookup fails, allow without limit info
+      return {
+        currentCount,
+        maxProviders: null,
+        canAddMore: true,
+        planName: 'Unknown',
+        planTier: 'unknown',
+      };
+    }
   }
 
   async update(
@@ -248,8 +306,25 @@ export class UsersService implements OnModuleInit {
       },
     ];
 
+    // Seed directly via repository to bypass subscription limit check
+    // (dev seeding happens before the subscription may be initialized)
     for (const u of devUsers) {
-      await this.create(DEV_TENANT_ID, u);
+      const passwordHash = await bcrypt.hash(u.password, SALT_ROUNDS);
+      const user = this.userRepository.create({
+        id: uuidv4(),
+        tenantId: DEV_TENANT_ID,
+        email: u.email,
+        passwordHash,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        role: u.role,
+        phone: u.phone,
+        department: u.department,
+        mfaEnabled: false,
+        mfaSecret: null,
+        isActive: true,
+      });
+      await this.userRepository.save(user);
     }
 
     this.logger.log(`Seeded ${devUsers.length} dev users for tenant ${DEV_TENANT_ID}`);

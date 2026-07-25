@@ -81,7 +81,7 @@ const activityIconMap: Record<string, React.ReactNode> = {
 const DashboardPage: React.FC = () => {
   const user = useAuthStore((state) => state.user);
   const navigate = useNavigate();
-  const { appointments: mockAppointments } = useAppointmentStore();
+  const { appointments } = useAppointmentStore();
 
   const firstName = user?.firstName || 'Doctor';
   const today = dayjs().format('dddd, MMMM D, YYYY');
@@ -304,7 +304,7 @@ const DashboardPage: React.FC = () => {
             bodyStyle={{ padding: '0 0 8px' }}
           >
             <Table<Appointment>
-              dataSource={mockAppointments}
+              dataSource={appointments}
               columns={appointmentColumns}
               rowKey="id"
               pagination={false}

@@ -17,6 +17,14 @@ export interface StaffUser {
   updatedAt: string;
 }
 
+export interface UserLimits {
+  currentCount: number;
+  maxProviders: number | null;
+  canAddMore: boolean;
+  planName: string;
+  planTier: string;
+}
+
 export interface RolePermission {
   key: string;
   label: string;
@@ -56,6 +64,11 @@ class UserService {
 
   async getAll(): Promise<StaffUser[]> {
     const res = await api.get(this.baseUrl);
+    return res.data;
+  }
+
+  async getLimits(): Promise<UserLimits> {
+    const res = await api.get(`${this.baseUrl}/limits`);
     return res.data;
   }
 
