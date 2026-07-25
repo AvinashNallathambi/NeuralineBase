@@ -57,9 +57,13 @@ jobs:
         with:
           script: |
             // When triggered by workflow_run, the conclusion is in the event payload
-            if (github.event_name === 'workflow_run') {
-              const conclusion = github.event.workflow_run.conclusion;
-              const headSha = github.event.workflow_run.head_sha;
+            // In github-script, use context.eventName (camelCase) and context.payload
+            const eventName = context.eventName;
+            console.log('Event name:', eventName);
+
+            if (eventName === 'workflow_run') {
+              const conclusion = context.payload.workflow_run.conclusion;
+              const headSha = context.payload.workflow_run.head_sha;
               console.log(`CI Pipeline conclusion: ${conclusion}`);
               console.log(`CI Pipeline head_sha: ${headSha}`);
 

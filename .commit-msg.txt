@@ -1,0 +1,11 @@
+fix: use correct property names in github-script for workflow_run
+
+The github-script action provides context.eventName (camelCase) and
+context.payload, not github.event_name and github.event. The previous
+code was using snake_case which returned undefined, causing the
+workflow_run check to be skipped and falling through to the polling
+code which found stale check suites.
+
+Generated with [Devin](https://cli.devin.ai/docs)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
