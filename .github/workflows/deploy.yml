@@ -1,7 +1,10 @@
 name: Deploy to AWS
 
 on:
-  # Manual trigger only — click "Run workflow" button in GitHub Actions UI
+  # Automatic: deploy on every push to main
+  push:
+    branches: ["main"]
+  # Manual: click "Run workflow" button in GitHub Actions UI
   workflow_dispatch:
     inputs:
       environment:
@@ -15,7 +18,7 @@ on:
 
 # Cancel any in-progress deploy to the same environment
 concurrency:
-  group: deploy-${{ github.event.inputs.environment }}
+  group: deploy-production
   cancel-in-progress: false
 
 jobs:
@@ -30,30 +33,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check CI status on this commit
+      - name: Wait for CI to finish and check result
         id: check
         uses: actions/github-script@v7
         with:
           script: |
-            const { data } = await github.rest.checkSuites.listForRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: context.sha,
-            });
+            // Wait up to 10 minutes for CI to complete
+            const maxAttempts = 30;
+            const sleepMs = 20000;
 
-            // Look for the CI Pipeline check suite
-            const ciSuite = data.check_suites.find(
-              suite => suite.conclusion === 'success'
-            );
+            for (let i = 0; i < maxAttempts; i++) {
+              const { data } = await github.rest.checkSuites.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.sha,
+              });
 
-            if (!ciSuite) {
-              core.setFailed('❌ CI has not passed on this commit. Push fixes and wait for CI to pass before deploying.');
-              core.setOutput('passed', 'false');
-              return;
+              const ciSuite = data.check_suites.find(
+                suite => suite.app?.slug === 'github-actions'
+              );
+
+              if (ciSuite && ciSuite.conclusion) {
+                if (ciSuite.conclusion === 'success') {
+                  console.log('✅ CI passed on commit:', context.sha);
+                  core.setOutput('passed', 'true');
+                  return;
+                } else {
+                  core.setFailed(`❌ CI failed with conclusion: ${ciSuite.conclusion}. Fix the failing checks before deploying.`);
+                  core.setOutput('passed', 'false');
+                  return;
+                }
+              }
+
+              console.log(`Waiting for CI to finish... (attempt ${i + 1}/${maxAttempts})`);
+              await new Promise(r => setTimeout(r, sleepMs));
             }
 
-            console.log('✅ CI passed on commit:', context.sha);
-            core.setOutput('passed', 'true');
+            core.setFailed('❌ CI did not complete within 10 minutes. Deploy aborted.');
+            core.setOutput('passed', 'false');
 
   # ─────────────────────────────────────────────────────────────────────────
   # Gate 2: Deploy to EC2 via SSH
@@ -63,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: verify-ci
     if: needs.verify-ci.outputs.ci_passed == 'true'
-    environment: ${{ github.event.inputs.environment }}
+    environment: production
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -72,12 +89,11 @@ jobs:
           username: ${{ secrets.AWS_EC2_USER }}
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
-          timeout: 300s
+          timeout: 600s
           script: |
             set -e
             echo "=== Neuraline EMR Deploy ==="
             echo "Commit: ${{ github.sha }}"
-            echo "Environment: ${{ github.event.inputs.environment }}"
             echo "Triggered by: ${{ github.actor }}"
             echo ""
 
@@ -100,8 +116,8 @@ jobs:
             sudo systemctl is-active nginx && echo "Nginx: ACTIVE" || echo "Nginx: FAILED"
 
             echo ""
-            echo "Health check (localhost):"
-            curl -sf http://localhost:4000/ && echo "" || echo "⚠️ Backend health check failed"
+            echo "Health check (HTTPS):"
+            curl -sf https://app.neura-line.com/api/v1/health && echo "" || echo "⚠️ Backend health check failed"
 
             echo ""
             echo "✅ Deploy complete: ${{ github.sha }}"
