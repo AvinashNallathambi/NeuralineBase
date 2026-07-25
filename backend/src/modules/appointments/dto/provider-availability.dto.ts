@@ -19,6 +19,12 @@ export class CreateProviderAvailabilityDto {
   @IsOptional()
   isAvailable?: boolean;
 
+  @IsInt()
+  @IsOptional()
+  @Min(5)
+  @Max(480)
+  slotDuration?: number; // minutes per appointment slot
+
   @IsArray()
   @IsString({ each: true })
   @IsOptional()
@@ -77,6 +83,12 @@ export class UpdateProviderAvailabilityDto {
   @IsBoolean()
   @IsOptional()
   isAvailable?: boolean;
+
+  @IsInt()
+  @IsOptional()
+  @Min(5)
+  @Max(480)
+  slotDuration?: number; // minutes per appointment slot
 
   @IsArray()
   @IsString({ each: true })

@@ -787,35 +787,45 @@ export class AppointmentsService {
       if (availability.effectiveDate && date < availability.effectiveDate) continue;
       if (availability.expiryDate && date > availability.expiryDate) continue;
 
-      // Get existing appointments for this slot
-      const startTime = new Date(date);
+      // Build the availability window for this day
+      const windowStart = new Date(date);
       const [hours, minutes] = availability.startTime.split(':').map(Number);
-      startTime.setHours(hours, minutes, 0, 0);
+      windowStart.setHours(hours, minutes, 0, 0);
 
-      const endTime = new Date(date);
+      const windowEnd = new Date(date);
       const [endHours, endMinutes] = availability.endTime.split(':').map(Number);
-      endTime.setHours(endHours, endMinutes, 0, 0);
+      windowEnd.setHours(endHours, endMinutes, 0, 0);
 
-      const existingAppointments = await this.appointmentRepository
-        .createQueryBuilder('appointment')
-        .where('appointment.tenantId = :tenantId', { tenantId })
-        .andWhere('appointment.providerId = :providerId', { providerId })
-        .andWhere('appointment.status NOT IN (:...statuses)', { statuses: ['cancelled', 'no_show'] })
-        .andWhere(
-          '(appointment.startTime < :endTime AND appointment.endTime > :startTime)',
-          { startTime, endTime },
-        )
-        .getCount();
+      // Split the window into individual slots of slotDuration minutes
+      const slotDurationMin = availability.slotDuration || 30;
+      const bufferMin = availability.bufferMinutes || 0;
 
-      // Check max appointments limit
-      if (availability.maxAppointments && existingAppointments >= availability.maxAppointments) {
-        continue;
+      for (let t = new Date(windowStart); t < windowEnd; ) {
+        const slotEnd = new Date(t.getTime() + slotDurationMin * 60000);
+        if (slotEnd > windowEnd) break;
+
+        // Check whether an existing appointment overlaps this slot
+        const existingCount = await this.appointmentRepository
+          .createQueryBuilder('appointment')
+          .where('appointment.tenantId = :tenantId', { tenantId })
+          .andWhere('appointment.providerId = :providerId', { providerId })
+          .andWhere('appointment.status NOT IN (:...statuses)', { statuses: ['cancelled', 'no_show'] })
+          .andWhere(
+            '(appointment.startTime < :endTime AND appointment.endTime > :startTime)',
+            { startTime: t, endTime: slotEnd },
+          )
+          .getCount();
+
+        if (existingCount === 0) {
+          slots.push({
+            start: t.toISOString(),
+            end: slotEnd.toISOString(),
+          });
+        }
+
+        // Advance by slotDuration + buffer
+        t.setTime(slotEnd.getTime() + bufferMin * 60000);
       }
-
-      slots.push({
-        start: availability.startTime,
-        end: availability.endTime,
-      });
     }
 
     return slots;

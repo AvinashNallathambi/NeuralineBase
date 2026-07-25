@@ -37,6 +37,9 @@ export class ProviderAvailability {
   @Column({ name: 'is_available', type: 'boolean', default: true })
   isAvailable!: boolean;
 
+  @Column({ name: 'slot_duration', type: 'int', default: 30 })
+  slotDuration!: number; // Duration of each appointment slot in minutes
+
   @Column({ name: 'appointment_types', type: 'jsonb', nullable: true })
   appointmentTypes!: string[]; // Array of appointment types that can be booked
 

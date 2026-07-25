@@ -9,6 +9,7 @@ export interface CreateProviderAvailabilityDto {
   startTime: string;
   endTime: string;
   isAvailable?: boolean;
+  slotDuration?: number;
   appointmentTypes?: string[];
   locationId?: string;
   maxAppointments?: number;
@@ -25,6 +26,7 @@ export interface UpdateProviderAvailabilityDto {
   startTime?: string;
   endTime?: string;
   isAvailable?: boolean;
+  slotDuration?: number;
   appointmentTypes?: string[];
   locationId?: string;
   maxAppointments?: number;
