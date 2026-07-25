@@ -25,6 +25,9 @@ echo ""
 
 # ─── 1. Pull latest code ───────────────────────────────────────────────────
 echo "▶ Pulling latest code from git..."
+# Reset any local changes (lockfiles, build artifacts) before pulling
+git reset --hard HEAD
+git clean -fd -- package-lock.json frontend/package-lock.json backend/package-lock.json
 git pull origin main
 echo "  Current commit: $(git rev-parse --short HEAD)"
 echo ""
