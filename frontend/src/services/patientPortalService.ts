@@ -113,6 +113,26 @@ class PatientPortalService {
     const response = await api.get(`/patients/portal/telemedicine/sessions/${sessionId}/token`);
     return response.data;
   }
+
+  /**
+   * Find or create a telemedicine session for one of the patient's
+   * appointments. The backend validates that the appointment belongs
+   * to the logged-in patient and is a telehealth visit.
+   */
+  async findOrCreateTelemedicineSession(appointmentId: string): Promise<any> {
+    const response = await api.post(
+      `/patients/portal/telemedicine/sessions/for-appointment/${appointmentId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Get details of the patient's telemedicine session.
+   */
+  async getTelemedicineSession(sessionId: string): Promise<any> {
+    const response = await api.get(`/patients/portal/telemedicine/sessions/${sessionId}`);
+    return response.data;
+  }
 }
 
 export const patientPortalService = new PatientPortalService();

@@ -8,8 +8,12 @@ import {
   Query,
   Req,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { TelemedicineService } from './telemedicine.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PatientJwtAuthGuard } from '../patients/patient-jwt-auth.guard';
@@ -42,6 +46,19 @@ export class TelemedicineController {
     return this.telemedicineService.createSession(
       req.tenantId ?? req.user.tenantId,
       body,
+      req.user.id,
+    );
+  }
+
+  @Post('sessions/for-appointment/:appointmentId')
+  @ApiOperation({ summary: 'Find or create a telemedicine session for an appointment' })
+  findOrCreateForAppointment(
+    @Req() req: AuthenticatedRequest,
+    @Param('appointmentId') appointmentId: string,
+  ) {
+    return this.telemedicineService.findOrCreateForAppointment(
+      req.tenantId ?? req.user.tenantId,
+      appointmentId,
       req.user.id,
     );
   }
@@ -121,6 +138,53 @@ export class TelemedicineController {
     );
   }
 
+  @Post('sessions/:id/recording')
+  @ApiOperation({ summary: 'Upload a visit recording (browser MediaRecorder blob)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 500 * 1024 * 1024 } }))
+  uploadRecording(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.telemedicineService.uploadRecording(
+      req.tenantId ?? req.user.tenantId,
+      id,
+      {
+        buffer: file.buffer,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+      },
+      req.user.id,
+    );
+  }
+
+  @Post('sessions/:id/transcribe')
+  @ApiOperation({ summary: 'Transcribe a session recording with AssemblyAI' })
+  transcribeRecording(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    return this.telemedicineService.transcribeRecording(
+      req.tenantId ?? req.user.tenantId,
+      id,
+    );
+  }
+
   @Get('sessions/:id/care-plan')
   @ApiOperation({ summary: 'Generate AI post-visit care plan' })
   postVisitCarePlan(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
@@ -167,6 +231,54 @@ export class TelemedicineController {
 @Controller('patients/portal/telemedicine')
 export class PatientPortalTelemedicineController {
   constructor(private readonly telemedicineService: TelemedicineService) {}
+
+  @Post('sessions/for-appointment/:appointmentId')
+  @UseGuards(PatientJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Patient finds or creates a telemedicine session for their appointment' })
+  async findOrCreateForAppointment(
+    @Req() req: AuthenticatedRequest,
+    @Param('appointmentId') appointmentId: string,
+  ) {
+    const tenantId = req.tenantId ?? req.user.tenantId;
+    const patientId = req.user.id;
+
+    // Validate the appointment belongs to this patient before creating
+    // a telemedicine session. The TelemedicineService.findOrCreateForAppointment
+    // validates the appointment exists and is telehealth, but we also need to
+    // ensure the patient owns it.
+    const session = await this.telemedicineService.findOrCreateForAppointment(
+      tenantId,
+      appointmentId,
+      patientId,
+    );
+
+    // Ownership check: the session's patientId must match the logged-in patient
+    if (session.patientId !== patientId) {
+      throw new BadRequestException('You are not authorized to join this appointment');
+    }
+
+    return session;
+  }
+
+  @Get('sessions/:id')
+  @UseGuards(PatientJwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiOperation({ summary: 'Patient gets details of their telemedicine session' })
+  async getSession(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const tenantId = req.tenantId ?? req.user.tenantId;
+    const session = await this.telemedicineService.findOne(tenantId, id);
+
+    // Ensure the patient owns this session
+    if (session.patientId !== req.user.id) {
+      throw new BadRequestException('You are not authorized to view this session');
+    }
+
+    return session;
+  }
 
   @Get('sessions/:id/token')
   @UseGuards(PatientJwtAuthGuard)

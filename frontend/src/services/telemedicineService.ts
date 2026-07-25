@@ -75,6 +75,39 @@ class TelemedicineService {
     return response.data;
   }
 
+  /**
+   * Find or create a telemedicine session for an existing appointment.
+   * Use this after creating a telehealth appointment so the underlying
+   * video room exists before the patient or provider tries to join.
+   */
+  async findOrCreateForAppointment(appointmentId: string): Promise<TelemedicineSession> {
+    const response = await api.post(`${this.baseUrl}/sessions/for-appointment/${appointmentId}`);
+    return response.data;
+  }
+
+  /**
+   * Upload a visit recording (browser MediaRecorder blob) to the backend.
+   * The backend stores the file and sets recordingStatus = completed.
+   */
+  async uploadRecording(sessionId: string, blob: Blob, filename: string = 'recording.webm'): Promise<TelemedicineSession> {
+    const formData = new FormData();
+    formData.append('file', blob, filename);
+    const response = await api.post(`${this.baseUrl}/sessions/${sessionId}/recording`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000, // 2 min for large recordings
+    });
+    return response.data;
+  }
+
+  /**
+   * Manually trigger transcription of a session's recording with AssemblyAI.
+   * (endSession also auto-transcribes if a recording is present.)
+   */
+  async transcribeRecording(sessionId: string): Promise<string | null> {
+    const response = await api.post(`${this.baseUrl}/sessions/${sessionId}/transcribe`);
+    return response.data;
+  }
+
   async listSessions(params?: {
     page?: number;
     limit?: number;

@@ -24,18 +24,21 @@ import {
   ClockCircleOutlined,
   CheckCircleOutlined,
 } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import patientPortalService from '../../services/patientPortalService';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 
 const PortalAppointmentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [slots, setSlots] = useState<any[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [joiningApptId, setJoiningApptId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -111,6 +114,20 @@ const PortalAppointmentsPage: React.FC = () => {
     no_show: 'orange',
   };
 
+  const handleJoinTelehealth = async (appointmentId: string) => {
+    setJoiningApptId(appointmentId);
+    try {
+      const session = await patientPortalService.findOrCreateTelemedicineSession(appointmentId);
+      navigate(`/portal/video-visit/${session.id}`);
+    } catch (err: any) {
+      message.error(
+        err?.response?.data?.message || 'Failed to join telehealth visit. Please try again.',
+      );
+    } finally {
+      setJoiningApptId(null);
+    }
+  };
+
   // Mock providers — in production this would come from an API
   const providers = [
     { id: 'prov-1', name: 'Dr. Sarah Chen' },
@@ -161,8 +178,15 @@ const PortalAppointmentsPage: React.FC = () => {
                         <ClockCircleOutlined /> {appt.startTime ? new Date(appt.startTime).toLocaleString() : 'N/A'}
                       </Text>
                       {appt.providerName && <Text type="secondary">Provider: {appt.providerName}</Text>}
-                      {appt.isTelehealth && appt.meetingLink && (
-                        <Button type="link" href={appt.meetingLink} target="_blank" style={{ padding: 0 }}>
+                      {appt.isTelehealth && (
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<VideoCameraOutlined />}
+                          loading={joiningApptId === appt.id}
+                          onClick={() => handleJoinTelehealth(appt.id)}
+                          style={{ marginTop: 4 }}
+                        >
                           Join Video Visit
                         </Button>
                       )}

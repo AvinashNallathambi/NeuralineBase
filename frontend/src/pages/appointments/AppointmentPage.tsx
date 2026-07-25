@@ -56,8 +56,10 @@ import { patientService, type Patient } from '../../services/patientService';
 import { providerAvailabilityService } from '../../services/providerAvailabilityService';
 import { patientGroupService, type PatientGroup } from '../../services/patientGroupService';
 import { userService, type StaffUser } from '../../services/userService';
+import { telemedicineService } from '../../services/telemedicineService';
 import WorkflowStatusBadge from '../../components/workflow/WorkflowStatusBadge';
 import type { ColumnsType } from 'antd/es/table';
+import { useNavigate } from 'react-router-dom';
 
 dayjs.extend(isoWeek);
 
@@ -127,6 +129,7 @@ const HOURS = Array.from({ length: 16 }, (_, i) => i + 6); // 6 AM to 9 PM
 
 const AppointmentPage: React.FC = () => {
   const [view, setView] = useState<ViewMode>('month');
+  const navigate = useNavigate();
   const { appointments, addAppointment, changeStatus: storeChangeStatus, loading, error, fetchAppointments } = useAppointmentStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
@@ -468,15 +471,37 @@ const AppointmentPage: React.FC = () => {
             .toISOString(),
           reason: (values.reason as string) || '',
           isTelehealth: !!values.isTelehealth,
-          meetingLink: values.isTelehealth
-            ? `https://telehealth.neuraline.health/room/apt-${Date.now()}`
-            : undefined,
+          // No fake meeting link — the real video room is created on the
+          // backend via telemedicineService.findOrCreateForAppointment()
+          // when the provider/patient joins the call.
+          meetingLink: undefined,
           reminders: values.remindersEnabled !== false,
           remindersEnabled: values.remindersEnabled !== false,
           createdAt: new Date().toISOString(),
         };
         addAppointment(newAppt);
         message.success('Appointment created successfully');
+
+        // For telehealth appointments, pre-create the telemedicine session
+        // (and the underlying video room) on the backend so it's ready when
+        // the patient or provider joins. Non-blocking — failure is logged
+        // but doesn't prevent the appointment from being saved.
+        if (values.isTelehealth) {
+          try {
+            // Wait for the store to persist the appointment via the API,
+            // then find-or-create the telemedicine session using the real
+            // backend appointment ID returned by the store.
+            await new Promise((resolve) => setTimeout(resolve, 800));
+            const created = useAppointmentStore.getState().appointments.find(
+              (a) => a.patientId === newAppt.patientId && a.startTime === newAppt.startTime,
+            );
+            if (created) {
+              await telemedicineService.findOrCreateForAppointment(created.id);
+            }
+          } catch (err) {
+            console.warn('Telemedicine session pre-creation failed (non-blocking):', err);
+          }
+        }
       }
 
       // Refresh appointments
@@ -1241,7 +1266,22 @@ const AppointmentPage: React.FC = () => {
             
             {record.isTelehealth && s !== 'completed' && s !== 'cancelled' && (
               <Tooltip title="Join Telehealth">
-                <Button size="small" icon={<VideoCameraOutlined />} type="link" />
+                <Button
+                  size="small"
+                  icon={<VideoCameraOutlined />}
+                  type="link"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      // Find-or-create the telemedicine session for this
+                      // appointment, then navigate to the WebRTC call page.
+                      const tmSession = await telemedicineService.findOrCreateForAppointment(record.id);
+                      navigate(`/telemedicine/${tmSession.id}`);
+                    } catch (err: any) {
+                      message.error('Failed to start telehealth session: ' + (err?.response?.data?.message || err?.message || 'unknown error'));
+                    }
+                  }}
+                />
               </Tooltip>
             )}
           </Space>
@@ -1742,14 +1782,21 @@ const AppointmentPage: React.FC = () => {
           Video Call
         </Tag>
 
-        {selectedAppointment.meetingLink && (
-          <a
-            href={selectedAppointment.meetingLink}
-            target="_blank"
-            rel="noopener noreferrer"
+        {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && (
+          <Button
+            type="primary"
+            icon={<VideoCameraOutlined />}
+            onClick={async () => {
+              try {
+                const tmSession = await telemedicineService.findOrCreateForAppointment(selectedAppointment.id);
+                navigate(`/telemedicine/${tmSession.id}`);
+              } catch (err: any) {
+                message.error('Failed to start telehealth session: ' + (err?.response?.data?.message || err?.message || 'unknown error'));
+              }
+            }}
           >
-            {selectedAppointment.meetingLink}
-          </a>
+            Join Call
+          </Button>
         )}
       </Space>
     </Descriptions.Item>

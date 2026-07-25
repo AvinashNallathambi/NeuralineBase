@@ -34,6 +34,9 @@ import {
   CreateMeetingRequest,
   CreateMeetingResult,
 } from '../integrations/providers/video-provider.interface';
+import { AssemblyAiTranscriptionService } from '../ai/assemblyai-transcription.service';
+import * as path from 'path';
+import * as fs from 'fs/promises';
 
 export interface CreateSessionDto {
   appointmentId?: string | null;
@@ -73,6 +76,7 @@ export class TelemedicineService {
     private readonly aiService: AiService,
     private readonly hipaaAuditService: HipaaAuditService,
     private readonly integrationsService: IntegrationsService,
+    private readonly assemblyAi: AssemblyAiTranscriptionService,
   ) {}
 
   async createSession(
@@ -372,6 +376,21 @@ export class TelemedicineService {
       }
     }
 
+    // If no transcript was passed in but a recording was uploaded, auto-
+    // transcribe it with AssemblyAI before generating the SOAP note. This
+    // lets the frontend just upload the MediaRecorder blob and the backend
+    // handles the full transcript → SOAP → encounter → superbill pipeline.
+    if ((!session.transcript || !session.transcript.trim()) && session.recordingUrl) {
+      try {
+        const transcript = await this.transcribeRecording(tenantId, session.id);
+        if (transcript) {
+          session.transcript = transcript;
+        }
+      } catch (error: any) {
+        this.logger.error(`Auto-transcription failed for session ${session.id}: ${error.message}`);
+      }
+    }
+
     // Generate AI SOAP note and suggested codes from transcript
     if (session.transcript && session.transcript.trim()) {
       try {
@@ -563,6 +582,164 @@ export class TelemedicineService {
     });
 
     return saved;
+  }
+
+  // ── Recording Upload + AI Transcription (browser MediaRecorder flow) ──────
+
+  /**
+   * Find-or-create a telemedicine session for a given appointment.
+   * Called by the frontend after creating a telehealth appointment so the
+   * session (and the underlying provider room) exists before the patient
+   * or provider tries to join. Returns the existing session if one is
+   * already linked to the appointment.
+   */
+  async findOrCreateForAppointment(
+    tenantId: string,
+    appointmentId: string,
+    performedBy: string,
+  ): Promise<TelemedicineSession> {
+    // Look for an existing session linked to this appointment
+    const existing = await this.sessionRepository.findOne({
+      where: { tenantId, appointmentId },
+    });
+    if (existing) return existing;
+
+    // Validate the appointment exists and is a telehealth visit
+    const appointment = await this.appointmentsService.findOne(tenantId, appointmentId);
+    if (!appointment.isTelehealth) {
+      throw new BadRequestException('Appointment is not a telehealth visit');
+    }
+    if (!appointment.patientId) {
+      throw new BadRequestException('Appointment has no patient assigned');
+    }
+
+    return this.createSession(
+      tenantId,
+      {
+        appointmentId: appointment.id,
+        patientId: appointment.patientId,
+        providerId: appointment.providerId,
+      },
+      performedBy,
+    );
+  }
+
+  /**
+   * Store an uploaded recording chunk (or final recording) for a session.
+   * The frontend uses MediaRecorder to capture the WebRTC media stream and
+   * uploads the resulting webm/mp4 file here. The file is stored on disk
+   * under a per-tenant directory and the path is recorded on the session.
+   *
+   * After the final chunk is uploaded, the session's `recordingStatus` is
+   * set to COMPLETED and `recordingUrl` points to the stored file. The
+   * actual transcription is triggered separately by `transcribeRecording()`
+   * (called automatically by `endSession` if a recording is present).
+   */
+  async uploadRecording(
+    tenantId: string,
+    sessionId: string,
+    file: { buffer: Buffer; originalname: string; mimetype: string },
+    performedBy: string,
+  ): Promise<TelemedicineSession> {
+    const session = await this.findOne(tenantId, sessionId);
+
+    // Persist to ./recordings/<tenantId>/<sessionId>.<ext>
+    const ext = path.extname(file.originalname) || (file.mimetype.includes('webm') ? '.webm' : '.mp4');
+    const recordingsDir = path.join(process.cwd(), 'recordings', tenantId);
+    await fs.mkdir(recordingsDir, { recursive: true });
+    const filename = `${sessionId}${ext}`;
+    const fullPath = path.join(recordingsDir, filename);
+    await fs.writeFile(fullPath, file.buffer);
+
+    const recordingUrl = `/recordings/${tenantId}/${filename}`;
+    session.recordingUrl = recordingUrl;
+    session.recordingStatus = RecordingStatus.COMPLETED;
+
+    const saved = await this.sessionRepository.save(session);
+
+    await this.hipaaAuditService.log({
+      tenantId,
+      userId: performedBy,
+      action: 'TELEMEDICINE_RECORDING_UPLOADED',
+      resourceType: 'TelemedicineSession',
+      resourceId: saved.id,
+      metadata: { recordingUrl, sizeBytes: file.buffer.length, mimetype: file.mimetype },
+    });
+
+    this.logger.log(`Recording uploaded for session ${sessionId}: ${recordingUrl} (${file.buffer.length} bytes)`);
+    return saved;
+  }
+
+  /**
+   * Transcribe a session's recording using AssemblyAI and store the
+   * transcript on the session. Returns the transcript text.
+   *
+   * AssemblyAI is preferred over the local Whisper service because it
+   * supports speaker diarization (provider vs patient) and a medical
+   * domain model, which produces better SOAP-note input.
+   *
+   * If AssemblyAI is not configured, falls back to reading any transcript
+   * already on the session (e.g. streamed from the gateway).
+   */
+  async transcribeRecording(
+    tenantId: string,
+    sessionId: string,
+  ): Promise<string | null> {
+    const session = await this.findOne(tenantId, sessionId);
+
+    if (!session.recordingUrl) {
+      this.logger.warn(`Cannot transcribe session ${sessionId}: no recording URL`);
+      return null;
+    }
+
+    // Read the recording file from disk
+    const fullPath = path.join(process.cwd(), session.recordingUrl);
+    let buffer: Buffer;
+    try {
+      buffer = await fs.readFile(fullPath);
+    } catch (err: any) {
+      this.logger.error(`Failed to read recording file ${fullPath}: ${err.message}`);
+      return null;
+    }
+
+    if (!this.assemblyAi.isConfigured()) {
+      this.logger.warn(
+        `AssemblyAI not configured — skipping transcription for session ${sessionId}. Set ASSEMBLYAI_API_KEY to enable.`,
+      );
+      return session.transcript || null;
+    }
+
+    this.logger.log(`Transcribing session ${sessionId} recording with AssemblyAI (${buffer.length} bytes)`);
+
+    // Detect mime type from extension
+    const ext = path.extname(session.recordingUrl).toLowerCase();
+    const mimeType =
+      ext === '.webm' ? 'audio/webm' :
+      ext === '.mp4' ? 'audio/mp4' :
+      ext === '.wav' ? 'audio/wav' :
+      ext === '.mp3' ? 'audio/mp3' :
+      undefined;
+
+    const result = await this.assemblyAi.transcribeAudioBuffer(buffer, mimeType);
+
+    // Build a readable transcript with speaker labels if available
+    let transcriptText: string;
+    if (result.utterances && result.utterances.length > 0) {
+      transcriptText = result.utterances
+        .map((u) => `[${u.speaker}]: ${u.text}`)
+        .join('\n');
+    } else {
+      transcriptText = result.text;
+    }
+
+    session.transcript = transcriptText;
+    await this.sessionRepository.save(session);
+
+    this.logger.log(
+      `Transcription complete for session ${sessionId}: ${transcriptText.length} chars, confidence ${result.confidence}, duration ${result.duration}s`,
+    );
+
+    return transcriptText;
   }
 
   async updateConnectionQuality(

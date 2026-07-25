@@ -106,6 +106,9 @@ const AiEncounterPage = lazyWithRetry(
 const TelemedicinePage = lazyWithRetry(
   () => import("../pages/telemedicine/TelemedicinePage"),
 );
+const TelemedicineCallPage = lazyWithRetry(
+  () => import("../pages/telemedicine/TelemedicineCallPage"),
+);
 const ReportsPage = lazyWithRetry(() => import("../pages/reports/ReportsPage"));
 const SettingsPage = lazyWithRetry(
   () => import("../pages/settings/SettingsPage"),
@@ -496,6 +499,14 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "/telemedicine/:sessionId",
+        element: (
+          <LazyPage>
+            <TelemedicineCallPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: "/reports",
         element: (
           <LazyPage>
@@ -647,7 +658,7 @@ const router = createBrowserRouter([
         path: "video-visit/:sessionId",
         element: (
           <LazyPage>
-            <PortalVideoVisitPage />
+            <TelemedicineCallPage />
           </LazyPage>
         ),
       },

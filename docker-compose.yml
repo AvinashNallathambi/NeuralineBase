@@ -146,6 +146,44 @@ services:
       - neuraline-network
     restart: unless-stopped
 
+  # ──────────────────────────────────────────────
+  # coturn – STUN/TURN relay for WebRTC telehealth
+  # Required so patients behind strict firewalls / NAT
+  # can still establish peer-to-peer video with the
+  # provider. Free, self-hosted, ~50MB RAM.
+  # ──────────────────────────────────────────────
+  coturn:
+    image: coturn/coturn:latest
+    container_name: neuraline-coturn
+    ports:
+      - '3478:3478/tcp'
+      - '3478:3478/udp'
+      - '5349:5349/tcp'
+      - '5349:5349/udp'
+      - '49152-49172:49152-49172/udp'
+    environment:
+      # In production, replace with your server's public IP / hostname
+      - TURN_EXTERNAL_IP=${TURN_EXTERNAL_IP:-auto}
+      - TURN_REALM=${TURN_REALM:-neuraline.health}
+      - TURN_USER=${TURN_USER:-neuraline}
+      - TURN_PASSWORD=${TURN_PASSWORD:-neuraline_turn_dev}
+    command: >
+      turnserver
+      --log-file=stdout
+      --external-ip=$${TURN_EXTERNAL_IP}
+      --realm=$${TURN_REALM}
+      --user=$${TURN_USER}:$${TURN_PASSWORD}
+      --no-tls
+      --no-dtls
+      --no-cli
+      --fingerprint
+      --stale-nonce
+      --min-port=49152
+      --max-port=49172
+    networks:
+      - neuraline-network
+    restart: unless-stopped
+
 # ──────────────────────────────────────────────
 # Networks
 # ──────────────────────────────────────────────
