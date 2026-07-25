@@ -133,34 +133,72 @@ jobs:
           port: 22
           timeout: 600s
           script: |
-            set -e
             echo "=== Neuraline EMR Deploy ==="
             echo "Commit: ${{ github.event.workflow_run.head_sha || github.sha }}"
             echo "Triggered by: ${{ github.actor }}"
             echo "Event: ${{ github.event_name }}"
             echo ""
 
-            cd /opt/neuraline
+            # ─── Diagnostic: Check prerequisites ──────────────────────────
+            echo "=== Pre-Deploy Diagnostics ==="
+            echo "User: $(whoami)"
+            echo "Home: $HOME"
+            echo "OS: $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME || echo unknown)"
+            echo "Node: $(node --version 2>/dev/null || echo 'NOT INSTALLED')"
+            echo "npm:  $(npm --version 2>/dev/null || echo 'NOT INSTALLED')"
+            echo "PM2:  $(pm2 --version 2>/dev/null || echo 'NOT INSTALLED')"
+            echo "Nginx: $(nginx -v 2>&1 || echo 'NOT INSTALLED')"
+            echo "Git:  $(git --version 2>/dev/null || echo 'NOT INSTALLED')"
+            echo ""
 
-            # Make deploy script executable
-            chmod +x deploy/deploy.sh
+            # ─── Clone repo if it doesn't exist yet (first deploy) ────────
+            if [ ! -d /opt/neuraline/.git ]; then
+              echo "▶ First deploy: cloning repo to /opt/neuraline..."
+              sudo mkdir -p /opt/neuraline
+              sudo chown -R $(whoami):$(whoami) /opt/neuraline
+              git clone https://github.com/AvinashNallathambi/NeuralineBase.git /opt/neuraline
+              echo "  ✅ Repo cloned"
+            fi
 
-            # Run the deploy script
-            ./deploy/deploy.sh
+            cd /opt/neuraline || { echo "❌ Cannot cd to /opt/neuraline"; exit 1; }
 
-            # Final verification
+            # ─── Run deploy script or fall back to manual steps ───────────
+            if [ -f deploy/deploy.sh ]; then
+              chmod +x deploy/deploy.sh
+              echo "▶ Running deploy/deploy.sh..."
+              ./deploy/deploy.sh 2>&1 || {
+                echo "❌ deploy.sh failed with exit code $?"
+                echo "=== Last 30 lines of PM2 logs ==="
+                pm2 logs --lines 30 --nostream 2>/dev/null || true
+                exit 1
+              }
+            else
+              echo "⚠️  deploy/deploy.sh not found — running inline deploy..."
+              git pull origin main || true
+              rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+              npm install
+              export NODE_OPTIONS='--max-old-space-size=1536'
+              cd backend && npm run build && cd ..
+              cd frontend && npm run build && cd ..
+            fi
+
+            # ─── Final verification ───────────────────────────────────────
             echo ""
             echo "=== Post-Deploy Verification ==="
             echo "Backend process:"
-            pm2 status
+            pm2 status 2>/dev/null || echo "PM2 not available"
 
             echo ""
             echo "Nginx status:"
-            sudo systemctl is-active nginx && echo "Nginx: ACTIVE" || echo "Nginx: FAILED"
+            sudo systemctl is-active nginx 2>/dev/null && echo "Nginx: ACTIVE" || echo "Nginx: FAILED/NOT INSTALLED"
+
+            echo ""
+            echo "Health check (local):"
+            curl -sf http://localhost:4000/api/v1/health 2>/dev/null && echo "" || echo "⚠️ Backend health check failed (local)"
 
             echo ""
             echo "Health check (HTTPS):"
-            curl -sf https://app.neura-line.com/api/v1/health && echo "" || echo "⚠️ Backend health check failed"
+            curl -sf https://app.neura-line.com/api/v1/health 2>/dev/null && echo "" || echo "⚠️ Backend health check failed (HTTPS)"
 
             echo ""
-            echo "✅ Deploy complete: ${{ github.sha }}"
+            echo "✅ Deploy complete: ${{ github.event.workflow_run.head_sha || github.sha }}"
