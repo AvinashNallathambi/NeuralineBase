@@ -133,6 +133,30 @@ export class AppointmentsService {
       }
     }
 
+    // Backfill providerName from the Users table when missing or stored as a
+    // raw UUID fallback. This ensures appointments display the provider's name
+    // instead of their UUID in the list and detail views.
+    // Only look up valid UUIDs to avoid Postgres errors on old mock data.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const pendingProviderIds = data
+      .filter((a) => a.providerId && uuidRegex.test(a.providerId) && (!a.providerName || a.providerName === a.providerId))
+      .map((a) => a.providerId);
+    if (pendingProviderIds.length > 0) {
+      const uniqueProviderIds = [...new Set(pendingProviderIds)];
+      const providers = await this.userRepository
+        .createQueryBuilder('user')
+        .where('user.id IN (:...ids)', { ids: uniqueProviderIds })
+        .getMany();
+      const providerNameMap = new Map(
+        providers.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim() || u.email]),
+      );
+      for (const appointment of data) {
+        if (appointment.providerId && (!appointment.providerName || appointment.providerName === appointment.providerId)) {
+          appointment.providerName = providerNameMap.get(appointment.providerId) || appointment.providerName;
+        }
+      }
+    }
+
     return {
       data,
       total,
@@ -165,7 +189,9 @@ export class AppointmentsService {
     // it is missing or stored as a raw UUID fallback. This ensures group
     // appointments (which are created without a provider name) display the
     // assigned provider correctly in the Appointment Details view.
-    if ((!appointment.providerName || appointment.providerName === appointment.providerId) && appointment.providerId) {
+    // Only look up valid UUIDs to avoid Postgres errors on old mock data.
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if ((!appointment.providerName || appointment.providerName === appointment.providerId) && appointment.providerId && uuidRegex.test(appointment.providerId)) {
       const user = await this.userRepository.findOne({
         where: { id: appointment.providerId, tenantId },
       });
@@ -269,9 +295,18 @@ export class AppointmentsService {
       }
     }
 
-    // Look up provider name — fall back to providerId as display name
-    let providerName: string | null = dto.providerId;
-    // In future: look up from a Users/Providers table
+    // Look up provider name from the Users table so the appointment displays
+    // the provider's actual name instead of their UUID.
+    let providerName: string | null = null;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (dto.providerId && uuidRegex.test(dto.providerId)) {
+      const provider = await this.userRepository.findOne({
+        where: { id: dto.providerId, tenantId },
+      });
+      if (provider) {
+        providerName = `${provider.firstName} ${provider.lastName}`.trim() || provider.email;
+      }
+    }
 
     const appointment = this.appointmentRepository.create({
       patientId: dto.patientId,
@@ -392,7 +427,17 @@ export class AppointmentsService {
     }
     if (dto.providerId && dto.providerId !== appointment.providerId) {
       appointment.providerId = dto.providerId;
-      appointment.providerName = dto.providerId;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(dto.providerId)) {
+        const provider = await this.userRepository.findOne({
+          where: { id: dto.providerId, tenantId },
+        });
+        appointment.providerName = provider
+          ? `${provider.firstName} ${provider.lastName}`.trim() || provider.email
+          : null;
+      } else {
+        appointment.providerName = null;
+      }
     }
     if (dto.startTime) appointment.startTime = new Date(dto.startTime);
     if (dto.endTime) appointment.endTime = new Date(dto.endTime);
