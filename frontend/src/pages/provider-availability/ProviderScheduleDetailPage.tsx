@@ -122,16 +122,34 @@ const ProviderScheduleDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [availability, overrideList, rolesData] = await Promise.all([
+      // Load each independently so one failure doesn't block the others
+      const [availabilityResult, overridesResult, rolesResult] = await Promise.allSettled([
         providerAvailabilityService.findAvailabilityByProvider(providerId),
         providerAvailabilityService.findOverridesByProvider(providerId),
         userService.getRoleDefinitions(),
       ]);
-      setSchedules(availability);
-      setOverrides(overrideList);
-      setRoles(rolesData);
-    } catch {
-      setError('Failed to load provider availability data');
+
+      if (availabilityResult.status === 'fulfilled') {
+        setSchedules(availabilityResult.value);
+      } else {
+        console.error('Failed to load availability:', availabilityResult.reason);
+      }
+
+      if (overridesResult.status === 'fulfilled') {
+        setOverrides(overridesResult.value);
+      } else {
+        console.error('Failed to load overrides:', overridesResult.reason);
+      }
+
+      if (rolesResult.status === 'fulfilled') {
+        setRoles(rolesResult.value);
+      } else {
+        console.error('Failed to load roles:', rolesResult.reason);
+      }
+
+      if (availabilityResult.status === 'rejected') {
+        setError('Failed to load provider availability data');
+      }
     } finally {
       setLoading(false);
     }
