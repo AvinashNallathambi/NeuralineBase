@@ -17,7 +17,7 @@ import {
   ApiBearerAuth,
   ApiBody,
 } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { PatientAuthService } from './patient-auth.service';
 import { PatientJwtAuthGuard } from './patient-jwt-auth.guard';
@@ -32,8 +32,8 @@ class PatientLoginDto {
   password!: string;
 
   @IsString()
-  @IsNotEmpty()
-  tenantId!: string;
+  @IsOptional()
+  tenantId?: string;
 }
 
 class SetupAccountDto {
@@ -58,8 +58,8 @@ class ForgotPasswordDto {
   email!: string;
 
   @IsString()
-  @IsNotEmpty()
-  tenantId!: string;
+  @IsOptional()
+  tenantId?: string;
 }
 
 class ResetPasswordDto {

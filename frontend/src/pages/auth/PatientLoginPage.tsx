@@ -19,12 +19,19 @@ import patientAuthService from '../../services/patientAuthService';
 
 const { Title, Text, Paragraph } = Typography;
 
+interface TenantChoice {
+  tenantId: string;
+}
+
 const PatientLoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
+  const [tenantChoices, setTenantChoices] = useState<TenantChoice[] | null>(null);
+  const [form] = Form.useForm();
   const navigate = useNavigate();
 
-  const onFinish = async (values: { email: string; password: string; tenantId: string }) => {
+  const onFinish = async (values: { email: string; password: string; tenantId?: string }) => {
     setLoading(true);
+    setTenantChoices(null);
     try {
       const data = await patientAuthService.login(values.email, values.password, values.tenantId);
       if (data.mfaRequired) {
@@ -34,8 +41,16 @@ const PatientLoginPage: React.FC = () => {
         navigate('/portal');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || err.message || 'Login failed';
-      message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+      const resp = err.response?.data;
+      // Multi-tenant case: backend tells us the email is registered at multiple providers
+      if (resp?.multiTenant && Array.isArray(resp.tenants)) {
+        setTenantChoices(resp.tenants);
+        form.setFieldsValue({ tenantId: '' });
+        message.warning(resp.message || 'Please select your healthcare provider');
+      } else {
+        const msg = resp?.message || err.message || 'Login failed';
+        message.error(Array.isArray(msg) ? msg.join(', ') : msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -77,24 +92,13 @@ const PatientLoginPage: React.FC = () => {
           </Text>
 
           <Form
+            form={form}
             name="patient-login"
             layout="vertical"
             onFinish={onFinish}
             autoComplete="off"
             size="large"
           >
-            <Form.Item
-              name="tenantId"
-              label="Healthcare Provider ID"
-              rules={[{ required: true, message: 'Please enter your provider ID' }]}
-              extra="This is the clinic ID provided by your healthcare provider"
-            >
-              <Input
-                prefix={<IdcardOutlined style={{ color: '#0D7C8A' }} />}
-                placeholder="e.g., 00000000-0000-0000-0000-000000000000"
-              />
-            </Form.Item>
-
             <Form.Item
               name="email"
               rules={[
@@ -105,6 +109,7 @@ const PatientLoginPage: React.FC = () => {
               <Input
                 prefix={<MailOutlined style={{ color: '#0D7C8A' }} />}
                 placeholder="Email address"
+                autoFocus
               />
             </Form.Item>
 
@@ -117,6 +122,20 @@ const PatientLoginPage: React.FC = () => {
                 placeholder="Password"
               />
             </Form.Item>
+
+            {/* Only shown when the backend reports the email is registered at multiple providers */}
+            {tenantChoices && tenantChoices.length > 0 && (
+              <Form.Item
+                name="tenantId"
+                label="Select your healthcare provider"
+                rules={[{ required: true, message: 'Please select your provider' }]}
+              >
+                <Input
+                  prefix={<IdcardOutlined style={{ color: '#0D7C8A' }} />}
+                  placeholder="Enter your provider ID"
+                />
+              </Form.Item>
+            )}
 
             <Form.Item style={{ marginBottom: 16, textAlign: 'right' }}>
               <Link to="/patient/forgot-password" style={{ color: '#0D7C8A', fontWeight: 500 }}>

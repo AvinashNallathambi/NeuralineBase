@@ -8,6 +8,7 @@ import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { AuditInterceptor } from "./common/interceptors/audit.interceptor";
 import { TenantInterceptor } from "./common/interceptors/tenant.interceptor";
+import { DatabaseRetryInterceptor } from "./common/interceptors/db-retry.interceptor";
 import { configureBodyParserWithRawBody } from "./common/middleware/webhook-body-parser.config";
 
 // HIPAA: Rate limiting is now handled globally by @nestjs/throttler with
@@ -16,6 +17,32 @@ import { configureBodyParserWithRawBody } from "./common/middleware/webhook-body
 
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
+
+  // ── Sentry initialization (optional — only activates if DSN is set) ──────
+  const SENTRY_DSN = process.env.SENTRY_DSN;
+  if (SENTRY_DSN) {
+    try {
+      const Sentry = await import("@sentry/node");
+      Sentry.init({
+        dsn: SENTRY_DSN,
+        environment: process.env.NODE_ENV || "development",
+        tracesSampleRate: 0.1,
+        // HIPAA: Strip PHI from request bodies before sending to Sentry
+        beforeSend(event: any) {
+          if (event.request?.data) delete event.request.data;
+          if (event.breadcrumbs) {
+            event.breadcrumbs = event.breadcrumbs.filter(
+              (b: any) => b.category !== "http.body" && b.category !== "query.body",
+            );
+          }
+          return event;
+        },
+      });
+      logger.log("Sentry error tracking initialized");
+    } catch {
+      logger.warn("SENTRY_DSN set but @sentry/node not installed — skipping");
+    }
+  }
 
   // HIPAA: Reduce log verbosity in production to avoid PHI leakage
   const isProd = process.env.NODE_ENV === "production";
@@ -85,8 +112,15 @@ async function bootstrap() {
   // Global filters
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  // Global interceptors
-  app.useGlobalInterceptors(new AuditInterceptor(), new TenantInterceptor());
+  // Global interceptors — order matters:
+  //   1. AuditInterceptor   — logs request start
+  //   2. TenantInterceptor  — sets req.tenantId from JWT
+  //   3. DatabaseRetryInterceptor — retries on stale DB connections (after Postgres restart)
+  app.useGlobalInterceptors(
+    new AuditInterceptor(),
+    new TenantInterceptor(),
+    new DatabaseRetryInterceptor(),
+  );
 
   // Swagger documentation – HIPAA: only in non-production environments
   if (!isProd) {

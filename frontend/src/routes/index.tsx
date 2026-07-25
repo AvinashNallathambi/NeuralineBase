@@ -121,6 +121,7 @@ const ForgotPasswordPage = lazyWithRetry(
 
 // Patient Portal
 const PatientLoginPage = lazyWithRetry(() => import("../pages/auth/PatientLoginPage"));
+const PatientSetupAccountPage = lazyWithRetry(() => import("../pages/auth/PatientSetupAccountPage"));
 const PatientPortalLayout = lazyWithRetry(() => import("../layouts/PatientPortalLayout"));
 const PortalDashboardPage = lazyWithRetry(() => import("../pages/portal/PortalDashboardPage"));
 const PortalAppointmentsPage = lazyWithRetry(() => import("../pages/portal/PortalAppointmentsPage"));
@@ -215,6 +216,15 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PatientLoginPage />
+          </LazyPage>
+        ),
+      },
+      // Patient portal account setup (public — accessed via invitation link)
+      {
+        path: "/patient/setup-account",
+        element: (
+          <LazyPage>
+            <PatientSetupAccountPage />
           </LazyPage>
         ),
       },

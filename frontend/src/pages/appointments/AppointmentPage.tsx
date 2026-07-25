@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Card,
   Table,
@@ -26,6 +26,8 @@ import {
   Avatar,
   List,
   Empty,
+  Alert,
+  Spin,
 } from 'antd';
 import {
   PlusOutlined,
@@ -156,6 +158,50 @@ const AppointmentPage: React.FC = () => {
   // any user/role added in Settings reflects here immediately.
   const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [staffUsersLoading, setStaffUsersLoading] = useState(false);
+
+  // Available slots for the selected provider+date in the New Appointment drawer
+  const [availableSlots, setAvailableSlots] = useState<{ start: string; end: string }[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [slotsChecked, setSlotsChecked] = useState(false);
+
+  // Watch provider + date form values to fetch available slots
+  const selectedProviderId = Form.useWatch('providerId', form);
+  const selectedFormDate = Form.useWatch('date', form);
+  const selectedAppointmentType = Form.useWatch('type', form);
+
+  useEffect(() => {
+    if (!selectedProviderId || !selectedFormDate) {
+      setAvailableSlots([]);
+      setSlotsChecked(false);
+      return;
+    }
+    let cancelled = false;
+    const fetchSlots = async () => {
+      setSlotsLoading(true);
+      setSlotsChecked(false);
+      try {
+        const dateObj = (selectedFormDate as dayjs.Dayjs).toDate();
+        const slots = await providerAvailabilityService.getAvailableSlots(
+          selectedProviderId,
+          dateObj,
+          selectedAppointmentType,
+        );
+        if (!cancelled) {
+          setAvailableSlots(slots);
+          setSlotsChecked(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setAvailableSlots([]);
+          setSlotsChecked(true);
+        }
+      } finally {
+        if (!cancelled) setSlotsLoading(false);
+      }
+    };
+    fetchSlots();
+    return () => { cancelled = true; };
+  }, [selectedProviderId, selectedFormDate, selectedAppointmentType]);
 
   // Extract unique statuses from appointments
   const uniqueStatuses = useMemo(() => {
@@ -1370,11 +1416,11 @@ const AppointmentPage: React.FC = () => {
         title="New Appointment"
         placement="right"
         width={520}
-        onClose={() => { setDrawerOpen(false); form.resetFields(); setIsTelehealth(false); }}
+        onClose={() => { setDrawerOpen(false); form.resetFields(); setIsTelehealth(false); setAvailableSlots([]); setSlotsChecked(false); }}
         open={drawerOpen}
         extra={
           <Space>
-            <Button onClick={() => { setDrawerOpen(false); form.resetFields(); setIsTelehealth(false); }}>Cancel</Button>
+            <Button onClick={() => { setDrawerOpen(false); form.resetFields(); setIsTelehealth(false); setAvailableSlots([]); setSlotsChecked(false); }}>Cancel</Button>
             <Button type="primary" onClick={() => form.submit()}>Schedule</Button>
           </Space>
         }
@@ -1482,6 +1528,51 @@ const AppointmentPage: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+
+          {/* Provider availability feedback */}
+          {slotsLoading && (
+            <div style={{ textAlign: 'center', padding: '12px 0', marginBottom: 16 }}>
+              <Spin size="small" /> <Text type="secondary" style={{ marginLeft: 8 }}>Checking provider availability…</Text>
+            </div>
+          )}
+          {slotsChecked && !slotsLoading && availableSlots.length === 0 && selectedProviderId && selectedFormDate && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="No availability set for this provider on this day"
+              description={
+                <span>
+                  This provider has no scheduled availability for{' '}
+                  <strong>{(selectedFormDate as dayjs.Dayjs).format('dddd, MMM D')}</strong>.
+                  You can still book manually, but please confirm with the provider first.
+                  Set availability in <strong>Provider Availability</strong> page.
+                </span>
+              }
+            />
+          )}
+          {slotsChecked && !slotsLoading && availableSlots.length > 0 && selectedProviderId && selectedFormDate && (
+            <Alert
+              type="success"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`${availableSlots.length} available slot${availableSlots.length === 1 ? '' : 's'} on ${(selectedFormDate as dayjs.Dayjs).format('dddd, MMM D')}`}
+              description={
+                <div style={{ maxHeight: 80, overflowY: 'auto' }}>
+                  {availableSlots.slice(0, 8).map((s, i) => (
+                    <Tag key={i} style={{ marginBottom: 4 }}>
+                      {dayjs(s.start).format('h:mm A')} – {dayjs(s.end).format('h:mm A')}
+                    </Tag>
+                  ))}
+                  {availableSlots.length > 8 && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {' '}+{availableSlots.length - 8} more…
+                    </Text>
+                  )}
+                </div>
+              }
+            />
+          )}
           <Form.Item name="isTelehealth" label="Telehealth" valuePropName="checked">
             <Switch onChange={setIsTelehealth} />
           </Form.Item>

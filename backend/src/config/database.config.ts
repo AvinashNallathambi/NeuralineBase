@@ -28,6 +28,20 @@ export const getDatabaseConfig = (
       }
     : false,
   autoLoadEntities: true,
+  // Retry initial DB connection on startup (e.g. if Postgres is still booting)
+  retryAttempts: 5,
+  retryDelay: 3000,
+  // Connection pool configuration — prevents stale connections from causing
+  // 500 errors after a Postgres restart. keepAlive detects dead sockets,
+  // idleTimeoutMillis drops idle connections before they go stale.
+  extra: {
+    max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+    min: 5,
+    idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT || '30000', 10),
+    connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECT_TIMEOUT || '5000', 10),
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+  },
 });
 
 // DataSource for CLI migrations

@@ -31,8 +31,10 @@ const PATIENT_USER_KEY = 'neuraline_patient_user';
 class PatientAuthServiceClass {
   private baseUrl = '/patients/auth';
 
-  async login(email: string, password: string, tenantId: string): Promise<PatientLoginResponse> {
-    const response = await api.post(`${this.baseUrl}/login`, { email, password, tenantId });
+  async login(email: string, password: string, tenantId?: string): Promise<PatientLoginResponse> {
+    const payload: Record<string, string> = { email, password };
+    if (tenantId) payload.tenantId = tenantId;
+    const response = await api.post(`${this.baseUrl}/login`, payload);
     const data = response.data;
     if (data.accessToken) {
       sessionStorage.setItem(PATIENT_TOKEN_KEY, data.accessToken);

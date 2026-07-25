@@ -14,6 +14,7 @@ set -e
 
 APP_DIR="/opt/neuraline"
 FRONTEND_DIR="/var/www/neuraline"
+BACKUP_DIR="/opt/neuraline/backups"
 
 cd "$APP_DIR"
 
@@ -61,7 +62,26 @@ npm prune --omit=dev 2>/dev/null || true
 echo "  ✅ Pruned"
 echo ""
 
-# ─── 4c. Run database migrations (use compiled JS, not TS) ──────────────────
+# ─── 4c. Backup database before migrations ─────────────────────────────────
+echo "▶ Backing up database before migration..."
+mkdir -p "$BACKUP_DIR"
+BACKUP_FILE="$BACKUP_DIR/db_backup_$(date '+%Y%m%d_%H%M%S').sql.gz"
+DB_HOST_VAL="${DB_HOST:-127.0.0.1}"
+DB_PORT_VAL="${DB_PORT:-5432}"
+DB_NAME_VAL="${DB_DATABASE:-neuraline}"
+DB_USER_VAL="${DB_USERNAME:-neuraline}"
+if pg_dump -h "$DB_HOST_VAL" -p "$DB_PORT_VAL" -U "$DB_USER_VAL" -d "$DB_NAME_VAL" --no-owner --clean --if-exists 2>/dev/null | gzip > "$BACKUP_FILE" 2>/dev/null; then
+  echo "  ✅ Backup saved: $BACKUP_FILE"
+  # Keep only the last 10 backups
+  ls -t "$BACKUP_DIR"/db_backup_*.sql.gz 2>/dev/null | tail -n +11 | xargs -r rm -f
+else
+  echo "  ⚠️  WARNING: Database backup failed — continuing anyway (set PGPASSWORD or use .pgpass)"
+  echo "     To enable backups: create /opt/neuraline/.pgpass with format:"
+  echo "     $DB_HOST_VAL:$DB_PORT_VAL:$DB_NAME_VAL:$DB_USER_VAL:<password>"
+fi
+echo ""
+
+# ─── 4d. Run database migrations (use compiled JS, not TS) ──────────────────
 echo "▶ Running database migrations..."
 cd backend
 NODE_EXTRA_CA_CERTS=/opt/neuraline/rds-ca-bundle.pem npx typeorm migration:run -d dist/config/database.config.js

@@ -26,9 +26,9 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
-import { useProviderStore } from '../../store/dataStore';
 import { providerAvailabilityService } from '../../services/providerAvailabilityService';
-import type { User, ProviderAvailability, ProviderAvailabilityOverride } from '../../types';
+import userService, { type RolePermission, type StaffUser } from '../../services/userService';
+import type { ProviderAvailability, ProviderAvailabilityOverride } from '../../types';
 
 const { Title } = Typography;
 
@@ -42,9 +42,16 @@ const specialtyColors: Record<string, string> = {
   'Primary Care': 'cyan',
 };
 
+const formatRole = (role: string, roles: RolePermission[]) =>
+  roles.find((r) => r.key === role)?.label ||
+  role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const getRoleColor = (role: string, roles: RolePermission[]) =>
+  roles.find((r) => r.key === role)?.color || 'default';
+
 interface ProviderRow {
   key: string;
-  provider: User;
+  provider: StaffUser;
   weeklyHours: number;
   activeDays: string;
   slotDuration: number;
@@ -54,9 +61,10 @@ interface ProviderRow {
 
 const ProviderAvailabilityPage: React.FC = () => {
   const navigate = useNavigate();
-  const { providers } = useProviderStore();
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [schedules, setSchedules] = useState<ProviderAvailability[]>([]);
   const [overrides, setOverrides] = useState<ProviderAvailabilityOverride[]>([]);
+  const [roles, setRoles] = useState<RolePermission[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
@@ -67,12 +75,16 @@ const ProviderAvailabilityPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const [availability, overrideList] = await Promise.all([
+        const [users, availability, overrideList, rolesData] = await Promise.all([
+          userService.getAll(),
           providerAvailabilityService.findAllAvailability(),
           providerAvailabilityService.findAllOverrides(),
+          userService.getRoleDefinitions(),
         ]);
+        setStaffUsers(users);
         setSchedules(availability);
         setOverrides(overrideList);
+        setRoles(rolesData);
       } catch (err) {
         setError('Failed to load availability data');
       } finally {
@@ -83,15 +95,15 @@ const ProviderAvailabilityPage: React.FC = () => {
   }, []);
 
   const providerRows = useMemo<ProviderRow[]>(() => {
-    let filtered = providers;
+    let filtered = staffUsers;
 
     if (searchText) {
       const q = searchText.toLowerCase();
       filtered = filtered.filter(
         (p) =>
           `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
-          (p.specialization || '').toLowerCase().includes(q) ||
-          (p.department || '').toLowerCase().includes(q)
+          (p.department || '').toLowerCase().includes(q) ||
+          (p.email || '').toLowerCase().includes(q)
       );
     }
 
@@ -137,10 +149,10 @@ const ProviderAvailabilityPage: React.FC = () => {
         nextTimeOff,
       };
     });
-  }, [providers, schedules, overrides, searchText, roleFilter]);
+  }, [staffUsers, schedules, overrides, searchText, roleFilter]);
 
-  const totalProviders = providers.length;
-  const doctorCount = providers.filter((p) => p.role === 'doctor').length;
+  const totalProviders = staffUsers.length;
+  const doctorCount = staffUsers.filter((p) => p.role === 'doctor').length;
   const totalWeeklyHours = providerRows.reduce((sum, r) => sum + r.weeklyHours, 0);
   const upcomingTimeOffs = overrides.filter(
     (o) =>
@@ -153,13 +165,13 @@ const ProviderAvailabilityPage: React.FC = () => {
       title: 'Provider',
       dataIndex: 'provider',
       key: 'provider',
-      render: (provider: User) => (
+      render: (provider: StaffUser) => (
         <div>
           <div style={{ fontWeight: 600, color: '#0D7C8A' }}>
             {provider.firstName} {provider.lastName}
           </div>
           <div style={{ fontSize: 12, color: '#666' }}>
-            {provider.specialization || provider.department || provider.role}
+            {provider.department || provider.role}
           </div>
         </div>
       ),
@@ -170,23 +182,20 @@ const ProviderAvailabilityPage: React.FC = () => {
       title: 'Role',
       key: 'role',
       render: (_, row) => (
-        <Tag color={row.provider.role === 'doctor' ? 'blue' : 'green'}>
-          {row.provider.role.charAt(0).toUpperCase() + row.provider.role.slice(1)}
+        <Tag color={getRoleColor(row.provider.role, roles)}>
+          {formatRole(row.provider.role, roles)}
         </Tag>
       ),
-      filters: [
-        { text: 'Doctor', value: 'doctor' },
-        { text: 'Nurse', value: 'nurse' },
-      ],
+      filters: roles.map((r) => ({ text: r.label, value: r.key })),
       onFilter: (value, record) => record.provider.role === value,
     },
     {
-      title: 'Specialty',
-      key: 'specialty',
+      title: 'Department',
+      key: 'department',
       render: (_, row) => {
-        const spec = row.provider.specialization;
-        return spec ? (
-          <Tag color={specialtyColors[spec] || 'default'}>{spec}</Tag>
+        const dept = row.provider.department;
+        return dept ? (
+          <Tag color={specialtyColors[dept] || 'default'}>{dept}</Tag>
         ) : (
           <span style={{ color: '#999' }}>—</span>
         );
@@ -334,8 +343,7 @@ const ProviderAvailabilityPage: React.FC = () => {
               style={{ width: '100%' }}
               options={[
                 { label: 'All Roles', value: 'all' },
-                { label: 'Doctors', value: 'doctor' },
-                { label: 'Nurses', value: 'nurse' },
+                ...roles.map((r) => ({ label: r.label, value: r.key })),
               ]}
             />
           </Col>

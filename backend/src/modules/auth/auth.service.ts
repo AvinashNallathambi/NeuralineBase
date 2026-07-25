@@ -11,6 +11,7 @@ import { ConfigService } from "@nestjs/config";
 import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 import { v4 as uuidv4 } from "uuid";
+import { authenticator } from "otplib";
 import { PasswordPolicyService } from "../../common/services/password-policy.service";
 import { UsersService } from "../users/users.service";
 import { User } from "../users/entities/user.entity";
@@ -270,17 +271,23 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException("User not found");
     }
 
-    // Generate MFA secret
-    // TODO: Use otplib to generate proper TOTP secret
-    const secret = uuidv4().replace(/-/g, "").substring(0, 16).toUpperCase();
+    // Generate MFA secret using otplib (RFC 6238 TOTP)
+    const secret = authenticator.generateSecret();
     const appName = this.configService.get<string>(
       "MFA_APP_NAME",
       "NeuralineEMR",
     );
-    const qrCodeUrl = `otpauth://totp/${appName}:${user.email}?secret=${secret}&issuer=${appName}`;
+    const qrCodeUrl = authenticator.keyuri(user.email, appName, secret);
 
-    // TODO: Save secret to user record in database
-    this.logger.log(`MFA enabled for user ${userId}`);
+    // Save secret to user record — MFA is not yet enabled until the user
+    // verifies a TOTP code (verifyMfa). This prevents locking users out
+    // if they abandon MFA setup after generating a secret.
+    if (user.tenantId && user.id !== "dev-user-1") {
+      await this.usersService.update(user.tenantId, user.id, {
+        mfaSecret: secret,
+      });
+    }
+    this.logger.log(`MFA secret generated for user ${userId}`);
 
     // HIPAA §164.312(a)(2)(iii) Automatic Logoff:
     // Revoke all existing sessions after MFA is enabled so the user must
@@ -310,15 +317,22 @@ export class AuthService implements OnModuleInit {
       throw new BadRequestException("MFA not configured");
     }
 
-    // TODO: Use otplib to verify TOTP code against stored secret
-    // HIPAA: Validate code format strictly (6-digit numeric only)
-    const isValid = /^\d{6}$/.test(code);
+    // Verify TOTP code using otplib (RFC 6238)
+    const isValid = authenticator.verify({
+      token: code,
+      secret: user.mfaSecret,
+    });
 
     if (!isValid) {
-      throw new UnauthorizedException("Invalid MFA code – must be 6 digits");
+      throw new UnauthorizedException("Invalid MFA code");
     }
-    // NOTE: Once otplib is integrated, replace the regex check with:
-    //   const isValid = authenticator.verify({ token: code, secret: user.mfaSecret });
+
+    // Mark MFA as enabled now that the user has verified a TOTP code
+    if (user.tenantId && user.id !== "dev-user-1") {
+      await this.usersService.update(user.tenantId, user.id, {
+        mfaEnabled: true,
+      });
+    }
 
     const tokens = this.generateTokens(user);
     this.logger.log(`MFA verified for user ${userId}`);

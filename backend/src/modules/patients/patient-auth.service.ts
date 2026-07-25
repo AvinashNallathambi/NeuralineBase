@@ -52,7 +52,7 @@ export class PatientAuthService {
   async login(
     email: string,
     password: string,
-    tenantId: string,
+    tenantId?: string,
   ): Promise<{
     accessToken: string;
     refreshToken: string;
@@ -61,9 +61,38 @@ export class PatientAuthService {
   }> {
     this.checkAccountLockout(email);
 
-    const patient = await this.patientRepository.findOne({
-      where: { email: email.toLowerCase(), tenantId },
-    });
+    // If tenantId is provided, look up within that tenant (original behavior).
+    // If not, auto-resolve by email across all tenants.
+    let patient: Patient | null;
+    if (tenantId) {
+      patient = await this.patientRepository.findOne({
+        where: { email: email.toLowerCase(), tenantId },
+      });
+    } else {
+      // Auto-resolve: find all patients with this email across tenants
+      const candidates = await this.patientRepository.find({
+        where: { email: email.toLowerCase() },
+      });
+      const portalReady = candidates.filter(
+        (p) => p.passwordHash && p.portalActive,
+      );
+      if (portalReady.length === 0) {
+        await this.recordFailedLogin(email);
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      if (portalReady.length === 1) {
+        patient = portalReady[0];
+      } else {
+        // Same email at multiple tenants — patient must pick which provider.
+        // We don't reveal tenant names here (PHI); the patient should know
+        // their provider. Return a 400 with tenant IDs to choose from.
+        throw new BadRequestException({
+          message: 'Your email is registered with multiple healthcare providers. Please specify your provider ID.',
+          multiTenant: true,
+          tenants: portalReady.map((p) => ({ tenantId: p.tenantId })),
+        });
+      }
+    }
 
     if (!patient || !patient.passwordHash || !patient.portalActive) {
       await this.recordFailedLogin(email);
@@ -202,10 +231,19 @@ export class PatientAuthService {
     return { message: 'Logged out successfully' };
   }
 
-  async forgotPassword(email: string, tenantId: string): Promise<{ message: string }> {
-    const patient = await this.patientRepository.findOne({
-      where: { email: email.toLowerCase(), tenantId },
-    });
+  async forgotPassword(email: string, tenantId?: string): Promise<{ message: string }> {
+    let patient: Patient | null;
+    if (tenantId) {
+      patient = await this.patientRepository.findOne({
+        where: { email: email.toLowerCase(), tenantId },
+      });
+    } else {
+      // Auto-resolve tenant by email
+      const candidates = await this.patientRepository.find({
+        where: { email: email.toLowerCase() },
+      });
+      patient = candidates.find((p) => p.portalActive && p.email) || null;
+    }
 
     // Always return the same message to avoid leaking which emails exist.
     const genericMessage = 'If an account with that email exists, a password reset link has been sent';
@@ -226,7 +264,7 @@ export class PatientAuthService {
     const resetUrl = this.buildPatientResetUrl(resetToken);
     try {
       await this.notificationsService.notify({
-        tenantId,
+        tenantId: patient.tenantId,
         type: NotificationType.GENERAL,
         title: 'Password Reset — Patient Portal',
         message: `Hello ${patient.firstName},\n\nWe received a request to reset your patient portal password. Please choose a new password by visiting the link below.\n\n${resetUrl}\n\nThis link will expire in 1 hour.\n\nIf you did not request a password reset, you can safely ignore this email.`,

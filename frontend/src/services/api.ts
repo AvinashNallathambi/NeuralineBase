@@ -15,7 +15,10 @@ api.interceptors.request.use(
   (config) => {
     // For patient portal endpoints, use patient token
     const url = config.url || '';
-    const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+    const isPatientEndpoint =
+      url.startsWith('/patients/auth') ||
+      url.startsWith('/patients/portal') ||
+      url.startsWith('/messaging/patient/');
 
     if (isPatientEndpoint) {
       const patientToken = sessionStorage.getItem('neuraline_patient_token');
@@ -41,7 +44,10 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
-      const isPatientEndpoint = url.startsWith('/patients/auth') || url.startsWith('/patients/portal');
+      const isPatientEndpoint =
+        url.startsWith('/patients/auth') ||
+        url.startsWith('/patients/portal') ||
+        url.startsWith('/messaging/patient/');
 
       if (isPatientEndpoint) {
         // Patient token expired — redirect to patient login
@@ -52,9 +58,14 @@ api.interceptors.response.use(
           window.location.href = '/patient/login';
         }
       } else {
-        // Staff token expired
+        // Staff token expired — only clear staff token, don't wipe patient session
         message.info('Logged out due to security concern');
-        sessionStorage.clear();
+        sessionStorage.removeItem('neuraline_token');
+        sessionStorage.removeItem('neuraline_user');
+        if (window.location.pathname.startsWith('/portal')) {
+          // Patient in portal — don't redirect to staff login on staff 401s
+          return Promise.reject(error);
+        }
         window.location.href = '/login';
       }
     }

@@ -179,7 +179,6 @@ jobs:
 
       - name: npm audit (high+ severity)
         run: npm audit --audit-level=high
-        continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────────────
   # Stage 6: All checks passed (gate for deploy)

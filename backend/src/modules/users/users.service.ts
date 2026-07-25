@@ -122,6 +122,7 @@ export class UsersService implements OnModuleInit {
       phone: string;
       department: string;
       mfaEnabled: boolean;
+      mfaSecret: string | null;
       isActive: boolean;
     }>,
   ): Promise<User> {

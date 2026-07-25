@@ -784,8 +784,25 @@ export class AppointmentsService {
       }
 
       // Check effective and expiry dates
-      if (availability.effectiveDate && date < availability.effectiveDate) continue;
-      if (availability.expiryDate && date > availability.expiryDate) continue;
+      // NOTE: pg driver may return `date` columns as strings (e.g. "2026-07-25"),
+      // so we must normalize to Date objects before comparing.
+      const effectiveDate = availability.effectiveDate
+        ? new Date(availability.effectiveDate)
+        : null;
+      const expiryDate = availability.expiryDate
+        ? new Date(availability.expiryDate)
+        : null;
+      // Use start-of-day for the requested date to avoid time-of-day mismatches
+      const dateStartOfDay = new Date(date);
+      dateStartOfDay.setHours(0, 0, 0, 0);
+
+      if (effectiveDate && dateStartOfDay < effectiveDate) continue;
+      if (expiryDate && dateStartOfDay > expiryDate) {
+        // expiryDate is inclusive (end of that day), so allow the day itself
+        const endOfExpiry = new Date(expiryDate);
+        endOfExpiry.setHours(23, 59, 59, 999);
+        if (dateStartOfDay > endOfExpiry) continue;
+      }
 
       // Build the availability window for this day
       const windowStart = new Date(date);
