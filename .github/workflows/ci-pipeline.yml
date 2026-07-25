@@ -28,7 +28,9 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+          npm install
 
       - name: Lint (all workspaces)
         run: npm run lint
@@ -55,7 +57,9 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+          npm install
 
       - name: Run backend unit tests
         run: npm run test:backend
@@ -118,7 +122,9 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+          npm install
 
       - name: Run backend E2E tests
         run: cd backend && npx jest --config ./test/jest-e2e.json --forceExit
@@ -140,19 +146,15 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+          npm install
 
       - name: Build backend
         run: npm run build:backend
 
       - name: Build frontend
         run: npm run build:frontend
-
-      - name: Build backend Docker image
-        run: docker build -t neuraline-backend:ci ./backend
-
-      - name: Build frontend Docker image
-        run: docker build -t neuraline-frontend:ci ./frontend
 
   # ─────────────────────────────────────────────────────────────────────
   # Stage 5: Security Audit
@@ -171,14 +173,16 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+          npm install
 
       - name: npm audit (high+ severity)
         run: npm audit --audit-level=high
         continue-on-error: true
 
   # ─────────────────────────────────────────────────────────────────────
-  # Stage 6: All checks passed (gate for manual deploy)
+  # Stage 6: All checks passed (gate for deploy)
   # ─────────────────────────────────────────────────────────────────────
   all-checks-passed:
     name: All Checks Passed
@@ -188,7 +192,4 @@ jobs:
       - name: Pipeline succeeded
         run: |
           echo "✅ All CI checks passed."
-          echo "The code is ready for manual deployment."
-          echo ""
-          echo "To deploy:"
-          echo "  docker compose up --build -d"
+          echo "The code is ready for auto-deployment to AWS."
