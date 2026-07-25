@@ -11,6 +11,7 @@ import {
   DatePicker,
   Checkbox,
   Modal,
+  Drawer,
   message,
   Row,
   Col,
@@ -38,7 +39,7 @@ interface ProblemListSectionProps {
 const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) => {
   const [problems, setProblems] = useState<PatientProblem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<PatientProblem | null>(null);
   const [form] = Form.useForm();
 
@@ -61,7 +62,7 @@ const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) =>
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    setModalOpen(true);
+    setDrawerOpen(true);
   };
 
   const openEdit = (problem: PatientProblem) => {
@@ -71,7 +72,7 @@ const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) =>
       onsetDate: problem.onsetDate ? dayjs(problem.onsetDate) : undefined,
       resolutionDate: problem.resolutionDate ? dayjs(problem.resolutionDate) : undefined,
     });
-    setModalOpen(true);
+    setDrawerOpen(true);
   };
 
   const handleSave = async () => {
@@ -90,7 +91,7 @@ const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) =>
         await patientService.createProblem(patientId, payload);
         message.success('Problem added');
       }
-      setModalOpen(false);
+      setDrawerOpen(false);
       form.resetFields();
       setEditing(null);
       fetchProblems();
@@ -187,16 +188,24 @@ const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) =>
         locale={{ emptyText: <Empty description="No problems on file" /> }}
       />
 
-      <Modal
+      <Drawer
         title={editing ? 'Edit Problem' : 'Add Problem'}
-        open={modalOpen}
-        onOk={handleSave}
-        onCancel={() => {
-          setModalOpen(false);
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
           form.resetFields();
           setEditing(null);
         }}
+        width={480}
         destroyOnClose
+        extra={
+          <Space>
+            <Button onClick={() => { setDrawerOpen(false); form.resetFields(); setEditing(null); }}>Cancel</Button>
+            <Button type="primary" onClick={handleSave} icon={<PlusOutlined />}>
+              {editing ? 'Save Changes' : 'Add Problem'}
+            </Button>
+          </Space>
+        }
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -260,10 +269,10 @@ const ProblemListSection: React.FC<ProblemListSectionProps> = ({ patientId }) =>
             </Col>
           </Row>
           <Form.Item name="notes" label="Notes">
-            <TextArea rows={2} />
+            <TextArea rows={4} />
           </Form.Item>
         </Form>
-      </Modal>
+      </Drawer>
     </Card>
   );
 };
