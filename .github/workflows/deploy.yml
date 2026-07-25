@@ -34,18 +34,19 @@ jobs:
     name: Verify CI Passed
     runs-on: ubuntu-latest
     outputs:
-      ci_passed: ${{ steps.check.outputs.passed }}
+      ci_passed: ${{ steps.skip-check.outputs.passed || steps.check.outputs.passed }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Skip CI check (manual deploy with skip_ci=true)
         if: github.event_name == 'workflow_dispatch' && inputs.skip_ci == true
+        id: skip-check
         run: |
           echo "⏭️ CI check skipped (manual deploy with skip_ci=true)"
-          echo "::set-output name=passed::true"
+          echo "passed=true" >> $GITHUB_OUTPUT
 
       - name: Wait for CI to finish and check result
-        if: !(github.event_name == 'workflow_dispatch' && inputs.skip_ci == true)
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_ci == true) }}
         id: check
         uses: actions/github-script@v7
         with:
