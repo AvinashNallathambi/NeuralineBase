@@ -28,11 +28,16 @@ git pull origin main
 echo "  Current commit: $(git rev-parse --short HEAD)"
 echo ""
 
-# ─── 2. Install/update dependencies (full, incl. devDeps for build) ────────
+# ─── 2. Install/update dependencies ────────────────────────────────────────
 echo "▶ Installing dependencies..."
-npm ci 2>/dev/null || npm install
+# Delete lockfiles to avoid Windows/Linux platform binary mismatches (rollup bug)
+rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+npm install
 echo "  ✅ Dependencies updated"
 echo ""
+
+# t3.micro has 1GB RAM — Node needs more heap for TypeScript compilation
+export NODE_OPTIONS='--max-old-space-size=1536'
 
 # ─── 3. Build backend ──────────────────────────────────────────────────────
 echo "▶ Building backend..."
@@ -42,7 +47,7 @@ cd ..
 echo "  ✅ Backend built"
 echo ""
 
-# ─── 4. Build frontend ─────────────────────────────────────────────────────
+# ─── 4. Build frontend (uses .env.production for VITE_API_URL) ──────────────
 echo "▶ Building frontend..."
 cd frontend
 npm run build
@@ -56,10 +61,10 @@ npm prune --omit=dev 2>/dev/null || true
 echo "  ✅ Pruned"
 echo ""
 
-# ─── 4c. Run database migrations ───────────────────────────────────────────
+# ─── 4c. Run database migrations (use compiled JS, not TS) ──────────────────
 echo "▶ Running database migrations..."
 cd backend
-npx typeorm migration:run -d src/config/database.config.ts
+NODE_EXTRA_CA_CERTS=/opt/neuraline/rds-ca-bundle.pem npx typeorm migration:run -d dist/config/database.config.js
 cd ..
 echo "  ✅ Migrations applied"
 echo ""
@@ -91,7 +96,7 @@ echo "▶ Running health checks..."
 sleep 5
 
 # Backend health check
-if curl -sf http://localhost:4000/ > /dev/null 2>&1; then
+if curl -sf http://localhost:4000/api/v1/health > /dev/null 2>&1; then
   echo "  ✅ Backend is healthy (port 4000)"
 else
   echo "  ❌ Backend health check FAILED — check: pm2 logs"
