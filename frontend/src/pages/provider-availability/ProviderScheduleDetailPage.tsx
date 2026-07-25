@@ -44,6 +44,7 @@ import type { ColumnsType } from 'antd/es/table';
 dayjs.extend(customParseFormat);
 import { useProviderStore } from '../../store/dataStore';
 import { providerAvailabilityService } from '../../services/providerAvailabilityService';
+import userService, { type RolePermission } from '../../services/userService';
 import type { ProviderAvailability, ProviderAvailabilityOverride, OverrideType, AppointmentType } from '../../types';
 
 const { Title, Text } = Typography;
@@ -103,6 +104,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
 
   const [schedules, setSchedules] = useState<ProviderAvailability[]>([]);
   const [overrides, setOverrides] = useState<ProviderAvailabilityOverride[]>([]);
+  const [roles, setRoles] = useState<RolePermission[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduleDrawer, setScheduleDrawer] = useState(false);
@@ -120,12 +122,14 @@ const ProviderScheduleDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [availability, overrideList] = await Promise.all([
+      const [availability, overrideList, rolesData] = await Promise.all([
         providerAvailabilityService.findAvailabilityByProvider(providerId),
         providerAvailabilityService.findOverridesByProvider(providerId),
+        userService.getRoleDefinitions(),
       ]);
       setSchedules(availability);
       setOverrides(overrideList);
+      setRoles(rolesData);
     } catch {
       setError('Failed to load provider availability data');
     } finally {
@@ -135,6 +139,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerId]);
 
   const providerSchedules = useMemo(
@@ -599,7 +604,9 @@ const ProviderScheduleDetailPage: React.FC = () => {
             {providerName}
           </Title>
           <Text type="secondary">
-            {provider.specialization || provider.department} &middot; {provider.role}
+            {provider.specialization || provider.department} &middot;{' '}
+            {roles.find((r) => r.key === provider.role)?.label ||
+              provider.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
           </Text>
         </Col>
       </Row>
@@ -727,8 +734,9 @@ const ProviderScheduleDetailPage: React.FC = () => {
                   <Descriptions bordered column={{ xs: 1, sm: 2 }}>
                     <Descriptions.Item label="Name">{providerName}</Descriptions.Item>
                     <Descriptions.Item label="Role">
-                      <Tag color={provider.role === 'doctor' ? 'blue' : 'green'}>
-                        {provider.role}
+                      <Tag color={roles.find((r) => r.key === provider.role)?.color || 'default'}>
+                        {roles.find((r) => r.key === provider.role)?.label ||
+                          provider.role.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
                       </Tag>
                     </Descriptions.Item>
                     <Descriptions.Item label="Specialization">

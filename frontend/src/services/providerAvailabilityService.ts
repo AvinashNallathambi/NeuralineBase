@@ -85,6 +85,11 @@ class ProviderAvailabilityService {
     return response.data;
   }
 
+  async findOverridesByProvider(providerId: string): Promise<ProviderAvailabilityOverride[]> {
+    const all = await this.findAllOverrides();
+    return all.filter((o) => o.providerId === providerId);
+  }
+
   async createAvailability(dto: CreateProviderAvailabilityDto): Promise<ProviderAvailability> {
     const response = await axios.post(
       `${API_BASE}/appointments/availability`,
