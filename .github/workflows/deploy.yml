@@ -1,8 +1,10 @@
 name: Deploy to AWS
 
 on:
-  # Automatic: deploy on every push to main
-  push:
+  # Automatic: deploy after CI Pipeline completes successfully on main
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
     branches: ["main"]
   # Manual: click "Run workflow" button in GitHub Actions UI
   workflow_dispatch:
@@ -37,6 +39,9 @@ jobs:
       ci_passed: ${{ steps.skip-check.outputs.passed || steps.check.outputs.passed }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # When triggered by workflow_run, checkout the CI run's commit
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Skip CI check (manual deploy with skip_ci=true)
         if: github.event_name == 'workflow_dispatch' && inputs.skip_ci == true
@@ -45,12 +50,31 @@ jobs:
           echo "⏭️ CI check skipped (manual deploy with skip_ci=true)"
           echo "passed=true" >> $GITHUB_OUTPUT
 
-      - name: Wait for CI to finish and check result
+      - name: Check CI result from workflow_run event
         if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_ci == true) }}
         id: check
         uses: actions/github-script@v7
         with:
           script: |
+            // When triggered by workflow_run, the conclusion is in the event payload
+            if (github.event_name === 'workflow_run') {
+              const conclusion = github.event.workflow_run.conclusion;
+              const headSha = github.event.workflow_run.head_sha;
+              console.log(`CI Pipeline conclusion: ${conclusion}`);
+              console.log(`CI Pipeline head_sha: ${headSha}`);
+
+              if (conclusion === 'success') {
+                console.log('✅ CI passed, proceeding with deploy');
+                core.setOutput('passed', 'true');
+                return;
+              } else {
+                core.setFailed(`❌ CI failed with conclusion: ${conclusion}. Deploy aborted. Fix the failing checks, or use manual deploy with "Skip CI checks" enabled.`);
+                core.setOutput('passed', 'false');
+                return;
+              }
+            }
+
+            // Fallback for manual dispatch without skip_ci
             // Wait up to 10 minutes for CI to complete
             const maxAttempts = 30;
             const sleepMs = 20000;
@@ -63,10 +87,11 @@ jobs:
               });
 
               const ciSuite = data.check_suites.find(
-                suite => suite.app?.slug === 'github-actions'
+                suite => suite.app?.slug === 'github-actions' &&
+                         suite.conclusion !== null
               );
 
-              if (ciSuite && ciSuite.conclusion) {
+              if (ciSuite) {
                 if (ciSuite.conclusion === 'success') {
                   console.log('✅ CI passed on commit:', context.sha);
                   core.setOutput('passed', 'true');
@@ -106,7 +131,7 @@ jobs:
           script: |
             set -e
             echo "=== Neuraline EMR Deploy ==="
-            echo "Commit: ${{ github.sha }}"
+            echo "Commit: ${{ github.event.workflow_run.head_sha || github.sha }}"
             echo "Triggered by: ${{ github.actor }}"
             echo "Event: ${{ github.event_name }}"
             echo ""
