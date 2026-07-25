@@ -162,7 +162,20 @@ jobs:
 
             cd /opt/neuraline || { echo "❌ Cannot cd to /opt/neuraline"; exit 1; }
 
-            # ─── Run deploy script or fall back to manual steps ───────────
+            # ─── Reset any local changes before pulling ───────────────────
+            echo "▶ Resetting local changes..."
+            git reset --hard HEAD
+            git clean -fd
+            echo "  ✅ Working tree clean"
+            echo ""
+
+            # ─── Pull latest code ─────────────────────────────────────────
+            echo "▶ Pulling latest code..."
+            git pull origin main
+            echo "  Current commit: $(git rev-parse --short HEAD)"
+            echo ""
+
+            # ─── Run deploy script ────────────────────────────────────────
             if [ -f deploy/deploy.sh ]; then
               chmod +x deploy/deploy.sh
               echo "▶ Running deploy/deploy.sh..."
@@ -174,7 +187,6 @@ jobs:
               }
             else
               echo "⚠️  deploy/deploy.sh not found — running inline deploy..."
-              git pull origin main || true
               rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
               npm install
               export NODE_OPTIONS='--max-old-space-size=1536'
