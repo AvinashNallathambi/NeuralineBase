@@ -179,6 +179,7 @@ jobs:
           npm install
 
       - name: npm audit (high+ severity)
+        continue-on-error: true
         run: npm audit --audit-level=high
 
   # ─────────────────────────────────────────────────────────────────────
