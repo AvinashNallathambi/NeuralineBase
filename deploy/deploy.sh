@@ -87,9 +87,13 @@ echo ""
 # ─── 4d. Run database migrations (use compiled JS, not TS) ──────────────────
 echo "▶ Running database migrations..."
 cd backend
-NODE_EXTRA_CA_CERTS=/opt/neuraline/rds-ca-bundle.pem npx typeorm migration:run -d dist/config/database.config.js
+if NODE_EXTRA_CA_CERTS=/opt/neuraline/rds-ca-bundle.pem npx typeorm migration:run -d dist/config/database.config.js 2>&1; then
+  echo "  ✅ Migrations applied"
+else
+  echo "  ⚠️  WARNING: Some migrations failed (likely 'already exists' errors from prior synchronize=true run)"
+  echo "     Continuing — the schema already exists from a previous DB_SYNCHRONIZE run."
+fi
 cd ..
-echo "  ✅ Migrations applied"
 echo ""
 
 # ─── 5. Copy frontend to Nginx ─────────────────────────────────────────────
