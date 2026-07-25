@@ -155,9 +155,15 @@ const LazyPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 const router = createBrowserRouter([
-  // Landing page
+  // Root — redirect to EHR login
   {
     path: "/",
+    element: <Navigate to="/login" replace />,
+  },
+
+  // Landing page (accessible at /landing)
+  {
+    path: "/landing",
     element: (
       <LazyPage>
         <LandingPage />
@@ -532,6 +538,7 @@ const router = createBrowserRouter([
 
   // Patient Portal routes – separate layout, patient-only auth
   {
+    path: "/portal",
     element: (
       <PatientRoute>
         <PatientPortalLayout />
@@ -547,7 +554,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/dashboard",
+        path: "dashboard",
         element: (
           <LazyPage>
             <PortalDashboardPage />
@@ -555,7 +562,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/appointments",
+        path: "appointments",
         element: (
           <LazyPage>
             <PortalAppointmentsPage />
@@ -563,7 +570,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/prescriptions",
+        path: "prescriptions",
         element: (
           <LazyPage>
             <PortalPrescriptionsPage />
@@ -571,7 +578,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/lab-results",
+        path: "lab-results",
         element: (
           <LazyPage>
             <PortalLabResultsPage />
@@ -579,7 +586,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/billing",
+        path: "billing",
         element: (
           <LazyPage>
             <PortalBillingPage />
@@ -587,7 +594,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/eobs",
+        path: "eobs",
         element: (
           <LazyPage>
             <PortalEobsPage />
@@ -595,7 +602,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/insurance",
+        path: "insurance",
         element: (
           <LazyPage>
             <PortalInsurancePage />
@@ -603,7 +610,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/profile",
+        path: "profile",
         element: (
           <LazyPage>
             <PortalProfilePage />
@@ -611,7 +618,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/messages",
+        path: "messages",
         element: (
           <LazyPage>
             <PortalMessagesPage />
@@ -619,7 +626,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/ai-assistant",
+        path: "ai-assistant",
         element: (
           <LazyPage>
             <PortalAiAssistantPage />
@@ -627,7 +634,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/portal/video-visit/:sessionId",
+        path: "video-visit/:sessionId",
         element: (
           <LazyPage>
             <PortalVideoVisitPage />
@@ -637,10 +644,10 @@ const router = createBrowserRouter([
     ],
   },
 
-  // Default redirect
+  // Default redirect — unknown routes go to login
   {
     path: "*",
-    element: <Navigate to="/dashboard" replace />,
+    element: <Navigate to="/login" replace />,
   },
 ]);
 
