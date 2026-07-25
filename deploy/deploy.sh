@@ -34,8 +34,10 @@ echo ""
 
 # ─── 2. Install/update dependencies ────────────────────────────────────────
 echo "▶ Installing dependencies..."
-# Delete lockfiles to avoid Windows/Linux platform binary mismatches (rollup bug)
+# Delete lockfiles AND node_modules to avoid Windows/Linux platform binary
+# mismatches (npm optional dependency bug — @rollup/rollup-linux-x64-gnu)
 rm -f package-lock.json frontend/package-lock.json backend/package-lock.json
+rm -rf node_modules frontend/node_modules backend/node_modules
 npm install
 echo "  ✅ Dependencies updated"
 echo ""
