@@ -175,21 +175,16 @@ if [ -f deploy/nginx.conf ]; then
       echo "  ✅ Fixed CSP (wss: allowed for WebSocket)"
     fi
   else
-    # No SSL config — safe to copy our config
-    # Check if any Let's Encrypt certs exist (any domain)
-    if ls /etc/letsencrypt/live/*/fullchain.pem 2>/dev/null | head -1 > /dev/null; then
-      # Certs exist but not in the active config — copy our full config
-      # but use the actual cert domain from the filesystem
-      CERT_DOMAIN=$(ls -d /etc/letsencrypt/live/*/ 2>/dev/null | head -1 | xargs basename)
-      if [ -n "$CERT_DOMAIN" ] && [ -f "/etc/letsencrypt/live/$CERT_DOMAIN/fullchain.pem" ]; then
-        sudo sed "s/app.neura-line.com/$CERT_DOMAIN/g" deploy/nginx.conf > /tmp/nginx_ssl.conf
-        sudo cp /tmp/nginx_ssl.conf "$NGINX_SITE"
-        rm -f /tmp/nginx_ssl.conf
-        echo "  ✅ Nginx config updated with SSL (domain: $CERT_DOMAIN)"
-      else
-        sudo cp deploy/nginx.conf "$NGINX_SITE"
-        echo "  ✅ Nginx config updated (SSL certs detected, using default domain)"
-      fi
+    # No SSL config in active site — check if any Let's Encrypt certs exist
+    CERT_DIR=$(ls -d /etc/letsencrypt/live/*/ 2>/dev/null | head -1)
+    if [ -n "$CERT_DIR" ] && [ -f "${CERT_DIR}fullchain.pem" ]; then
+      # Certs exist — extract domain name from directory path
+      CERT_DOMAIN=$(basename "$CERT_DIR")
+      echo "  ℹ️  Found SSL cert for domain: $CERT_DOMAIN"
+      sudo sed "s/app.neura-line.com/$CERT_DOMAIN/g" deploy/nginx.conf > /tmp/nginx_ssl.conf
+      sudo cp /tmp/nginx_ssl.conf "$NGINX_SITE"
+      rm -f /tmp/nginx_ssl.conf
+      echo "  ✅ Nginx config updated with SSL (domain: $CERT_DOMAIN)"
     else
       # No certs at all — use HTTP-only by stripping the HTTPS block
       echo "  ⚠️  No SSL certs found — using HTTP-only config"
