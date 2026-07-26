@@ -51,7 +51,7 @@ function getIceServers(): RTCIceServer[] {
 
 // Backend WebSocket URL — defaults to the API host with ws protocol
 function getSocketUrl(): string {
-  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
+  const apiBase = import.meta.env.VITE_API_URL || '/api/v1';
   // Strip /api/v1 suffix and use the host root for the socket namespace
   const hostRoot = apiBase.replace(/\/api\/v\d+\/?$/, '');
   return hostRoot;
