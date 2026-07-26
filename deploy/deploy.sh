@@ -122,10 +122,19 @@ echo ""
 
 # ─── 8. Health check ───────────────────────────────────────────────────────
 echo "▶ Running health checks..."
-sleep 5
 
-# Backend health check
-if curl -sf http://localhost:4000/api/v1/health > /dev/null 2>&1; then
+# Backend health check — retry for up to 60 seconds (backend takes time to boot)
+BACKEND_READY=false
+for i in $(seq 1 12); do
+  if curl -sf http://localhost:4000/api/v1/health > /dev/null 2>&1; then
+    BACKEND_READY=true
+    break
+  fi
+  echo "  ⏳ Waiting for backend to start (attempt $i/12)..."
+  sleep 5
+done
+
+if [ "$BACKEND_READY" = true ]; then
   echo "  ✅ Backend is healthy (port 4000)"
 else
   echo "  ❌ Backend health check FAILED — check: pm2 logs"
