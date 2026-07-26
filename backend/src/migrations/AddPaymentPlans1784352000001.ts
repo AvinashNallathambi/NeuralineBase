@@ -8,14 +8,8 @@ export class AddPaymentPlans1784352000001 implements MigrationInterface {
   name = 'AddPaymentPlans1784352000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "subscription_payment_plans_frequency_enum"
-      AS ENUM ('weekly', 'biweekly', 'monthly')
-    `);
-    await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "subscription_payment_plans_status_enum"
-      AS ENUM ('active', 'completed', 'cancelled', 'past_due')
-    `);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_payment_plans_frequency_enum') THEN CREATE TYPE "subscription_payment_plans_frequency_enum" AS ENUM ('weekly', 'biweekly', 'monthly'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_payment_plans_status_enum') THEN CREATE TYPE "subscription_payment_plans_status_enum" AS ENUM ('active', 'completed', 'cancelled', 'past_due'); END IF; END $$`);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "subscription_payment_plans" (

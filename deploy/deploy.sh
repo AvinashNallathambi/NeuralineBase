@@ -125,34 +125,89 @@ if [ -f deploy/nginx.conf ]; then
   if [ -f "$NGINX_SITE" ]; then
     sudo cp "$NGINX_SITE" "${NGINX_SITE}.bak.$(date '+%Y%m%d_%H%M%S')"
   fi
-  # The nginx.conf includes both HTTP→HTTPS redirect and HTTPS server blocks
-  # with Certbot cert paths. Only copy if SSL certs exist (otherwise nginx -t fails)
-  if [ -f /etc/letsencrypt/live/app.neura-line.com/fullchain.pem ]; then
-    sudo cp deploy/nginx.conf "$NGINX_SITE"
-    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline
-    sudo rm -f /etc/nginx/sites-enabled/default
-    echo "  ✅ Nginx config updated (SSL certs detected)"
+  # Check if existing config already has SSL (Certbot added listen 443)
+  if [ -f "$NGINX_SITE" ] && grep -q "listen 443" "$NGINX_SITE"; then
+    # SSL config exists — DON'T overwrite (would break HTTPS)
+    # Instead, inject the telemedicine WebSocket location block if missing
+    if ! grep -q "location = /telemedicine" "$NGINX_SITE"; then
+      echo "  ⚠️  SSL config detected — injecting telemedicine WebSocket block"
+      # Insert the telemedicine location block before the SPA fallback
+      sudo sed -i '/location \/ {/i \
+    # ── WebSocket Proxy for Telemedicine (Socket.IO namespace /telemedicine) ──\
+    # EXACT match: only /telemedicine (Socket.IO), NOT /telemedicine/SESSION_ID (SPA)\
+    location = /telemedicine {\
+        proxy_pass http://127.0.0.1:4000;\
+        proxy_http_version 1.1;\
+        proxy_set_header Host $host;\
+        proxy_set_header X-Real-IP $remote_addr;\
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto $scheme;\
+        proxy_set_header Upgrade $http_upgrade;\
+        proxy_set_header Connection "upgrade";\
+        proxy_connect_timeout 60s;\
+        proxy_read_timeout 3600s;\
+        proxy_send_timeout 3600s;\
+    }\
+\
+    # ── Socket.IO polling fallback ──\
+    location /socket.io/ {\
+        proxy_pass http://127.0.0.1:4000;\
+        proxy_http_version 1.1;\
+        proxy_set_header Host $host;\
+        proxy_set_header X-Real-IP $remote_addr;\
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto $scheme;\
+        proxy_set_header Upgrade $http_upgrade;\
+        proxy_set_header Connection "upgrade";\
+    }\
+' "$NGINX_SITE"
+      echo "  ✅ Telemedicine WebSocket block injected into SSL config"
+    else
+      echo "  ✅ SSL config already has telemedicine block — no changes needed"
+    fi
+    # Also fix Permissions-Policy and CSP if camera is disabled
+    if grep -q "camera=()" "$NGINX_SITE"; then
+      sudo sed -i 's/camera=(), microphone=(self)/camera=(self), microphone=(self)/' "$NGINX_SITE"
+      echo "  ✅ Fixed Permissions-Policy (camera enabled)"
+    fi
+    if grep -q "connect-src 'self';" "$NGINX_SITE" && ! grep -q "wss:" "$NGINX_SITE"; then
+      sudo sed -i "s/connect-src 'self';/connect-src 'self' wss: https:;/" "$NGINX_SITE"
+      echo "  ✅ Fixed CSP (wss: allowed for WebSocket)"
+    fi
   else
-    # No SSL certs yet — strip the HTTPS block and use HTTP-only
-    echo "  ⚠️  No SSL certs found — using HTTP-only config"
-    # Copy only the HTTP server block (lines before the HTTPS block)
-    # This is a fallback for first deploy before Certbot is run
-    sudo awk '/^# ── HTTPS: Main application server/{exit} {print}' deploy/nginx.conf > /tmp/nginx_http_only.conf
-    # Add a simple HTTP server block that serves the app (no redirect)
-    echo "" >> /tmp/nginx_http_only.conf
-    echo "server {" >> /tmp/nginx_http_only.conf
-    echo "    listen 80;" >> /tmp/nginx_http_only.conf
-    echo "    server_name _;" >> /tmp/nginx_http_only.conf
-    echo "    root /var/www/neuraline;" >> /tmp/nginx_http_only.conf
-    echo "    index index.html;" >> /tmp/nginx_http_only.conf
-    # Extract location blocks from the HTTPS section
-    awk '/^server \{/{found=0} /listen 443/{found=1} found && /^    location/{p=1} p{print} p && /^    }/{p=0}' deploy/nginx.conf >> /tmp/nginx_http_only.conf
-    echo "}" >> /tmp/nginx_http_only.conf
-    sudo cp /tmp/nginx_http_only.conf "$NGINX_SITE"
+    # No SSL config — safe to copy our config
+    # Check if any Let's Encrypt certs exist (any domain)
+    if ls /etc/letsencrypt/live/*/fullchain.pem 2>/dev/null | head -1 > /dev/null; then
+      # Certs exist but not in the active config — copy our full config
+      # but use the actual cert domain from the filesystem
+      CERT_DOMAIN=$(ls -d /etc/letsencrypt/live/*/ 2>/dev/null | head -1 | xargs basename)
+      if [ -n "$CERT_DOMAIN" ] && [ -f "/etc/letsencrypt/live/$CERT_DOMAIN/fullchain.pem" ]; then
+        sudo sed "s/app.neura-line.com/$CERT_DOMAIN/g" deploy/nginx.conf > /tmp/nginx_ssl.conf
+        sudo cp /tmp/nginx_ssl.conf "$NGINX_SITE"
+        rm -f /tmp/nginx_ssl.conf
+        echo "  ✅ Nginx config updated with SSL (domain: $CERT_DOMAIN)"
+      else
+        sudo cp deploy/nginx.conf "$NGINX_SITE"
+        echo "  ✅ Nginx config updated (SSL certs detected, using default domain)"
+      fi
+    else
+      # No certs at all — use HTTP-only by stripping the HTTPS block
+      echo "  ⚠️  No SSL certs found — using HTTP-only config"
+      sudo awk '/^# ── HTTPS: Main application server/{exit} {print}' deploy/nginx.conf > /tmp/nginx_http_only.conf
+      echo "" >> /tmp/nginx_http_only.conf
+      echo "server {" >> /tmp/nginx_http_only.conf
+      echo "    listen 80;" >> /tmp/nginx_http_only.conf
+      echo "    server_name _;" >> /tmp/nginx_http_only.conf
+      echo "    root /var/www/neuraline;" >> /tmp/nginx_http_only.conf
+      echo "    index index.html;" >> /tmp/nginx_http_only.conf
+      awk '/^server \{/{found=0} /listen 443/{found=1} found && /^    location/{p=1} p{print} p && /^    }/{p=0}' deploy/nginx.conf >> /tmp/nginx_http_only.conf
+      echo "}" >> /tmp/nginx_http_only.conf
+      sudo cp /tmp/nginx_http_only.conf "$NGINX_SITE"
+      rm -f /tmp/nginx_http_only.conf
+      echo "  ✅ Nginx config updated (HTTP-only, run certbot to enable HTTPS)"
+    fi
     sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline
     sudo rm -f /etc/nginx/sites-enabled/default
-    rm -f /tmp/nginx_http_only.conf
-    echo "  ✅ Nginx config updated (HTTP-only, run certbot to enable HTTPS)"
   fi
 fi
 echo "▶ Reloading Nginx..."

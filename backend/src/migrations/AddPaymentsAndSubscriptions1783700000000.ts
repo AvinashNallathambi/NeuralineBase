@@ -24,7 +24,7 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
 
     // ── subscription_plans ────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscription_plans_tier_enum" AS ENUM ('solo', 'professional', 'enterprise')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_plans_tier_enum') THEN CREATE TYPE "subscription_plans_tier_enum" AS ENUM ('solo', 'professional', 'enterprise'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "subscription_plans" (
         "id"                      uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -53,8 +53,8 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
     `);
 
     // ── subscriptions ─────────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscriptions_status_enum" AS ENUM ('trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscriptions_billingcycle_enum" AS ENUM ('monthly', 'annual')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptions_status_enum') THEN CREATE TYPE "subscriptions_status_enum" AS ENUM ('trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptions_billingcycle_enum') THEN CREATE TYPE "subscriptions_billingcycle_enum" AS ENUM ('monthly', 'annual'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "subscriptions" (
         "id"                       uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -82,7 +82,7 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscriptions_status" ON "subscriptions" ("status")`);
 
     // ── subscription_invoices ─────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscription_invoices_status_enum" AS ENUM ('paid', 'open', 'failed', 'void', 'refunded')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_invoices_status_enum') THEN CREATE TYPE "subscription_invoices_status_enum" AS ENUM ('paid', 'open', 'failed', 'void', 'refunded'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "subscription_invoices" (
         "id"                         uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -112,8 +112,8 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
     await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscription_invoices_tenant_status" ON "subscription_invoices" ("tenant_id", "status")`);
 
     // ── payments ──────────────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "payments_status_enum" AS ENUM ('pending', 'succeeded', 'failed', 'refunded', 'cancelled')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "payments_method_enum" AS ENUM ('card', 'ach', 'cash', 'check', 'other')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payments_status_enum') THEN CREATE TYPE "payments_status_enum" AS ENUM ('pending', 'succeeded', 'failed', 'refunded', 'cancelled'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payments_method_enum') THEN CREATE TYPE "payments_method_enum" AS ENUM ('card', 'ach', 'cash', 'check', 'other'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "payments" (
         "id"                  uuid NOT NULL DEFAULT uuid_generate_v4(),

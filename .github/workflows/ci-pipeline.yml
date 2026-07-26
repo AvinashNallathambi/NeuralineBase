@@ -202,13 +202,30 @@ jobs:
             exit 1
           fi
 
-          # Check that all migrations use IF NOT EXISTS (prevent re-run failures)
+          # Check that all CREATE TABLE/INDEX use IF NOT EXISTS (prevent re-run failures)
           BARE_CREATE=$(grep -r 'CREATE TABLE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' | wc -l)
-          BARE_TYPE=$(grep -r 'CREATE TYPE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' | wc -l)
-          if [ "$BARE_CREATE" -gt 0 ] || [ "$BARE_TYPE" -gt 0 ]; then
-            echo "❌ Found CREATE TABLE/TYPE without IF NOT EXISTS in migrations"
+          if [ "$BARE_CREATE" -gt 0 ]; then
+            echo "❌ Found CREATE TABLE without IF NOT EXISTS in migrations"
             grep -rn 'CREATE TABLE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' || true
-            grep -rn 'CREATE TYPE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' || true
+            exit 1
+          fi
+
+          # CREATE TYPE does NOT support IF NOT EXISTS in PostgreSQL
+          # It must be wrapped in a DO block with pg_type check instead
+          BARE_TYPE=$(grep -r 'CREATE TYPE ' backend/src/migrations/ | grep -v 'DO \$\$' | wc -l)
+          if [ "$BARE_TYPE" -gt 0 ]; then
+            echo "❌ Found CREATE TYPE outside DO block in migrations"
+            echo "   PostgreSQL does not support CREATE TYPE IF NOT EXISTS."
+            echo "   Wrap in: DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '...') THEN CREATE TYPE ...; END IF; END \$\$"
+            grep -rn 'CREATE TYPE ' backend/src/migrations/ | grep -v 'DO \$\$' || true
+            exit 1
+          fi
+
+          # Also check for invalid CREATE TYPE IF NOT EXISTS (syntax error in PostgreSQL)
+          INVALID_TYPE=$(grep -r 'CREATE TYPE IF NOT EXISTS' backend/src/migrations/ | wc -l)
+          if [ "$INVALID_TYPE" -gt 0 ]; then
+            echo "❌ Found CREATE TYPE IF NOT EXISTS — this is invalid PostgreSQL syntax"
+            grep -rn 'CREATE TYPE IF NOT EXISTS' backend/src/migrations/ || true
             exit 1
           fi
 

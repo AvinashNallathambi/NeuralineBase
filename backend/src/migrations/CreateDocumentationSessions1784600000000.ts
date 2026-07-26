@@ -4,10 +4,10 @@ export class CreateDocumentationSessions1784600000000 implements MigrationInterf
   name = 'CreateDocumentationSessions1784600000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_status_enum" AS ENUM('draft', 'transcribed', 'note_generated', 'reviewed', 'signed', 'cancelled')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_consent_status_enum" AS ENUM('pending', 'granted', 'declined', 'provider_dictation')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_audio_retention_policy_enum" AS ENUM('delete_after_transcription')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_note_versions_source_enum" AS ENUM('ai_generated', 'clinician_edited', 'signed')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_sessions_status_enum') THEN CREATE TYPE "documentation_sessions_status_enum" AS ENUM('draft', 'transcribed', 'note_generated', 'reviewed', 'signed', 'cancelled'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_sessions_consent_status_enum') THEN CREATE TYPE "documentation_sessions_consent_status_enum" AS ENUM('pending', 'granted', 'declined', 'provider_dictation'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_sessions_audio_retention_policy_enum') THEN CREATE TYPE "documentation_sessions_audio_retention_policy_enum" AS ENUM('delete_after_transcription'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_note_versions_source_enum') THEN CREATE TYPE "documentation_note_versions_source_enum" AS ENUM('ai_generated', 'clinician_edited', 'signed'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "documentation_sessions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

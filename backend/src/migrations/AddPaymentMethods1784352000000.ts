@@ -21,10 +21,7 @@ export class AddPaymentMethods1784352000000 implements MigrationInterface {
     `);
 
     // ── Create subscription_payment_methods table ───────────────────
-    await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "subscription_payment_methods_type_enum"
-      AS ENUM ('card', 'us_bank_account', 'sepa_debit', 'bacs_debit', 'acss_debit')
-    `);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscription_payment_methods_type_enum') THEN CREATE TYPE "subscription_payment_methods_type_enum" AS ENUM ('card', 'us_bank_account', 'sepa_debit', 'bacs_debit', 'acss_debit'); END IF; END $$`);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "subscription_payment_methods" (

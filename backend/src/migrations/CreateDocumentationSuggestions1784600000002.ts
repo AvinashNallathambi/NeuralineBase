@@ -4,8 +4,8 @@ export class CreateDocumentationSuggestions1784600000002 implements MigrationInt
   name = 'CreateDocumentationSuggestions1784600000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_suggestions_kind_enum" AS ENUM('order', 'coding', 'cdi', 'prior_auth', 'after_visit_summary', 'claim_scrub', 'revenue_risk')`);
-    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_suggestions_status_enum" AS ENUM('pending', 'accepted', 'dismissed')`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_suggestions_kind_enum') THEN CREATE TYPE "documentation_suggestions_kind_enum" AS ENUM('order', 'coding', 'cdi', 'prior_auth', 'after_visit_summary', 'claim_scrub', 'revenue_risk'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'documentation_suggestions_status_enum') THEN CREATE TYPE "documentation_suggestions_status_enum" AS ENUM('pending', 'accepted', 'dismissed'); END IF; END $$`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "documentation_suggestions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),

@@ -20,8 +20,8 @@ export class AddTelemedicineSessions1784131706135 implements MigrationInterface 
         await queryRunner.query(`DROP INDEX "public"."idx_subscription_invoices_subscription_id"`);
         await queryRunner.query(`DROP INDEX "public"."idx_subscription_invoices_tenant_subscription"`);
         await queryRunner.query(`DROP INDEX "public"."idx_subscription_invoices_tenant_status"`);
-        await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."notifications_type_enum" AS ENUM('trial_ending', 'trial_expired', 'payment_failed', 'payment_succeeded', 'renewal_upcoming', 'subscription_cancelled', 'plan_changed', 'dunning_reminder', 'account_suspended', 'general')`);
-        await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."notifications_priority_enum" AS ENUM('low', 'medium', 'high', 'urgent')`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notifications_type_enum') THEN CREATE TYPE "public"."notifications_type_enum" AS ENUM('trial_ending', 'trial_expired', 'payment_failed', 'payment_succeeded', 'renewal_upcoming', 'subscription_cancelled', 'plan_changed', 'dunning_reminder', 'account_suspended', 'general'); END IF; END $$`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notifications_priority_enum') THEN CREATE TYPE "public"."notifications_priority_enum" AS ENUM('low', 'medium', 'high', 'urgent'); END IF; END $$`);
         await queryRunner.query(`CREATE TABLE IF NOT EXISTS "notifications" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "tenant_id" uuid NOT NULL, "user_id" uuid, "type" "public"."notifications_type_enum" NOT NULL DEFAULT 'general', "title" character varying(255) NOT NULL, "message" text NOT NULL, "priority" "public"."notifications_priority_enum" NOT NULL DEFAULT 'medium', "action_url" character varying(500), "action_label" character varying(100), "is_read" boolean NOT NULL DEFAULT false, "read_at" TIMESTAMP WITH TIME ZONE, "email_sent" boolean NOT NULL DEFAULT false, "email_sent_at" TIMESTAMP WITH TIME ZONE, "metadata" jsonb NOT NULL DEFAULT '{}', "created_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), "updated_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_6a72c3c0f683f6462415e653c3a" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_d93ddd7e1b890535ecafbb334e" ON "notifications" ("tenant_id") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_9a8a82462cab47c73d25f49261" ON "notifications" ("user_id") `);
@@ -45,7 +45,7 @@ export class AddTelemedicineSessions1784131706135 implements MigrationInterface 
         await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "mfa_enabled" SET NOT NULL`);
         await queryRunner.query(`ALTER TABLE "patients" ALTER COLUMN "portal_active" SET NOT NULL`);
         await queryRunner.query(`ALTER TYPE "public"."subscriptions_billingcycle_enum" RENAME TO "subscriptions_billingcycle_enum_old"`);
-        await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."subscriptions_billing_cycle_enum" AS ENUM('monthly', 'annual')`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptions_billing_cycle_enum') THEN CREATE TYPE "public"."subscriptions_billing_cycle_enum" AS ENUM('monthly', 'annual'); END IF; END $$`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" DROP DEFAULT`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" TYPE "public"."subscriptions_billing_cycle_enum" USING "billing_cycle"::"text"::"public"."subscriptions_billing_cycle_enum"`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" SET DEFAULT 'monthly'`);
@@ -85,7 +85,7 @@ export class AddTelemedicineSessions1784131706135 implements MigrationInterface 
         await queryRunner.query(`DROP INDEX "public"."IDX_4d2ce22525e1801b449f24a989"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_563a5e248518c623eebd987d43"`);
         await queryRunner.query(`DROP INDEX "public"."IDX_9109b53fca5cef7720aca72974"`);
-        await queryRunner.query(`CREATE TYPE IF NOT EXISTS "public"."subscriptions_billingcycle_enum_old" AS ENUM('monthly', 'annual')`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'subscriptions_billingcycle_enum_old') THEN CREATE TYPE "public"."subscriptions_billingcycle_enum_old" AS ENUM('monthly', 'annual'); END IF; END $$`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" DROP DEFAULT`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" TYPE "public"."subscriptions_billingcycle_enum_old" USING "billing_cycle"::"text"::"public"."subscriptions_billingcycle_enum_old"`);
         await queryRunner.query(`ALTER TABLE "subscriptions" ALTER COLUMN "billing_cycle" SET DEFAULT 'monthly'`);

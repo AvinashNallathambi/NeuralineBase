@@ -9,12 +9,8 @@ export class CreateTrialRequests1784361700000 implements MigrationInterface {
   name = 'CreateTrialRequests1784361700000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "trial_requests_plan_type_enum" AS ENUM ('solo', 'professional', 'enterprise')
-    `);
-    await queryRunner.query(`
-      CREATE TYPE IF NOT EXISTS "trial_requests_status_enum" AS ENUM ('pending', 'approved', 'active', 'rejected', 'disabled', 'converted', 'expired', 'wiped')
-    `);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trial_requests_plan_type_enum') THEN CREATE TYPE "trial_requests_plan_type_enum" AS ENUM ('solo', 'professional', 'enterprise'); END IF; END $$`);
+    await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'trial_requests_status_enum') THEN CREATE TYPE "trial_requests_status_enum" AS ENUM ('pending', 'approved', 'active', 'rejected', 'disabled', 'converted', 'expired', 'wiped'); END IF; END $$`);
 
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "trial_requests" (
