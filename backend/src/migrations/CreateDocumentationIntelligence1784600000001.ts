@@ -5,7 +5,7 @@ export class CreateDocumentationIntelligence1784600000001 implements MigrationIn
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "documentation_preferences" (
+      CREATE TABLE IF NOT EXISTS "documentation_preferences" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id" uuid NOT NULL,
         "provider_id" uuid NOT NULL,
@@ -21,7 +21,7 @@ export class CreateDocumentationIntelligence1784600000001 implements MigrationIn
       )
     `);
     await queryRunner.query(`
-      CREATE TABLE "documentation_evidence" (
+      CREATE TABLE IF NOT EXISTS "documentation_evidence" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "session_id" uuid NOT NULL,
         "tenant_id" uuid NOT NULL,
@@ -36,8 +36,8 @@ export class CreateDocumentationIntelligence1784600000001 implements MigrationIn
         CONSTRAINT "PK_documentation_evidence" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_evidence_session_section" ON "documentation_evidence" ("session_id", "note_section")`);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_evidence_tenant" ON "documentation_evidence" ("tenant_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_evidence_session_section" ON "documentation_evidence" ("session_id", "note_section")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_evidence_tenant" ON "documentation_evidence" ("tenant_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

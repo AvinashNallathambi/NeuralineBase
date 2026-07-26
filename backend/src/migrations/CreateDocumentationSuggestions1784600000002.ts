@@ -4,10 +4,10 @@ export class CreateDocumentationSuggestions1784600000002 implements MigrationInt
   name = 'CreateDocumentationSuggestions1784600000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE TYPE "documentation_suggestions_kind_enum" AS ENUM('order', 'coding', 'cdi', 'prior_auth', 'after_visit_summary', 'claim_scrub', 'revenue_risk')`);
-    await queryRunner.query(`CREATE TYPE "documentation_suggestions_status_enum" AS ENUM('pending', 'accepted', 'dismissed')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_suggestions_kind_enum" AS ENUM('order', 'coding', 'cdi', 'prior_auth', 'after_visit_summary', 'claim_scrub', 'revenue_risk')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_suggestions_status_enum" AS ENUM('pending', 'accepted', 'dismissed')`);
     await queryRunner.query(`
-      CREATE TABLE "documentation_suggestions" (
+      CREATE TABLE IF NOT EXISTS "documentation_suggestions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "session_id" uuid NOT NULL,
         "tenant_id" uuid NOT NULL,
@@ -22,8 +22,8 @@ export class CreateDocumentationSuggestions1784600000002 implements MigrationInt
         CONSTRAINT "PK_documentation_suggestions" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_suggestions_session_status" ON "documentation_suggestions" ("session_id", "status")`);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_suggestions_tenant_kind" ON "documentation_suggestions" ("tenant_id", "kind")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_suggestions_session_status" ON "documentation_suggestions" ("session_id", "status")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_suggestions_tenant_kind" ON "documentation_suggestions" ("tenant_id", "kind")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

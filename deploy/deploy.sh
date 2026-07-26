@@ -117,7 +117,14 @@ pm2 save
 echo "  ✅ Backend restarted"
 echo ""
 
-# ─── 7. Reload Nginx ───────────────────────────────────────────────────────
+# ─── 7. Update Nginx config and reload ──────────────────────────────────────
+echo "▶ Updating Nginx config..."
+if [ -f deploy/nginx.conf ]; then
+  sudo cp deploy/nginx.conf /etc/nginx/sites-available/neuraline
+  sudo ln -sf /etc/nginx/sites-available/neuraline /etc/nginx/sites-enabled/neuraline
+  sudo rm -f /etc/nginx/sites-enabled/default
+  echo "  ✅ Nginx config updated"
+fi
 echo "▶ Reloading Nginx..."
 sudo nginx -t && sudo systemctl reload nginx
 echo "  ✅ Nginx reloaded"

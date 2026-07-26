@@ -47,6 +47,17 @@ async function bootstrap() {
   // HIPAA: Reduce log verbosity in production to avoid PHI leakage
   const isProd = process.env.NODE_ENV === "production";
 
+  // ── Safety guard: block synchronize=true in production ───────────────────
+  // synchronize=true alters the schema on every startup without recording
+  // migrations, causing schema drift and data loss. This guard prevents
+  // accidental enablement in production environments.
+  if (isProd && process.env.DB_SYNCHRONIZE === "true") {
+    logger.error("FATAL: DB_SYNCHRONIZE=true is not allowed in production.");
+    logger.error("Use migrations instead: npx typeorm migration:generate");
+    logger.error("Refusing to start — set DB_SYNCHRONIZE=false and restart.");
+    process.exit(1);
+  }
+
   // Use Pino logger from LoggerModule (configured in app.module.ts).
   // Pino provides structured JSON logging with PHI redaction.
   const { Logger: PinoLogger } = await import("nestjs-pino");

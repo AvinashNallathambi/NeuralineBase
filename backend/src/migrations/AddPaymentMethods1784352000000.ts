@@ -22,12 +22,12 @@ export class AddPaymentMethods1784352000000 implements MigrationInterface {
 
     // ── Create subscription_payment_methods table ───────────────────
     await queryRunner.query(`
-      CREATE TYPE "subscription_payment_methods_type_enum"
+      CREATE TYPE IF NOT EXISTS "subscription_payment_methods_type_enum"
       AS ENUM ('card', 'us_bank_account', 'sepa_debit', 'bacs_debit', 'acss_debit')
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "subscription_payment_methods" (
+      CREATE TABLE IF NOT EXISTS "subscription_payment_methods" (
         "id"                        uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id"                 uuid NOT NULL,
         "stripe_payment_method_id"  varchar(100) NOT NULL,
@@ -52,12 +52,12 @@ export class AddPaymentMethods1784352000000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "idx_subscription_payment_methods_tenant_id"
+      CREATE INDEX IF NOT EXISTS "idx_subscription_payment_methods_tenant_id"
       ON "subscription_payment_methods" ("tenant_id")
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "idx_subscription_payment_methods_tenant_default"
+      CREATE INDEX IF NOT EXISTS "idx_subscription_payment_methods_tenant_default"
       ON "subscription_payment_methods" ("tenant_id", "is_default")
     `);
   }

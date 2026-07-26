@@ -21,9 +21,9 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ── subscription_plans ────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE "subscription_plans_tier_enum" AS ENUM ('solo', 'professional', 'enterprise')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscription_plans_tier_enum" AS ENUM ('solo', 'professional', 'enterprise')`);
     await queryRunner.query(`
-      CREATE TABLE "subscription_plans" (
+      CREATE TABLE IF NOT EXISTS "subscription_plans" (
         "id"                      uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tier"                    "subscription_plans_tier_enum" NOT NULL,
         "name"                    varchar(100) NOT NULL,
@@ -50,10 +50,10 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
     `);
 
     // ── subscriptions ─────────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE "subscriptions_status_enum" AS ENUM ('trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused')`);
-    await queryRunner.query(`CREATE TYPE "subscriptions_billingcycle_enum" AS ENUM ('monthly', 'annual')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscriptions_status_enum" AS ENUM ('trialing', 'active', 'past_due', 'cancelled', 'expired', 'paused')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscriptions_billingcycle_enum" AS ENUM ('monthly', 'annual')`);
     await queryRunner.query(`
-      CREATE TABLE "subscriptions" (
+      CREATE TABLE IF NOT EXISTS "subscriptions" (
         "id"                       uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id"                uuid NOT NULL,
         "plan_tier"                varchar(50) NOT NULL,
@@ -75,13 +75,13 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
         CONSTRAINT "pk_subscriptions" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_subscriptions_tenant_id" ON "subscriptions" ("tenant_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_subscriptions_status" ON "subscriptions" ("status")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscriptions_tenant_id" ON "subscriptions" ("tenant_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscriptions_status" ON "subscriptions" ("status")`);
 
     // ── subscription_invoices ─────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE "subscription_invoices_status_enum" AS ENUM ('paid', 'open', 'failed', 'void', 'refunded')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscription_invoices_status_enum" AS ENUM ('paid', 'open', 'failed', 'void', 'refunded')`);
     await queryRunner.query(`
-      CREATE TABLE "subscription_invoices" (
+      CREATE TABLE IF NOT EXISTS "subscription_invoices" (
         "id"                         uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id"                  uuid NOT NULL,
         "subscription_id"            uuid NOT NULL,
@@ -103,16 +103,16 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
         CONSTRAINT "uq_subscription_invoices_invoice_number" UNIQUE ("invoice_number")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_subscription_invoices_tenant_id" ON "subscription_invoices" ("tenant_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_subscription_invoices_subscription_id" ON "subscription_invoices" ("subscription_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_subscription_invoices_tenant_subscription" ON "subscription_invoices" ("tenant_id", "subscription_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_subscription_invoices_tenant_status" ON "subscription_invoices" ("tenant_id", "status")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscription_invoices_tenant_id" ON "subscription_invoices" ("tenant_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscription_invoices_subscription_id" ON "subscription_invoices" ("subscription_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscription_invoices_tenant_subscription" ON "subscription_invoices" ("tenant_id", "subscription_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_subscription_invoices_tenant_status" ON "subscription_invoices" ("tenant_id", "status")`);
 
     // ── payments ──────────────────────────────────────────────────────────
-    await queryRunner.query(`CREATE TYPE "payments_status_enum" AS ENUM ('pending', 'succeeded', 'failed', 'refunded', 'cancelled')`);
-    await queryRunner.query(`CREATE TYPE "payments_method_enum" AS ENUM ('card', 'ach', 'cash', 'check', 'other')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "payments_status_enum" AS ENUM ('pending', 'succeeded', 'failed', 'refunded', 'cancelled')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "payments_method_enum" AS ENUM ('card', 'ach', 'cash', 'check', 'other')`);
     await queryRunner.query(`
-      CREATE TABLE "payments" (
+      CREATE TABLE IF NOT EXISTS "payments" (
         "id"                  uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id"           uuid NOT NULL,
         "invoice_id"          uuid,
@@ -133,12 +133,12 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
         CONSTRAINT "pk_payments" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "idx_payments_tenant_id" ON "payments" ("tenant_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_payments_invoice_id" ON "payments" ("invoice_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_payments_patient_id" ON "payments" ("patient_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_payments_tenant_invoice" ON "payments" ("tenant_id", "invoice_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_payments_tenant_patient" ON "payments" ("tenant_id", "patient_id")`);
-    await queryRunner.query(`CREATE INDEX "idx_payments_tenant_status" ON "payments" ("tenant_id", "status")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_tenant_id" ON "payments" ("tenant_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_invoice_id" ON "payments" ("invoice_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_patient_id" ON "payments" ("patient_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_tenant_invoice" ON "payments" ("tenant_id", "invoice_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_tenant_patient" ON "payments" ("tenant_id", "patient_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "idx_payments_tenant_status" ON "payments" ("tenant_id", "status")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

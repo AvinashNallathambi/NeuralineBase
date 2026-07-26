@@ -10,14 +10,14 @@ export class CreateTrialRequests1784361700000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE "trial_requests_plan_type_enum" AS ENUM ('solo', 'professional', 'enterprise')
+      CREATE TYPE IF NOT EXISTS "trial_requests_plan_type_enum" AS ENUM ('solo', 'professional', 'enterprise')
     `);
     await queryRunner.query(`
-      CREATE TYPE "trial_requests_status_enum" AS ENUM ('pending', 'approved', 'active', 'rejected', 'disabled', 'converted', 'expired', 'wiped')
+      CREATE TYPE IF NOT EXISTS "trial_requests_status_enum" AS ENUM ('pending', 'approved', 'active', 'rejected', 'disabled', 'converted', 'expired', 'wiped')
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "trial_requests" (
+      CREATE TABLE IF NOT EXISTS "trial_requests" (
         "id"                uuid NOT NULL DEFAULT uuid_generate_v4(),
         "email"             varchar(255) NOT NULL,
         "first_name"        varchar(100) NOT NULL,
@@ -41,13 +41,13 @@ export class CreateTrialRequests1784361700000 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "idx_trial_requests_status" ON "trial_requests" ("status")
+      CREATE INDEX IF NOT EXISTS "idx_trial_requests_status" ON "trial_requests" ("status")
     `);
     await queryRunner.query(`
-      CREATE INDEX "idx_trial_requests_email" ON "trial_requests" ("email")
+      CREATE INDEX IF NOT EXISTS "idx_trial_requests_email" ON "trial_requests" ("email")
     `);
     await queryRunner.query(`
-      CREATE INDEX "idx_trial_requests_tenant_id" ON "trial_requests" ("tenant_id")
+      CREATE INDEX IF NOT EXISTS "idx_trial_requests_tenant_id" ON "trial_requests" ("tenant_id")
     `);
   }
 

@@ -93,7 +93,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({
           localVideoRef.current.srcObject = stream;
         }
 
-        const socket = io(`${import.meta.env.VITE_API_URL || ''}/telemedicine`, {
+        const socket = io('/telemedicine', {
           transports: ['websocket'],
           auth: { token },
         });

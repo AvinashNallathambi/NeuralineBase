@@ -9,16 +9,16 @@ export class AddPaymentPlans1784352000001 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TYPE "subscription_payment_plans_frequency_enum"
+      CREATE TYPE IF NOT EXISTS "subscription_payment_plans_frequency_enum"
       AS ENUM ('weekly', 'biweekly', 'monthly')
     `);
     await queryRunner.query(`
-      CREATE TYPE "subscription_payment_plans_status_enum"
+      CREATE TYPE IF NOT EXISTS "subscription_payment_plans_status_enum"
       AS ENUM ('active', 'completed', 'cancelled', 'past_due')
     `);
 
     await queryRunner.query(`
-      CREATE TABLE "subscription_payment_plans" (
+      CREATE TABLE IF NOT EXISTS "subscription_payment_plans" (
         "id"                        uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id"                 uuid NOT NULL,
         "subscription_id"           uuid,
@@ -42,11 +42,11 @@ export class AddPaymentPlans1784352000001 implements MigrationInterface {
     `);
 
     await queryRunner.query(`
-      CREATE INDEX "idx_subscription_payment_plans_tenant_id"
+      CREATE INDEX IF NOT EXISTS "idx_subscription_payment_plans_tenant_id"
       ON "subscription_payment_plans" ("tenant_id")
     `);
     await queryRunner.query(`
-      CREATE INDEX "idx_subscription_payment_plans_tenant_status"
+      CREATE INDEX IF NOT EXISTS "idx_subscription_payment_plans_tenant_status"
       ON "subscription_payment_plans" ("tenant_id", "status")
     `);
   }

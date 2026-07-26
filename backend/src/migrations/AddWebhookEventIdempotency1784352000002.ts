@@ -8,7 +8,7 @@ export class AddWebhookEventIdempotency1784352000002 implements MigrationInterfa
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE "subscription_webhook_events" (
+      CREATE TABLE IF NOT EXISTS "subscription_webhook_events" (
         "event_id"                   varchar(100) NOT NULL,
         "event_type"                 varchar(100) NOT NULL,
         "provider_subscription_id"     varchar(100) NOT NULL,
@@ -21,7 +21,7 @@ export class AddWebhookEventIdempotency1784352000002 implements MigrationInterfa
       )
     `);
     await queryRunner.query(`
-      CREATE INDEX "idx_subscription_webhook_events_processed_at"
+      CREATE INDEX IF NOT EXISTS "idx_subscription_webhook_events_processed_at"
       ON "subscription_webhook_events" ("processed_at")
     `);
   }

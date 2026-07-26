@@ -184,12 +184,43 @@ jobs:
         run: npm audit --audit-level=high
 
   # ─────────────────────────────────────────────────────────────────────
+  # Stage 5b: Migration Safety Check
+  # Verifies that DB_SYNCHRONIZE is not enabled in production env files
+  # ─────────────────────────────────────────────────────────────────────
+  migration-safety:
+    name: Migration Safety
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check DB_SYNCHRONIZE is not enabled in production
+        run: |
+          # Check .env.example for dangerous defaults
+          if grep -q "DB_SYNCHRONIZE=true" .env.example backend/.env.example 2>/dev/null; then
+            echo "❌ DB_SYNCHRONIZE=true found in .env.example — this is dangerous"
+            exit 1
+          fi
+
+          # Check that all migrations use IF NOT EXISTS (prevent re-run failures)
+          BARE_CREATE=$(grep -r 'CREATE TABLE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' | wc -l)
+          BARE_TYPE=$(grep -r 'CREATE TYPE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' | wc -l)
+          if [ "$BARE_CREATE" -gt 0 ] || [ "$BARE_TYPE" -gt 0 ]; then
+            echo "❌ Found CREATE TABLE/TYPE without IF NOT EXISTS in migrations"
+            grep -rn 'CREATE TABLE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' || true
+            grep -rn 'CREATE TYPE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' || true
+            exit 1
+          fi
+
+          echo "✅ Migration safety checks passed"
+
+  # ─────────────────────────────────────────────────────────────────────
   # Stage 6: All checks passed (gate for deploy)
   # ─────────────────────────────────────────────────────────────────────
   all-checks-passed:
     name: All Checks Passed
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, unit-tests, e2e-tests, build, security-audit]
+    needs: [lint-typecheck, unit-tests, e2e-tests, build, security-audit, migration-safety]
     steps:
       - name: Pipeline succeeded
         run: |

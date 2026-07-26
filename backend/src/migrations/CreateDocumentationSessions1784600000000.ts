@@ -4,12 +4,12 @@ export class CreateDocumentationSessions1784600000000 implements MigrationInterf
   name = 'CreateDocumentationSessions1784600000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE TYPE "documentation_sessions_status_enum" AS ENUM('draft', 'transcribed', 'note_generated', 'reviewed', 'signed', 'cancelled')`);
-    await queryRunner.query(`CREATE TYPE "documentation_sessions_consent_status_enum" AS ENUM('pending', 'granted', 'declined', 'provider_dictation')`);
-    await queryRunner.query(`CREATE TYPE "documentation_sessions_audio_retention_policy_enum" AS ENUM('delete_after_transcription')`);
-    await queryRunner.query(`CREATE TYPE "documentation_note_versions_source_enum" AS ENUM('ai_generated', 'clinician_edited', 'signed')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_status_enum" AS ENUM('draft', 'transcribed', 'note_generated', 'reviewed', 'signed', 'cancelled')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_consent_status_enum" AS ENUM('pending', 'granted', 'declined', 'provider_dictation')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_sessions_audio_retention_policy_enum" AS ENUM('delete_after_transcription')`);
+    await queryRunner.query(`CREATE TYPE IF NOT EXISTS "documentation_note_versions_source_enum" AS ENUM('ai_generated', 'clinician_edited', 'signed')`);
     await queryRunner.query(`
-      CREATE TABLE "documentation_sessions" (
+      CREATE TABLE IF NOT EXISTS "documentation_sessions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "tenant_id" uuid NOT NULL,
         "encounter_id" uuid,
@@ -36,11 +36,11 @@ export class CreateDocumentationSessions1784600000000 implements MigrationInterf
         CONSTRAINT "PK_documentation_sessions" PRIMARY KEY ("id")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_sessions_tenant_patient_created" ON "documentation_sessions" ("tenant_id", "patient_id", "created_at")`);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_sessions_tenant_provider_status" ON "documentation_sessions" ("tenant_id", "provider_id", "status")`);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_sessions_tenant_encounter" ON "documentation_sessions" ("tenant_id", "encounter_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_sessions_tenant_patient_created" ON "documentation_sessions" ("tenant_id", "patient_id", "created_at")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_sessions_tenant_provider_status" ON "documentation_sessions" ("tenant_id", "provider_id", "status")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_sessions_tenant_encounter" ON "documentation_sessions" ("tenant_id", "encounter_id")`);
     await queryRunner.query(`
-      CREATE TABLE "documentation_note_versions" (
+      CREATE TABLE IF NOT EXISTS "documentation_note_versions" (
         "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
         "session_id" uuid NOT NULL,
         "tenant_id" uuid NOT NULL,
@@ -55,8 +55,8 @@ export class CreateDocumentationSessions1784600000000 implements MigrationInterf
         CONSTRAINT "UQ_documentation_note_versions_session_version" UNIQUE ("session_id", "version_number")
       )
     `);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_note_versions_session" ON "documentation_note_versions" ("session_id")`);
-    await queryRunner.query(`CREATE INDEX "IDX_documentation_note_versions_tenant" ON "documentation_note_versions" ("tenant_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_note_versions_session" ON "documentation_note_versions" ("session_id")`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_documentation_note_versions_tenant" ON "documentation_note_versions" ("tenant_id")`);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

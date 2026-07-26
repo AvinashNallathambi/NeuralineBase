@@ -31,6 +31,11 @@ curl -X POST http://localhost:11434/api/pull -d '{"name":"mistral"}'
 - Docker PostgreSQL: user=`neuraline`, password=`neuraline_dev`, database=`neuraline`
 - `DB_SYNCHRONIZE=false` by default. Use migrations to manage schema changes.
 - Boolean env vars must be compared as strings (ConfigService returns strings)
+- **NEVER use `DB_SYNCHRONIZE=true` in production.** The backend has a startup guard
+  that will refuse to boot if `DB_SYNCHRONIZE=true` and `NODE_ENV=production`.
+  CI also checks that `.env.example` files don't default to `DB_SYNCHRONIZE=true`.
+  Using synchronize in production causes schema drift, untracked changes, and
+  data loss (renamed columns are dropped). Always use migrations instead.
 
 ### Schema Migrations
 When you modify an entity, generate and run a migration:
@@ -45,7 +50,12 @@ npx typeorm migration:run -d src/config/database.config.ts
 npx typeorm migration:revert -d src/config/database.config.ts
 ```
 
-To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env` or Docker env, then disable it and create a migration before committing.
+**Migration rules:**
+- All `CREATE TABLE`, `CREATE TYPE`, and `CREATE INDEX` statements MUST use `IF NOT EXISTS`
+- CI checks this automatically (migration-safety job) — bare CREATE statements will fail CI
+- To enable auto-sync temporarily (dev only), set `DB_SYNCHRONIZE=true` in `.env`,
+  then disable it and create a migration before committing.
+- Never commit `.env` with `DB_SYNCHRONIZE=true`
 
 ## Backend Modules
 - **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions
