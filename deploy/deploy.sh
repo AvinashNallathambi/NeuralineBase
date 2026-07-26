@@ -56,6 +56,9 @@ echo ""
 # ─── 4. Build frontend (uses .env.production for VITE_API_URL) ──────────────
 echo "▶ Building frontend..."
 cd frontend
+# Create .env.production so Vite uses relative URLs (Nginx proxies /api/ to backend)
+# Without this, VITE_API_URL falls back to http://localhost:4000 which breaks in browser
+echo "VITE_API_URL=/api/v1" > .env.production
 npm run build
 cd ..
 echo "  ✅ Frontend built"
