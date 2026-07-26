@@ -38,15 +38,9 @@ function getIceServers(): RTCIceServer[] {
       // ignore parse error, fall back to defaults
     }
   }
-  // Default local-dev coturn (assumes docker-compose on localhost)
-  return [
-    ...DEFAULT_ICE_SERVERS,
-    {
-      urls: 'turn:localhost:3478',
-      username: import.meta.env.VITE_TURN_USER || 'neuraline',
-      credential: import.meta.env.VITE_TURN_PASSWORD || 'neuraline_turn_dev',
-    },
-  ];
+  // No TURN server configured — use STUN-only (works for same-network calls)
+  // For production cross-network telemedicine, set VITE_TURN_SERVERS env var
+  return DEFAULT_ICE_SERVERS;
 }
 
 // Backend WebSocket URL — defaults to the API host with ws protocol
