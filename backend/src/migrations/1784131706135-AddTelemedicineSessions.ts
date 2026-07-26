@@ -65,7 +65,7 @@ export class AddTelemedicineSessions1784131706135 implements MigrationInterface 
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_4f183991dc9bcbda39fa614193" ON "subscription_invoices" ("subscription_id") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_70ceeba6a982b46dc324207862" ON "subscription_invoices" ("tenant_id", "status") `);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_cfc86cbad95ba5d735c3d147e4" ON "subscription_invoices" ("tenant_id", "subscription_id") `);
-        await queryRunner.query(`ALTER TABLE "portal_messages" ADD CONSTRAINT "FK_fb3c417c6608570b4f1f5283605" FOREIGN KEY ("conversation_id") REFERENCES "portal_conversations"("id") ON DELETE NO ACTION ON UPDATE NO ACTION`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_fb3c417c6608570b4f1f5283605') THEN ALTER TABLE "portal_messages" ADD CONSTRAINT "FK_fb3c417c6608570b4f1f5283605" FOREIGN KEY ("conversation_id") REFERENCES "portal_conversations"("id") ON DELETE NO ACTION ON UPDATE NO ACTION; END IF; END $$`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {

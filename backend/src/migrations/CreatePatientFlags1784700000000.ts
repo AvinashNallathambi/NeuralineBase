@@ -12,8 +12,8 @@ export class CreatePatientFlags1784700000000 implements MigrationInterface {
         await queryRunner.query(`CREATE TABLE IF NOT EXISTS "patient_flag_acknowledgements" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "tenant_id" uuid NOT NULL, "flag_id" uuid NOT NULL, "user_id" character varying(64) NOT NULL, "user_email" character varying(255), "acknowledged_at" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), CONSTRAINT "PK_patient_flag_acknowledgements" PRIMARY KEY ("id"))`);
         await queryRunner.query(`CREATE UNIQUE INDEX IF NOT EXISTS "UQ_patient_flag_ack_tenant_flag_user" ON "patient_flag_acknowledgements" ("tenant_id", "flag_id", "user_id")`);
         await queryRunner.query(`CREATE INDEX IF NOT EXISTS "IDX_patient_flag_ack_tenant_user" ON "patient_flag_acknowledgements" ("tenant_id", "user_id")`);
-        await queryRunner.query(`ALTER TABLE "patient_flags" ADD CONSTRAINT "FK_patient_flags_patient" FOREIGN KEY ("patient_id") REFERENCES "patients"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
-        await queryRunner.query(`ALTER TABLE "patient_flag_acknowledgements" ADD CONSTRAINT "FK_patient_flag_ack_flag" FOREIGN KEY ("flag_id") REFERENCES "patient_flags"("id") ON DELETE CASCADE ON UPDATE NO ACTION`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_patient_flags_patient') THEN ALTER TABLE "patient_flags" ADD CONSTRAINT "FK_patient_flags_patient" FOREIGN KEY ("patient_id") REFERENCES "patients"("id") ON DELETE CASCADE ON UPDATE NO ACTION; END IF; END $$`);
+        await queryRunner.query(`DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_patient_flag_ack_flag') THEN ALTER TABLE "patient_flag_acknowledgements" ADD CONSTRAINT "FK_patient_flag_ack_flag" FOREIGN KEY ("flag_id") REFERENCES "patient_flags"("id") ON DELETE CASCADE ON UPDATE NO ACTION; END IF; END $$`);
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {

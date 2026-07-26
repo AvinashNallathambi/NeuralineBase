@@ -20,6 +20,9 @@ export class AddPaymentsAndSubscriptions1783700000000 implements MigrationInterf
   name = 'AddPaymentsAndSubscriptions1783700000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
+    // Ensure uuid-ossp extension is available (needed for uuid_generate_v4())
+    await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+
     // ── subscription_plans ────────────────────────────────────────────────
     await queryRunner.query(`CREATE TYPE IF NOT EXISTS "subscription_plans_tier_enum" AS ENUM ('solo', 'professional', 'enterprise')`);
     await queryRunner.query(`

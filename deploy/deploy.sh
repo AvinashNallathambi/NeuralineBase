@@ -119,11 +119,41 @@ echo ""
 
 # ─── 7. Update Nginx config and reload ──────────────────────────────────────
 echo "▶ Updating Nginx config..."
+NGINX_SITE="/etc/nginx/sites-available/neuraline"
 if [ -f deploy/nginx.conf ]; then
-  sudo cp deploy/nginx.conf /etc/nginx/sites-available/neuraline
-  sudo ln -sf /etc/nginx/sites-available/neuraline /etc/nginx/sites-enabled/neuraline
-  sudo rm -f /etc/nginx/sites-enabled/default
-  echo "  ✅ Nginx config updated"
+  # Backup current config
+  if [ -f "$NGINX_SITE" ]; then
+    sudo cp "$NGINX_SITE" "${NGINX_SITE}.bak.$(date '+%Y%m%d_%H%M%S')"
+  fi
+  # The nginx.conf includes both HTTP→HTTPS redirect and HTTPS server blocks
+  # with Certbot cert paths. Only copy if SSL certs exist (otherwise nginx -t fails)
+  if [ -f /etc/letsencrypt/live/app.neura-line.com/fullchain.pem ]; then
+    sudo cp deploy/nginx.conf "$NGINX_SITE"
+    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline
+    sudo rm -f /etc/nginx/sites-enabled/default
+    echo "  ✅ Nginx config updated (SSL certs detected)"
+  else
+    # No SSL certs yet — strip the HTTPS block and use HTTP-only
+    echo "  ⚠️  No SSL certs found — using HTTP-only config"
+    # Copy only the HTTP server block (lines before the HTTPS block)
+    # This is a fallback for first deploy before Certbot is run
+    sudo awk '/^# ── HTTPS: Main application server/{exit} {print}' deploy/nginx.conf > /tmp/nginx_http_only.conf
+    # Add a simple HTTP server block that serves the app (no redirect)
+    echo "" >> /tmp/nginx_http_only.conf
+    echo "server {" >> /tmp/nginx_http_only.conf
+    echo "    listen 80;" >> /tmp/nginx_http_only.conf
+    echo "    server_name _;" >> /tmp/nginx_http_only.conf
+    echo "    root /var/www/neuraline;" >> /tmp/nginx_http_only.conf
+    echo "    index index.html;" >> /tmp/nginx_http_only.conf
+    # Extract location blocks from the HTTPS section
+    awk '/^server \{/{found=0} /listen 443/{found=1} found && /^    location/{p=1} p{print} p && /^    }/{p=0}' deploy/nginx.conf >> /tmp/nginx_http_only.conf
+    echo "}" >> /tmp/nginx_http_only.conf
+    sudo cp /tmp/nginx_http_only.conf "$NGINX_SITE"
+    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline
+    sudo rm -f /etc/nginx/sites-enabled/default
+    rm -f /tmp/nginx_http_only.conf
+    echo "  ✅ Nginx config updated (HTTP-only, run certbot to enable HTTPS)"
+  fi
 fi
 echo "▶ Reloading Nginx..."
 sudo nginx -t && sudo systemctl reload nginx
