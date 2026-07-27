@@ -178,8 +178,9 @@ if [ -f deploy/nginx.conf ]; then
     # No SSL config in active site — check if any Let's Encrypt certs exist
     CERT_DIR=$(ls -d /etc/letsencrypt/live/*/ 2>/dev/null | head -1)
     if [ -n "$CERT_DIR" ] && [ -f "${CERT_DIR}fullchain.pem" ]; then
-      # Certs exist — extract domain name from directory path
-      CERT_DOMAIN=$(basename "$CERT_DIR")
+      # Certs exist — extract domain name from directory path (pure shell, no basename)
+      CERT_DOMAIN=${CERT_DIR%/}
+      CERT_DOMAIN=${CERT_DOMAIN##*/}
       echo "  ℹ️  Found SSL cert for domain: $CERT_DOMAIN"
       sudo sed "s/app.neura-line.com/$CERT_DOMAIN/g" deploy/nginx.conf > /tmp/nginx_ssl.conf
       sudo cp /tmp/nginx_ssl.conf "$NGINX_SITE"
