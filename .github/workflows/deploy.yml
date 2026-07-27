@@ -134,6 +134,7 @@ jobs:
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
           timeout: 600s
+          command_timeout: 30m
           envs: CERTBOT_EMAIL
           script: |
             echo "=== Neuraline EMR Deploy ==="
