@@ -19,13 +19,13 @@ export class CreatePatientFlags1784700000000 implements MigrationInterface {
     public async down(queryRunner: QueryRunner): Promise<void> {
         await queryRunner.query(`ALTER TABLE "patient_flag_acknowledgements" DROP CONSTRAINT "FK_patient_flag_ack_flag"`);
         await queryRunner.query(`ALTER TABLE "patient_flags" DROP CONSTRAINT "FK_patient_flags_patient"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_patient_flag_ack_tenant_user"`);
-        await queryRunner.query(`DROP INDEX "public"."UQ_patient_flag_ack_tenant_flag_user"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_patient_flag_ack_tenant_user"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."UQ_patient_flag_ack_tenant_flag_user"`);
         await queryRunner.query(`DROP TABLE "patient_flag_acknowledgements"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_patient_flags_tenant_patient_banner"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_patient_flags_tenant_patient_severity"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_patient_flags_tenant_patient_status"`);
-        await queryRunner.query(`DROP INDEX "public"."IDX_patient_flags_tenant_patient"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_patient_flags_tenant_patient_banner"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_patient_flags_tenant_patient_severity"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_patient_flags_tenant_patient_status"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "public"."IDX_patient_flags_tenant_patient"`);
         await queryRunner.query(`DROP TABLE "patient_flags"`);
     }
 }
