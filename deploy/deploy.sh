@@ -127,6 +127,7 @@ set +e
 
 # Find the first domain that has a valid Let's Encrypt certificate
 CERT_DOMAIN=""
+CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 if [ -d /etc/letsencrypt/live ]; then
   for cert_dir in /etc/letsencrypt/live/*; do
     [ -d "$cert_dir" ] || continue
@@ -137,6 +138,47 @@ if [ -d /etc/letsencrypt/live ]; then
       break
     fi
   done
+fi
+
+# If no certs found, try to install/renew via Certbot when an email is provided.
+if [ -z "$CERT_DOMAIN" ] && [ -n "$CERTBOT_EMAIL" ]; then
+  echo "  ⚠️  No SSL certs found. Attempting to obtain/renew certificates via Certbot..."
+  echo "      Email: $CERTBOT_EMAIL"
+  if command -v certbot >/dev/null 2>&1; then
+    echo "  ✅ Certbot is installed"
+  else
+    echo "  ▶ Installing Certbot..."
+    sudo snap install core || true
+    sudo snap refresh core || true
+    sudo snap install --classic certbot || true
+    sudo ln -sf /snap/bin/certbot /usr/bin/certbot 2>/dev/null || true
+  fi
+  if command -v certbot >/dev/null 2>&1; then
+    # Stop Nginx briefly so Certbot can bind port 80 if needed, then renew/obtain
+    echo "  ▶ Running certbot --nginx -d app.neura-line.com ..."
+    sudo systemctl stop nginx 2>/dev/null || true
+    sudo certbot --nginx -d app.neura-line.com --non-interactive --agree-tos --email "$CERTBOT_EMAIL" --redirect --hsts || true
+    sudo systemctl start nginx 2>/dev/null || true
+    # Re-check certs
+    if [ -d /etc/letsencrypt/live ]; then
+      for cert_dir in /etc/letsencrypt/live/*; do
+        [ -d "$cert_dir" ] || continue
+        d=${cert_dir%/}
+        d=${d##*/}
+        if [ -f "/etc/letsencrypt/live/$d/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$d/privkey.pem" ]; then
+          CERT_DOMAIN="$d"
+          break
+        fi
+      done
+    fi
+    if [ -n "$CERT_DOMAIN" ]; then
+      echo "  ✅ Certbot obtained/renewed cert for domain: $CERT_DOMAIN"
+    else
+      echo "  ⚠️  Certbot ran but no certificate was created. Check 'certbot certificates' on the EC2."
+    fi
+  else
+    echo "  ❌ Certbot could not be installed. HTTPS will not work until Certbot is available."
+  fi
 fi
 
 # Backup current config if it exists
