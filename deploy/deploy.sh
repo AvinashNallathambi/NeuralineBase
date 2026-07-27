@@ -122,85 +122,51 @@ echo ""
 # We always try to end with a valid, reloaded config.
 echo "▶ Updating Nginx config..."
 NGINX_SITE="/etc/nginx/sites-available/neuraline"
+DOMAIN="app.neura-line.com"
 
 set +e
 
-# Find the first domain that has a valid Let's Encrypt certificate
+# Helper: check if a Let's Encrypt cert exists for a domain (uses sudo — /etc/letsencrypt is root:root 700)
+cert_exists() {
+  local d="$1"
+  sudo test -f "/etc/letsencrypt/live/$d/fullchain.pem" 2>/dev/null && \
+  sudo test -f "/etc/letsencrypt/live/$d/privkey.pem" 2>/dev/null
+}
+
+# ── Step 1: Check for existing SSL certificate ──
 CERT_DOMAIN=""
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
-if [ -d /etc/letsencrypt/live ]; then
-  for cert_dir in /etc/letsencrypt/live/*; do
-    [ -d "$cert_dir" ] || continue
-    d=${cert_dir%/}
-    d=${d##*/}
-    if [ -f "/etc/letsencrypt/live/$d/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$d/privkey.pem" ]; then
-      CERT_DOMAIN="$d"
-      break
-    fi
-  done
+if cert_exists "$DOMAIN"; then
+  CERT_DOMAIN="$DOMAIN"
+  echo "  ✅ SSL cert found for: $DOMAIN"
 fi
 
-# If no certs found, try to install/renew via Certbot when an email is provided.
-if [ -z "$CERT_DOMAIN" ] && [ -n "$CERTBOT_EMAIL" ]; then
-  echo "  ⚠️  No SSL certs found. Attempting to obtain/renew certificates via Certbot..."
-  echo "      Email: $CERTBOT_EMAIL"
-  if command -v certbot >/dev/null 2>&1; then
-    echo "  ✅ Certbot is installed"
-  else
-    echo "  ▶ Installing Certbot..."
-    sudo snap install core || true
-    sudo snap refresh core || true
-    sudo snap install --classic certbot || true
-    sudo ln -sf /snap/bin/certbot /usr/bin/certbot 2>/dev/null || true
-  fi
-  if command -v certbot >/dev/null 2>&1; then
-    # Stop Nginx briefly so Certbot can bind port 80 if needed, then renew/obtain
-    echo "  ▶ Running certbot --nginx -d app.neura-line.com ..."
-    sudo systemctl stop nginx 2>/dev/null || true
-    sudo certbot --nginx -d app.neura-line.com --non-interactive --agree-tos --email "$CERTBOT_EMAIL" --redirect --hsts || true
-    sudo systemctl start nginx 2>/dev/null || true
-    # Re-check certs
-    if [ -d /etc/letsencrypt/live ]; then
-      for cert_dir in /etc/letsencrypt/live/*; do
-        [ -d "$cert_dir" ] || continue
-        d=${cert_dir%/}
-        d=${d##*/}
-        if [ -f "/etc/letsencrypt/live/$d/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$d/privkey.pem" ]; then
-          CERT_DOMAIN="$d"
-          break
-        fi
-      done
-    fi
-    if [ -n "$CERT_DOMAIN" ]; then
-      echo "  ✅ Certbot obtained/renewed cert for domain: $CERT_DOMAIN"
-    else
-      echo "  ⚠️  Certbot ran but no certificate was created. Check 'certbot certificates' on the EC2."
-    fi
-  else
-    echo "  ❌ Certbot could not be installed. HTTPS will not work until Certbot is available."
-  fi
-fi
-
-# Backup current config if it exists
+# ── Step 2: Backup current config ──
 if [ -f "$NGINX_SITE" ]; then
   sudo cp "$NGINX_SITE" "${NGINX_SITE}.bak.$(date '+%Y%m%d_%H%M%S')" 2>/dev/null || true
 fi
 
-# Build the nginx config using deploy/nginx.conf as the source.
-# If we have a real cert domain, replace the placeholder and keep the HTTPS block.
-# Otherwise strip the HTTPS block so the HTTP server doesn't redirect to a missing HTTPS server.
+# ── Step 3: Write Nginx config ──
+# If we already have a cert, write the full HTTPS config from the template.
+# If not, write an HTTP-only config WITH server_name <domain> so Certbot can find it later.
 if [ -n "$CERT_DOMAIN" ]; then
-  echo "  ℹ️  SSL cert found for domain: $CERT_DOMAIN"
+  # ── HTTPS config from template ──
+  echo "  ℹ️  Writing Nginx config with SSL for: $CERT_DOMAIN"
   sed "s|app.neura-line.com|$CERT_DOMAIN|g" deploy/nginx.conf | sudo tee "$NGINX_SITE" >/dev/null
   echo "  ✅ Nginx config written with SSL"
 else
-  echo "  ⚠️  No SSL certs found — using HTTP-only config"
-  # Write a complete minimal HTTP-only config.
-  # Do NOT redirect to HTTPS because no HTTPS server exists.
-  sudo tee "$NGINX_SITE" >/dev/null <<'EOF'
+  # ── HTTP-only config (with server_name <domain> so Certbot can match it) ──
+  echo "  ⚠️  No SSL certs found — writing HTTP-only config (with server_name $DOMAIN)"
+  sudo tee "$NGINX_SITE" >/dev/null <<EOF
 server {
     listen 80;
-    server_name _;
+    server_name $DOMAIN;
+
+    # Let ACME challenge through (Certbot renewal)
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
     root /var/www/neuraline;
     index index.html;
 
@@ -222,11 +188,11 @@ server {
     location /api/ {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         client_max_body_size 50m;
         proxy_connect_timeout 30s;
@@ -237,11 +203,11 @@ server {
     location = /telemedicine {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_connect_timeout 60s;
         proxy_read_timeout 3600s;
@@ -251,26 +217,26 @@ server {
     location /socket.io/ {
         proxy_pass http://127.0.0.1:4000;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files \$uri \$uri/ /index.html;
         add_header Cache-Control "no-store, no-cache, must-revalidate" always;
     }
 
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)\$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
         access_log off;
     }
 
-    location ~ /\. {
+    location ~ /\\. {
         deny all;
         access_log off;
         log_not_found off;
@@ -286,15 +252,17 @@ EOF
   echo "  ✅ Nginx config written as HTTP-only"
 fi
 
+# Enable the site
 sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline 2>/dev/null || true
 sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
 
+# ── Step 4: Test and reload Nginx with the initial config ──
 echo "▶ Testing Nginx config..."
 if sudo nginx -t >/dev/null 2>&1; then
   sudo systemctl reload nginx
   echo "  ✅ Nginx reloaded"
 else
-  echo "  ❌ New Nginx config is invalid — trying to restore previous valid config..."
+  echo "  ❌ Nginx config is invalid — trying to restore previous valid config..."
   LATEST_BAK=$(ls -t "$NGINX_SITE".bak.* 2>/dev/null | head -1)
   if [ -n "$LATEST_BAK" ] && [ -f "$LATEST_BAK" ]; then
     sudo cp "$LATEST_BAK" "$NGINX_SITE"
@@ -306,6 +274,47 @@ else
     fi
   else
     echo "  ❌ No backup found — leaving original config (site may be down until manually fixed)"
+  fi
+fi
+
+# ── Step 5: If no cert but CERTBOT_EMAIL is set, run Certbot NOW ──
+# Nginx is already running with server_name <domain>, so Certbot can find the server block.
+if [ -z "$CERT_DOMAIN" ] && [ -n "$CERTBOT_EMAIL" ]; then
+  echo ""
+  echo "  ⚠️  No SSL cert found. Attempting to obtain one via Certbot..."
+  echo "      Email: $CERTBOT_EMAIL"
+  if command -v certbot >/dev/null 2>&1; then
+    echo "  ✅ Certbot is installed"
+  else
+    echo "  ▶ Installing Certbot..."
+    sudo snap install core || true
+    sudo snap refresh core || true
+    sudo snap install --classic certbot || true
+    sudo ln -sf /snap/bin/certbot /usr/bin/certbot 2>/dev/null || true
+  fi
+  if command -v certbot >/dev/null 2>&1; then
+    echo "  ▶ Running certbot --nginx -d $DOMAIN ..."
+    # Nginx is running with server_name $DOMAIN, so Certbot can find the server block
+    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$CERTBOT_EMAIL" --redirect || true
+    # Re-check for cert (use sudo — /etc/letsencrypt is root-only)
+    if cert_exists "$DOMAIN"; then
+      CERT_DOMAIN="$DOMAIN"
+      echo "  ✅ Certbot obtained cert for: $CERT_DOMAIN"
+      # Rewrite Nginx config with the full HTTPS template (Certbot may have modified it,
+      # but our template is more complete with security headers, WebSocket proxy, etc.)
+      echo "  ▶ Rewriting Nginx config with full HTTPS template..."
+      sed "s|app.neura-line.com|$CERT_DOMAIN|g" deploy/nginx.conf | sudo tee "$NGINX_SITE" >/dev/null
+      if sudo nginx -t >/dev/null 2>&1; then
+        sudo systemctl reload nginx
+        echo "  ✅ Nginx reloaded with HTTPS"
+      else
+        echo "  ⚠️  HTTPS config test failed — Certbot's auto-config should still be active"
+      fi
+    else
+      echo "  ⚠️  Certbot ran but no certificate was created. Check 'sudo certbot certificates' on the EC2."
+    fi
+  else
+    echo "  ❌ Certbot could not be installed. HTTPS will not work until Certbot is available."
   fi
 fi
 
