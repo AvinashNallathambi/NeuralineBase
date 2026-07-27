@@ -118,97 +118,156 @@ echo "  ✅ Backend restarted"
 echo ""
 
 # ─── 7. Update Nginx config and reload ──────────────────────────────────────
+# This section is defensive: nginx config errors must NOT kill the deploy.
+# We always try to end with a valid, reloaded config.
 echo "▶ Updating Nginx config..."
 NGINX_SITE="/etc/nginx/sites-available/neuraline"
-if [ -f deploy/nginx.conf ]; then
-  # Backup current config
-  if [ -f "$NGINX_SITE" ]; then
-    sudo cp "$NGINX_SITE" "${NGINX_SITE}.bak.$(date '+%Y%m%d_%H%M%S')"
-  fi
-  # Check if existing config already has SSL (Certbot added listen 443)
-  if [ -f "$NGINX_SITE" ] && grep -q "listen 443" "$NGINX_SITE"; then
-    # SSL config exists — DON'T overwrite (would break HTTPS)
-    # Instead, inject the telemedicine WebSocket location block if missing
-    if ! grep -q "location = /telemedicine" "$NGINX_SITE"; then
-      echo "  ⚠️  SSL config detected — injecting telemedicine WebSocket block"
-      # Insert the telemedicine location block before the SPA fallback
-      sudo sed -i '/location \/ {/i \
-    # ── WebSocket Proxy for Telemedicine (Socket.IO namespace /telemedicine) ──\
-    # EXACT match: only /telemedicine (Socket.IO), NOT /telemedicine/SESSION_ID (SPA)\
-    location = /telemedicine {\
-        proxy_pass http://127.0.0.1:4000;\
-        proxy_http_version 1.1;\
-        proxy_set_header Host $host;\
-        proxy_set_header X-Real-IP $remote_addr;\
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-        proxy_set_header X-Forwarded-Proto $scheme;\
-        proxy_set_header Upgrade $http_upgrade;\
-        proxy_set_header Connection "upgrade";\
-        proxy_connect_timeout 60s;\
-        proxy_read_timeout 3600s;\
-        proxy_send_timeout 3600s;\
-    }\
-\
-    # ── Socket.IO polling fallback ──\
-    location /socket.io/ {\
-        proxy_pass http://127.0.0.1:4000;\
-        proxy_http_version 1.1;\
-        proxy_set_header Host $host;\
-        proxy_set_header X-Real-IP $remote_addr;\
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-        proxy_set_header X-Forwarded-Proto $scheme;\
-        proxy_set_header Upgrade $http_upgrade;\
-        proxy_set_header Connection "upgrade";\
-    }\
-' "$NGINX_SITE"
-      echo "  ✅ Telemedicine WebSocket block injected into SSL config"
+
+set +e
+
+# Find the first domain that has a valid Let's Encrypt certificate
+CERT_DOMAIN=""
+if [ -d /etc/letsencrypt/live ]; then
+  for cert_dir in /etc/letsencrypt/live/*; do
+    [ -d "$cert_dir" ] || continue
+    d=${cert_dir%/}
+    d=${d##*/}
+    if [ -f "/etc/letsencrypt/live/$d/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/$d/privkey.pem" ]; then
+      CERT_DOMAIN="$d"
+      break
+    fi
+  done
+fi
+
+# Backup current config if it exists
+if [ -f "$NGINX_SITE" ]; then
+  sudo cp "$NGINX_SITE" "${NGINX_SITE}.bak.$(date '+%Y%m%d_%H%M%S')" 2>/dev/null || true
+fi
+
+# Build the nginx config using deploy/nginx.conf as the source.
+# If we have a real cert domain, replace the placeholder and keep the HTTPS block.
+# Otherwise strip the HTTPS block so the HTTP server doesn't redirect to a missing HTTPS server.
+if [ -n "$CERT_DOMAIN" ]; then
+  echo "  ℹ️  SSL cert found for domain: $CERT_DOMAIN"
+  sed "s|app.neura-line.com|$CERT_DOMAIN|g" deploy/nginx.conf | sudo tee "$NGINX_SITE" >/dev/null
+  echo "  ✅ Nginx config written with SSL"
+else
+  echo "  ⚠️  No SSL certs found — using HTTP-only config"
+  # Write a complete minimal HTTP-only config.
+  # Do NOT redirect to HTTPS because no HTTPS server exists.
+  sudo tee "$NGINX_SITE" >/dev/null <<'EOF'
+server {
+    listen 80;
+    server_name _;
+    root /var/www/neuraline;
+    index index.html;
+
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(self), microphone=(self), geolocation=()" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" always;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_min_length 256;
+    gzip_types text/plain text/css text/javascript application/javascript application/json application/xml application/xml+rss image/svg+xml font/woff2;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 50m;
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+    }
+
+    location = /telemedicine {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_connect_timeout 60s;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    }
+
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location /health {
+        access_log off;
+        return 200 'OK';
+        add_header Content-Type text/plain;
+    }
+}
+EOF
+  echo "  ✅ Nginx config written as HTTP-only"
+fi
+
+sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline 2>/dev/null || true
+sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+echo "▶ Testing Nginx config..."
+if sudo nginx -t >/dev/null 2>&1; then
+  sudo systemctl reload nginx
+  echo "  ✅ Nginx reloaded"
+else
+  echo "  ❌ New Nginx config is invalid — trying to restore previous valid config..."
+  LATEST_BAK=$(ls -t "$NGINX_SITE".bak.* 2>/dev/null | head -1)
+  if [ -n "$LATEST_BAK" ] && [ -f "$LATEST_BAK" ]; then
+    sudo cp "$LATEST_BAK" "$NGINX_SITE"
+    if sudo nginx -t >/dev/null 2>&1; then
+      sudo systemctl reload nginx
+      echo "  ✅ Nginx restored and reloaded from $LATEST_BAK"
     else
-      echo "  ✅ SSL config already has telemedicine block — no changes needed"
-    fi
-    # Also fix Permissions-Policy and CSP if camera is disabled
-    if grep -q "camera=()" "$NGINX_SITE"; then
-      sudo sed -i 's/camera=(), microphone=(self)/camera=(self), microphone=(self)/' "$NGINX_SITE"
-      echo "  ✅ Fixed Permissions-Policy (camera enabled)"
-    fi
-    if grep -q "connect-src 'self';" "$NGINX_SITE" && ! grep -q "wss:" "$NGINX_SITE"; then
-      sudo sed -i "s/connect-src 'self';/connect-src 'self' wss: https:;/" "$NGINX_SITE"
-      echo "  ✅ Fixed CSP (wss: allowed for WebSocket)"
+      echo "  ❌ Backup config is also invalid — leaving original (site may be down until manually fixed)"
     fi
   else
-    # No SSL config in active site — check if any Let's Encrypt certs exist
-    CERT_DIR=$(ls -d /etc/letsencrypt/live/*/ 2>/dev/null | head -1)
-    if [ -n "$CERT_DIR" ] && [ -f "${CERT_DIR}fullchain.pem" ]; then
-      # Certs exist — extract domain name from directory path (pure shell, no basename)
-      CERT_DOMAIN=${CERT_DIR%/}
-      CERT_DOMAIN=${CERT_DOMAIN##*/}
-      echo "  ℹ️  Found SSL cert for domain: $CERT_DOMAIN"
-      sudo sed "s/app.neura-line.com/$CERT_DOMAIN/g" deploy/nginx.conf > /tmp/nginx_ssl.conf
-      sudo cp /tmp/nginx_ssl.conf "$NGINX_SITE"
-      rm -f /tmp/nginx_ssl.conf
-      echo "  ✅ Nginx config updated with SSL (domain: $CERT_DOMAIN)"
-    else
-      # No certs at all — use HTTP-only by stripping the HTTPS block
-      echo "  ⚠️  No SSL certs found — using HTTP-only config"
-      sudo awk '/^# ── HTTPS: Main application server/{exit} {print}' deploy/nginx.conf > /tmp/nginx_http_only.conf
-      echo "" >> /tmp/nginx_http_only.conf
-      echo "server {" >> /tmp/nginx_http_only.conf
-      echo "    listen 80;" >> /tmp/nginx_http_only.conf
-      echo "    server_name _;" >> /tmp/nginx_http_only.conf
-      echo "    root /var/www/neuraline;" >> /tmp/nginx_http_only.conf
-      echo "    index index.html;" >> /tmp/nginx_http_only.conf
-      awk '/^server \{/{found=0} /listen 443/{found=1} found && /^    location/{p=1} p{print} p && /^    }/{p=0}' deploy/nginx.conf >> /tmp/nginx_http_only.conf
-      echo "}" >> /tmp/nginx_http_only.conf
-      sudo cp /tmp/nginx_http_only.conf "$NGINX_SITE"
-      rm -f /tmp/nginx_http_only.conf
-      echo "  ✅ Nginx config updated (HTTP-only, run certbot to enable HTTPS)"
-    fi
-    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/neuraline
-    sudo rm -f /etc/nginx/sites-enabled/default
+    echo "  ❌ No backup found — leaving original config (site may be down until manually fixed)"
   fi
 fi
-echo "▶ Reloading Nginx..."
-sudo nginx -t && sudo systemctl reload nginx
-echo "  ✅ Nginx reloaded"
+
+set -e
 echo ""
 
 # ─── 8. Health check ───────────────────────────────────────────────────────
