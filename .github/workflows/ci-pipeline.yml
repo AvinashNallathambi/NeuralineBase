@@ -210,21 +210,14 @@ jobs:
             exit 1
           fi
 
-          # CREATE TYPE does NOT support IF NOT EXISTS in PostgreSQL
-          # It must be wrapped in a DO block with pg_type check instead
-          BARE_TYPE=$(grep -r 'CREATE TYPE ' backend/src/migrations/ | grep -v 'DO \$\$' | wc -l)
-          if [ "$BARE_TYPE" -gt 0 ]; then
-            echo "❌ Found CREATE TYPE outside DO block in migrations"
-            echo "   PostgreSQL does not support CREATE TYPE IF NOT EXISTS."
-            echo "   Wrap in: DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '...') THEN CREATE TYPE ...; END IF; END \$\$"
-            grep -rn 'CREATE TYPE ' backend/src/migrations/ | grep -v 'DO \$\$' || true
-            exit 1
-          fi
-
-          # Also check for invalid CREATE TYPE IF NOT EXISTS (syntax error in PostgreSQL)
+          # CREATE TYPE does NOT support IF NOT EXISTS in PostgreSQL.
+          # It must be wrapped in a DO block with a pg_type existence check.
+          # (We can't reliably detect DO blocks with grep, so we only flag the
+          #  invalid "CREATE TYPE IF NOT EXISTS" syntax.)
           INVALID_TYPE=$(grep -r 'CREATE TYPE IF NOT EXISTS' backend/src/migrations/ | wc -l)
           if [ "$INVALID_TYPE" -gt 0 ]; then
             echo "❌ Found CREATE TYPE IF NOT EXISTS — this is invalid PostgreSQL syntax"
+            echo "   Wrap in: DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '...') THEN CREATE TYPE ...; END IF; END \$\$"
             grep -rn 'CREATE TYPE IF NOT EXISTS' backend/src/migrations/ || true
             exit 1
           fi
