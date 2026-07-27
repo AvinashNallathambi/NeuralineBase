@@ -126,14 +126,15 @@ jobs:
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
         with:
           host: ${{ secrets.AWS_EC2_HOST }}
           username: ${{ secrets.AWS_EC2_USER }}
           key: ${{ secrets.AWS_SSH_PRIVATE_KEY }}
           port: 22
           timeout: 600s
-          env:
-            CERTBOT_EMAIL: ${{ secrets.CERTBOT_EMAIL }}
+          envs: CERTBOT_EMAIL
           script: |
             echo "=== Neuraline EMR Deploy ==="
             echo "Commit: ${{ github.event.workflow_run.head_sha || github.sha }}"
