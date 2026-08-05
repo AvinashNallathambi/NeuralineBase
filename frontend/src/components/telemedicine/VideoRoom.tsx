@@ -362,14 +362,14 @@ const VideoRoom: React.FC<VideoRoomProps> = ({
           >
             <div style={{ display: 'grid', gridTemplateColumns: remoteStreamList.length > 0 ? '1fr 1fr' : '1fr', gap: 16 }}>
               {/* Local video */}
-              <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#1a1a2e', minHeight: 300 }}>
-                <video ref={localVideoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#f5f5f5', minHeight: 300 }}>
+                <video ref={localVideoRef} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#f5f5f5' }} />
                 <div style={{ position: 'absolute', bottom: 12, left: 12, background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: 6 }}>
                   <Text style={{ color: '#fff' }}>{userName} (You)</Text>
                 </div>
                 {isVideoOff && (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#16213e' }}>
-                    <VideoCameraAddOutlined style={{ fontSize: 48, color: 'rgba(255,255,255,0.3)' }} />
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
+                    <VideoCameraAddOutlined style={{ fontSize: 48, color: 'rgba(0,0,0,0.3)' }} />
                   </div>
                 )}
               </div>
@@ -552,8 +552,8 @@ const RemoteVideo: React.FC<{
   }, [stream]);
 
   return (
-    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#1a1a2e', minHeight: 300 }}>
-      <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+    <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#f5f5f5', minHeight: 300 }}>
+      <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#f5f5f5' }} />
       <div style={{ position: 'absolute', bottom: 12, left: 12, background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: 6 }}>
         <Text style={{ color: '#fff' }}>{participant?.name || 'Remote Participant'}</Text>
       </div>

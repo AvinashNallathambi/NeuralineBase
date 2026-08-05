@@ -499,14 +499,6 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "/telemedicine/:sessionId",
-        element: (
-          <LazyPage>
-            <TelemedicineCallPage />
-          </LazyPage>
-        ),
-      },
-      {
         path: "/reports",
         element: (
           <LazyPage>
@@ -555,6 +547,19 @@ const router = createBrowserRouter([
         ),
       },
     ],
+  },
+
+  // Telemedicine call page — full-screen, NO MainLayout (no sidebar/topnav)
+  // so the video visit looks like Google Meet / Zoom.
+  {
+    path: "/telemedicine/:sessionId",
+    element: (
+      <ProtectedRoute>
+        <LazyPage>
+          <TelemedicineCallPage />
+        </LazyPage>
+      </ProtectedRoute>
+    ),
   },
 
   // Patient Portal routes – separate layout, patient-only auth
@@ -654,15 +659,20 @@ const router = createBrowserRouter([
           </LazyPage>
         ),
       },
-      {
-        path: "video-visit/:sessionId",
-        element: (
-          <LazyPage>
-            <TelemedicineCallPage />
-          </LazyPage>
-        ),
-      },
     ],
+  },
+
+  // Patient portal video visit — full-screen, NO PatientPortalLayout
+  // (no sidebar/topnav) so it looks like Google Meet / Zoom.
+  {
+    path: "/portal/video-visit/:sessionId",
+    element: (
+      <PatientRoute>
+        <LazyPage>
+          <TelemedicineCallPage />
+        </LazyPage>
+      </PatientRoute>
+    ),
   },
 
   // Default redirect — unknown routes go to login

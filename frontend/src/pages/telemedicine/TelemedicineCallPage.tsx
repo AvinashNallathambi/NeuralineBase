@@ -623,7 +623,7 @@ const TelemedicineCallPage: React.FC = () => {
   }
 
   return (
-    <div style={{ padding: 16, height: 'calc(100vh - 64px)', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ padding: 16, height: '100vh', display: 'flex', flexDirection: 'column', background: '#ffffff' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <Space>
@@ -665,7 +665,7 @@ const TelemedicineCallPage: React.FC = () => {
       <div style={{ display: 'flex', gap: 12, flex: 1, minHeight: 0 }}>
         {/* Video area */}
         <Card
-          bodyStyle={{ padding: 0, height: '100%', position: 'relative', background: '#000', borderRadius: 8 }}
+          bodyStyle={{ padding: 0, height: '100%', position: 'relative', background: '#f5f5f5', borderRadius: 8 }}
           style={{ flex: 1, overflow: 'hidden' }}
         >
           {/* Remote video (full size) */}
@@ -673,7 +673,7 @@ const TelemedicineCallPage: React.FC = () => {
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#f5f5f5' }}
           />
           {callStatus === 'waiting' && (
             <div style={{
@@ -682,12 +682,13 @@ const TelemedicineCallPage: React.FC = () => {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#fff',
+              color: '#595959',
               flexDirection: 'column',
               gap: 12,
+              background: '#f5f5f5',
             }}>
               <Spin size="large" />
-              <Text style={{ color: '#fff' }}>Waiting for the other participant to join…</Text>
+              <Text style={{ color: '#595959' }}>Waiting for the other participant to join…</Text>
             </div>
           )}
 
@@ -705,8 +706,9 @@ const TelemedicineCallPage: React.FC = () => {
               height: 150,
               objectFit: 'cover',
               borderRadius: 8,
-              border: '2px solid #fff',
-              background: '#000',
+              border: '2px solid #ffffff',
+              background: '#f5f5f5',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
               transform: 'scaleX(-1)', // mirror
             }}
           />
@@ -719,9 +721,10 @@ const TelemedicineCallPage: React.FC = () => {
             transform: 'translateX(-50%)',
             display: 'flex',
             gap: 8,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(255,255,255,0.95)',
             padding: '8px 16px',
             borderRadius: 24,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
           }}>
             <Tooltip title={isMicMuted ? 'Unmute Mic' : 'Mute Mic'}>
               <Button
