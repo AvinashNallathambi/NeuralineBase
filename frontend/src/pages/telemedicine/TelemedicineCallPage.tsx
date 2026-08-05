@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Card, Input, List, message, Spin, Tag, Typography, Space, Tooltip, Modal } from 'antd';
+import { Button, Card, Input, List, message, Spin, Tag, Typography, Space, Tooltip, Modal, Badge } from 'antd';
 import {
   ArrowLeftOutlined,
   AudioOutlined,
@@ -78,6 +78,8 @@ const TelemedicineCallPage: React.FC = () => {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [endingCall, setEndingCall] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -90,6 +92,7 @@ const TelemedicineCallPage: React.FC = () => {
   const chatListRef = useRef<HTMLDivElement>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const originalVideoTrackRef = useRef<MediaStreamTrack | null>(null);
+  const showChatRef = useRef(false);
 
   // Load the session metadata
   useEffect(() => {
@@ -119,6 +122,12 @@ const TelemedicineCallPage: React.FC = () => {
       chatListRef.current.scrollTop = chatListRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  // Keep showChatRef in sync so the socket handler can read current value
+  useEffect(() => {
+    showChatRef.current = showChat;
+    if (showChat) setUnreadChatCount(0);
+  }, [showChat]);
 
   // ── MediaRecorder: capture the local stream for upload on call end ──────
   const startRecording = useCallback((stream: MediaStream) => {
@@ -334,6 +343,9 @@ const TelemedicineCallPage: React.FC = () => {
 
         socket.on('chat-message', (msg: ChatMessage) => {
           setChatMessages((prev) => [...prev, msg]);
+          if (!showChatRef.current) {
+            setUnreadChatCount((c) => c + 1);
+          }
         });
 
         socket.on('session-in-progress', () => {
@@ -753,6 +765,18 @@ const TelemedicineCallPage: React.FC = () => {
                 type={isScreenSharing ? 'primary' : 'default'}
               />
             </Tooltip>
+            {/* Chat toggle button — Google Meet style */}
+            <Tooltip title={showChat ? 'Close chat' : 'Open chat'}>
+              <Badge count={unreadChatCount} size="small" offset={[-2, 2]}>
+                <Button
+                  shape="circle"
+                  size="large"
+                  icon={<MessageOutlined />}
+                  onClick={() => setShowChat((v) => !v)}
+                  type={showChat ? 'primary' : 'default'}
+                />
+              </Badge>
+            </Tooltip>
             {/* Recording consent request — provider only */}
             {!isPatient && !recordingConsentRequested && !recordingConsentGranted && (
               <Tooltip title="Request Recording Consent">
@@ -788,46 +812,78 @@ const TelemedicineCallPage: React.FC = () => {
               />
             </Tooltip>
           </div>
-        </Card>
 
-        {/* Chat sidebar */}
-        <Card
-          title={<Space><MessageOutlined /> Chat</Space>}
-          style={{ width: 320, display: 'flex', flexDirection: 'column' }}
-          bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, minHeight: 0 }}
-        >
-          <div ref={chatListRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
-            {chatMessages.length === 0 ? (
-              <Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 24 }}>
-                No messages yet
-              </Text>
-            ) : (
-              <List
-                dataSource={chatMessages}
-                renderItem={(msg) => (
-                  <List.Item style={{ border: 'none', padding: '4px 0' }}>
-                    <div>
-                      <Text type="secondary" style={{ fontSize: 11 }}>
-                        {msg.senderRole} · {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                      <div>{msg.text}</div>
-                    </div>
-                  </List.Item>
+          {/* Chat panel — slide-in overlay on the right (Google Meet style) */}
+          {showChat && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 340,
+              background: '#ffffff',
+              borderLeft: '1px solid #f0f0f0',
+              display: 'flex',
+              flexDirection: 'column',
+              zIndex: 10,
+              boxShadow: '-2px 0 8px rgba(0,0,0,0.08)',
+            }}>
+              {/* Chat header */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderBottom: '1px solid #f0f0f0',
+                background: '#fafafa',
+              }}>
+                <Space>
+                  <MessageOutlined />
+                  <Text strong>In-call chat</Text>
+                </Space>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CloseCircleOutlined />}
+                  onClick={() => setShowChat(false)}
+                />
+              </div>
+              {/* Chat messages */}
+              <div ref={chatListRef} style={{ flex: 1, overflowY: 'auto', padding: '8px 12px' }}>
+                {chatMessages.length === 0 ? (
+                  <Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 24 }}>
+                    No messages yet
+                  </Text>
+                ) : (
+                  <List
+                    dataSource={chatMessages}
+                    renderItem={(msg) => (
+                      <List.Item style={{ border: 'none', padding: '4px 0' }}>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {msg.senderRole} · {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                          <div>{msg.text}</div>
+                        </div>
+                      </List.Item>
+                    )}
+                  />
                 )}
-              />
-            )}
-          </div>
-          <div style={{ padding: 8, borderTop: '1px solid #f0f0f0', display: 'flex', gap: 4 }}>
-            <TextArea
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onPressEnter={sendChatMessage}
-              placeholder="Type a message…"
-              autoSize={{ minRows: 1, maxRows: 3 }}
-              style={{ flex: 1 }}
-            />
-            <Button type="primary" icon={<SendOutlined />} onClick={sendChatMessage} />
-          </div>
+              </div>
+              {/* Chat input */}
+              <div style={{ padding: 8, borderTop: '1px solid #f0f0f0', display: 'flex', gap: 4 }}>
+                <TextArea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onPressEnter={sendChatMessage}
+                  placeholder="Type a message…"
+                  autoSize={{ minRows: 1, maxRows: 3 }}
+                  style={{ flex: 1 }}
+                />
+                <Button type="primary" icon={<SendOutlined />} onClick={sendChatMessage} />
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </div>
