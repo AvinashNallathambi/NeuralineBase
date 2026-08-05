@@ -264,17 +264,15 @@ const TelemedicineCallPage: React.FC = () => {
 
         socket.on('joined-room', () => {
           setCallStatus((prev) => (prev === 'in-call' ? prev : 'waiting'));
-          // 5. Set up the peer connection and send an offer to any existing participants
-          const pc = setupPeerConnection();
-          pc.createOffer()
-            .then((offer) => pc.setLocalDescription(offer))
-            .then(() => {
-              socket.emit('offer', {
-                targetSocketId: '*',
-                sdp: pc.localDescription,
-              });
-            })
-            .catch((err) => console.error('Offer creation failed:', err));
+          // Set up the peer connection and WAIT for an offer from existing
+          // participants.  The existing participant(s) will send an offer when
+          // they receive the "participant-joined" event for us.
+          //
+          // We must NOT create an offer here — if both sides create offers
+          // simultaneously (glare), setRemoteDescription(offer) will fail
+          // because the RTCPeerConnection already has a local offer, and the
+          // media connection will never establish.
+          setupPeerConnection();
         });
 
         socket.on('participant-joined', async (data: { socketId: string; userId: string; role: string; name: string }) => {
@@ -295,6 +293,12 @@ const TelemedicineCallPage: React.FC = () => {
 
         socket.on('offer', async (data: { sdp: RTCSessionDescriptionInit; callerSocketId: string }) => {
           const pc = peerConnectionRef.current || setupPeerConnection();
+          // Guard against glare: if we already have a local offer, ignore
+          // the incoming offer rather than crashing on setRemoteDescription.
+          if (pc.signalingState !== 'stable') {
+            console.warn('Received offer but PC is not stable (state=' + pc.signalingState + '), ignoring');
+            return;
+          }
           try {
             await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
             const answer = await pc.createAnswer();
@@ -354,8 +358,9 @@ const TelemedicineCallPage: React.FC = () => {
           });
         });
 
-        socket.on('recording-consent-response', (data: { granted: boolean; userId: string }) => {
-          if (data.granted) {
+        socket.on('recording-consent-response', (data: { granted?: boolean; consented?: boolean; userId: string }) => {
+          const granted = data.granted ?? data.consented ?? false;
+          if (granted) {
             setRecordingConsentGranted(true);
             message.success('Patient has consented to recording.');
           } else {

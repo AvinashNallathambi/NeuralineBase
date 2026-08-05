@@ -17,6 +17,26 @@ import Peer from 'simple-peer';
 
 const { Text, Title } = Typography;
 
+// STUN/TURN servers for WebRTC NAT traversal.
+// In production, set VITE_TURN_SERVERS to a JSON array of RTCIceServer configs.
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
+function getIceServers(): RTCIceServer[] {
+  const envServers = import.meta.env.VITE_TURN_SERVERS as string | undefined;
+  if (envServers) {
+    try {
+      const parsed = JSON.parse(envServers) as RTCIceServer[];
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch {
+      // ignore parse error, fall back to defaults
+    }
+  }
+  return DEFAULT_ICE_SERVERS;
+}
+
 interface ChatMessage {
   id: string;
   senderId: string;
@@ -188,11 +208,18 @@ const VideoRoom: React.FC<VideoRoomProps> = ({
     };
   }, [sessionId, roomId, userId, role, userName, token, startTimer]);
 
-  // Create peer as initiator when a new participant joins
+  // Create peer as initiator when a new participant joins.
+  // Use deterministic initiator selection to avoid WebRTC glare: if both
+  // sides create initiator peers, the offers cross and neither side processes
+  // the other's offer, so the media connection never establishes.
+  // The client with the lexicographically smaller socketId is the initiator.
   useEffect(() => {
-    const newParticipants = participants.filter((p) => p.socketId !== socketRef.current?.id && !peersRef.current[p.socketId]);
+    const mySocketId = socketRef.current?.id;
+    if (!mySocketId) return;
+    const newParticipants = participants.filter((p) => p.socketId !== mySocketId && !peersRef.current[p.socketId]);
     newParticipants.forEach((participant) => {
-      createPeer(participant.socketId, true);
+      const initiator = mySocketId < participant.socketId;
+      createPeer(participant.socketId, initiator);
     });
   }, [participants]);
 
@@ -201,6 +228,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({
       initiator,
       trickle: true,
       stream: localStreamRef.current || undefined,
+      config: { iceServers: getIceServers() },
     });
 
     peer.on('signal', (data) => {
@@ -226,7 +254,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({
   };
 
   const handleReceiveOffer = (callerSocketId: string, sdp: RTCSessionDescriptionInit) => {
-    const peer = createPeer(callerSocketId, false);
+    // Reuse the existing peer if one was already created by the participants
+    // useEffect (non-initiator side).  Creating a new peer here would
+    // overwrite the existing one and leave an orphaned peer.
+    let peer = peersRef.current[callerSocketId];
+    if (!peer) {
+      peer = createPeer(callerSocketId, false);
+    }
     peer.signal(sdp);
   };
 

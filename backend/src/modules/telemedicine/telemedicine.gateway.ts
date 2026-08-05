@@ -162,28 +162,45 @@ export class TelemedicineGateway implements OnGatewayInit, OnGatewayConnection, 
   // WebRTC signaling messages
   @SubscribeMessage('offer')
   handleOffer(client: AuthenticatedSocket, payload: { targetSocketId: string; sdp: RTCSessionDescriptionInit }) {
-    this.server.to(payload.targetSocketId).emit('offer', {
+    const offerData = {
       sdp: payload.sdp,
       callerSocketId: client.id,
       callerUserId: client.user?.sub,
-    });
+    };
+    if (!payload.targetSocketId || payload.targetSocketId === '*') {
+      // Broadcast to everyone in the room except the sender
+      client.to(client.roomId!).emit('offer', offerData);
+    } else {
+      this.server.to(payload.targetSocketId).emit('offer', offerData);
+    }
   }
 
   @SubscribeMessage('answer')
   handleAnswer(client: AuthenticatedSocket, payload: { targetSocketId: string; sdp: RTCSessionDescriptionInit }) {
-    this.server.to(payload.targetSocketId).emit('answer', {
+    const answerData = {
       sdp: payload.sdp,
       calleeSocketId: client.id,
       calleeUserId: client.user?.sub,
-    });
+    };
+    if (!payload.targetSocketId || payload.targetSocketId === '*') {
+      client.to(client.roomId!).emit('answer', answerData);
+    } else {
+      this.server.to(payload.targetSocketId).emit('answer', answerData);
+    }
   }
 
   @SubscribeMessage('ice-candidate')
   handleIceCandidate(client: AuthenticatedSocket, payload: { targetSocketId: string; candidate: RTCIceCandidateInit }) {
-    this.server.to(payload.targetSocketId).emit('ice-candidate', {
+    const candidateData = {
       candidate: payload.candidate,
       senderSocketId: client.id,
-    });
+    };
+    if (!payload.targetSocketId || payload.targetSocketId === '*') {
+      // Broadcast to everyone in the room except the sender
+      client.to(client.roomId!).emit('ice-candidate', candidateData);
+    } else {
+      this.server.to(payload.targetSocketId).emit('ice-candidate', candidateData);
+    }
   }
 
   @SubscribeMessage('chat-message')
@@ -235,13 +252,16 @@ export class TelemedicineGateway implements OnGatewayInit, OnGatewayConnection, 
   }
 
   @SubscribeMessage('recording-consent-response')
-  async handleRecordingConsentResponse(client: AuthenticatedSocket, payload: { consented: boolean }) {
+  async handleRecordingConsentResponse(client: AuthenticatedSocket, payload: { consented?: boolean; granted?: boolean }) {
     if (!client.roomId) return { event: 'error', data: { message: 'Not in a room' } };
+    // Accept both `consented` (legacy) and `granted` (used by TelemedicineCallPage)
+    const consented = payload.consented ?? payload.granted ?? false;
     this.server.to(client.roomId).emit('recording-consent-response', {
       userId: client.user?.sub,
-      consented: payload.consented,
+      consented,
+      granted: consented,
     });
-    return { event: 'recording-consent-response', data: { consented: payload.consented } };
+    return { event: 'recording-consent-response', data: { consented, granted: consented } };
   }
 
   private extractToken(client: AuthenticatedSocket): string | null {
