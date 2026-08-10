@@ -58,6 +58,28 @@ async function bootstrap() {
     process.exit(1);
   }
 
+  // ── Safety guard: block mock subscription provider in production ──────────
+  // Without STRIPE_API_KEY, the SubscriptionsModule falls back to
+  // MockSubscriptionProvider, which accepts any fake payment method (e.g.
+  // "pm_mock_123") without validation. Running this in production would let
+  // tenants "subscribe" with fake cards, bypassing all payment enforcement.
+  // This guard prevents accidental mock-mode billing in production.
+  if (isProd && !process.env.STRIPE_API_KEY) {
+    logger.error(
+      "FATAL: STRIPE_API_KEY is not set in production.",
+    );
+    logger.error(
+      "Without a Stripe key the backend uses MockSubscriptionProvider, which",
+    );
+    logger.error(
+      "accepts fake payment methods and bypasses real billing. Set",
+    );
+    logger.error(
+      "STRIPE_API_KEY (and STRIPE_WEBHOOK_SECRET) in your .env and restart.",
+    );
+    process.exit(1);
+  }
+
   // Use Pino logger from LoggerModule (configured in app.module.ts).
   // Pino provides structured JSON logging with PHI redaction.
   const { Logger: PinoLogger } = await import("nestjs-pino");
@@ -92,9 +114,17 @@ async function bootstrap() {
   app.setGlobalPrefix("api/v1");
 
   // CORS
-  const corsOrigins = configService.get<string>("CORS_ORIGINS", "*");
+  // When CORS_ORIGINS is "*" we use origin: true (reflect the request Origin)
+  // because origin: ["*"] with credentials: true is invalid per CORS spec —
+  // the cors package treats "*" in an array as a literal string, not a wildcard,
+  // so no origin would ever match and the browser blocks every cross-origin request.
+  const corsOriginsRaw = configService.get<string>("CORS_ORIGINS", "*").trim();
+  const isWildcard = corsOriginsRaw === "*";
+  const corsOrigins = isWildcard
+    ? true // reflect the request Origin header back
+    : corsOriginsRaw.split(",").map((o) => o.trim()).filter(Boolean);
   app.enableCors({
-    origin: corsOrigins.split(","),
+    origin: corsOrigins,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "X-Tenant-ID"],

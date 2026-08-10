@@ -109,6 +109,34 @@ sudo chown -R www-data:www-data "$FRONTEND_DIR"
 echo "  ✅ Frontend deployed"
 echo ""
 
+# ─── 5b. Ensure CORS_ORIGINS includes the marketing website ─────────────────
+# The marketing site (neura-line.com) submits trial requests to the API from a
+# different origin. If CORS_ORIGINS in .env doesn't include it, the browser
+# blocks the preflight. This step idempotently adds the marketing origins.
+ENV_FILE="$APP_DIR/backend/.env"
+MARKETING_ORIGINS="http://neura-line.com,https://neura-line.com,https://www.neura-line.com"
+echo "▶ Ensuring CORS_ORIGINS includes marketing site..."
+if [ -f "$ENV_FILE" ]; then
+  if grep -q "^CORS_ORIGINS=" "$ENV_FILE"; then
+    CURRENT=$(grep "^CORS_ORIGINS=" "$ENV_FILE" | cut -d'=' -f2-)
+    if echo "$CURRENT" | grep -q "neura-line.com"; then
+      echo "  ✅ CORS_ORIGINS already includes marketing site"
+    elif [ "$CURRENT" = "*" ]; then
+      echo "  ℹ️  CORS_ORIGINS is wildcard (*) — code handles this via origin:true"
+    else
+      NEW_VALUE="$CURRENT,$MARKETING_ORIGINS"
+      sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$NEW_VALUE|" "$ENV_FILE"
+      echo "  ✅ Added marketing origins to CORS_ORIGINS: $NEW_VALUE"
+    fi
+  else
+    echo "CORS_ORIGINS=$MARKETING_ORIGINS" >> "$ENV_FILE"
+    echo "  ✅ Added CORS_ORIGINS with marketing origins (was not set)"
+  fi
+else
+  echo "  ⚠️  .env not found at $ENV_FILE — skipping CORS update"
+fi
+echo ""
+
 # ─── 6. Restart backend with PM2 ───────────────────────────────────────────
 echo "▶ Restarting backend (PM2)..."
 cd "$APP_DIR"
