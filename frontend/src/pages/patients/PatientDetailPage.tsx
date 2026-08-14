@@ -60,7 +60,7 @@ import ProblemListSection from '../../components/patients/ProblemListSection';
 import EditPatientModal from '../../components/patients/EditPatientModal';
 import { PatientInsuranceManager } from '../../components/patients/PatientInsuranceManager';
 import { patientService } from '../../services/patientService';
-import type { PortalStatus, EnablePortalResult } from '../../services/patientService';
+import type { PortalStatus, EnablePortalResult, PatientDocumentRecord } from '../../services/patientService';
 import type { EncounterVitals } from '../../services/encounterService';
 
 const { Title, Text, Paragraph } = Typography;
@@ -109,7 +109,8 @@ const PatientDetailPage: React.FC = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [vitalsHistory, setVitalsHistory] = useState<Array<EncounterVitals & { encounterId: string; encounterDate: string }>>([]);
   const [vitalsLoading, setVitalsLoading] = useState(false);
-  const [documents, setDocuments] = useState<Array<{ id: string; name: string; type: string; size: string; date: string; documentType?: string }>>([]);
+  const [documents, setDocuments] = useState<PatientDocumentRecord[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [portalStatus, setPortalStatus] = useState<PortalStatus | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -141,6 +142,23 @@ const PatientDetailPage: React.FC = () => {
   useEffect(() => {
     fetchVitals();
   }, [fetchVitals]);
+
+  const fetchDocuments = useCallback(async () => {
+    if (!id) return;
+    setDocumentsLoading(true);
+    try {
+      const data = await patientService.getDocuments(id);
+      setDocuments(data);
+    } catch {
+      // silent – documents may not exist yet
+    } finally {
+      setDocumentsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   const fetchPortalStatus = useCallback(async () => {
     if (!id) return;
@@ -536,28 +554,43 @@ const PatientDetailPage: React.FC = () => {
   );
 
   // ── Tab: Documents ──
+  const documentTypeOptions = [
+    { label: 'Lab Report', value: 'lab_report' },
+    { label: 'Imaging', value: 'imaging' },
+    { label: 'Consent Form', value: 'consent' },
+    { label: 'Referral', value: 'referral' },
+    { label: 'Insurance Card', value: 'insurance_card' },
+    { label: 'Identity Document', value: 'identity' },
+    { label: 'Other', value: 'other' },
+  ];
+
+  const documentTypeLabel = (type: string): string =>
+    documentTypeOptions.find((o) => o.value === type)?.label || type;
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const DocumentsTab = () => {
+    const [selectedType, setSelectedType] = useState<string>('other');
+    const [description, setDescription] = useState<string>('');
+    const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
     const handleUpload = async (file: File) => {
       if (!patient) return;
       setUploading(true);
       try {
-        const result = await patientService.uploadDocument(
+        await patientService.uploadDocument(
           patient.id,
           file,
-          'other',
+          selectedType,
+          description || undefined,
         );
-        setDocuments((prev) => [
-          {
-            id: result.id,
-            name: result.fileName,
-            type: file.name.split('.').pop()?.toUpperCase() || 'FILE',
-            size: `${(file.size / 1024).toFixed(0)} KB`,
-            date: new Date().toISOString(),
-            documentType: result.documentType,
-          },
-          ...prev,
-        ]);
+        await fetchDocuments();
         message.success(`${file.name} uploaded successfully`);
+        setDescription('');
       } catch (err: unknown) {
         const error = err as { response?: { data?: { message?: string } } };
         message.error(error?.response?.data?.message || 'Failed to upload document');
@@ -569,20 +602,61 @@ const PatientDetailPage: React.FC = () => {
     const handleDelete = (docId: string) => {
       Modal.confirm({
         title: 'Delete Document',
-        content: 'Are you sure you want to delete this document?',
+        content: 'Are you sure you want to delete this document? This cannot be undone.',
         okText: 'Delete',
         okType: 'danger',
-        onOk: () => {
-          setDocuments((prev) => prev.filter((d) => d.id !== docId));
-          message.success('Document deleted');
+        onOk: async () => {
+          try {
+            await patientService.deleteDocument(patient!.id, docId);
+            setDocuments((prev) => prev.filter((d) => d.id !== docId));
+            message.success('Document deleted');
+          } catch (err: unknown) {
+            const error = err as { response?: { data?: { message?: string } } };
+            message.error(error?.response?.data?.message || 'Failed to delete document');
+          }
         },
       });
+    };
+
+    const handleDownload = async (docId: string) => {
+      if (!patient) return;
+      setDownloadingId(docId);
+      try {
+        await patientService.downloadDocument(patient.id, docId);
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } };
+        message.error(error?.response?.data?.message || 'Failed to download document');
+      } finally {
+        setDownloadingId(null);
+      }
     };
 
     return (
       <Row gutter={[24, 24]}>
         <Col xs={24}>
           <Card title="Upload Documents">
+            <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: 16 }}>
+              <Row gutter={12}>
+                <Col xs={24} sm={10}>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>Document Type</Text>
+                  <Select
+                    value={selectedType}
+                    onChange={setSelectedType}
+                    options={documentTypeOptions}
+                    style={{ width: '100%' }}
+                  />
+                </Col>
+                <Col xs={24} sm={14}>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>Description (optional)</Text>
+                  <Input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="e.g. Chest X-ray from 2024-03-15"
+                    maxLength={255}
+                  />
+                </Col>
+              </Row>
+            </Space>
             <Dragger
               name="file"
               multiple
@@ -608,7 +682,11 @@ const PatientDetailPage: React.FC = () => {
         </Col>
         <Col xs={24}>
           <Card title={`Documents (${documents.length})`}>
-            {documents.length === 0 ? (
+            {documentsLoading ? (
+              <div style={{ textAlign: 'center', padding: 40 }}>
+                <Spin />
+              </div>
+            ) : documents.length === 0 ? (
               <Empty description="No documents uploaded yet" />
             ) : (
               <List
@@ -616,7 +694,13 @@ const PatientDetailPage: React.FC = () => {
                 renderItem={(doc) => (
                   <List.Item
                     actions={[
-                      <Button type="link" key="download" icon={<DownloadOutlined />}>
+                      <Button
+                        type="link"
+                        key="download"
+                        icon={<DownloadOutlined />}
+                        loading={downloadingId === doc.id}
+                        onClick={() => handleDownload(doc.id)}
+                      >
                         Download
                       </Button>,
                       <Button
@@ -632,8 +716,20 @@ const PatientDetailPage: React.FC = () => {
                   >
                     <List.Item.Meta
                       avatar={<FileTextOutlined style={{ fontSize: 24, color: '#0D7C8A' }} />}
-                      title={doc.name}
-                      description={`${doc.type} - ${doc.size} - Uploaded ${dayjs(doc.date).format('MM/DD/YYYY')}`}
+                      title={
+                        <Space>
+                          <Text strong>{doc.fileName}</Text>
+                          <Tag color="blue">{documentTypeLabel(doc.documentType)}</Tag>
+                        </Space>
+                      }
+                      description={
+                        <Space direction="vertical" size={2}>
+                          <Text type="secondary">
+                            {formatFileSize(Number(doc.fileSize))} - Uploaded {dayjs(doc.createdAt).format('MM/DD/YYYY')}
+                          </Text>
+                          {doc.description && <Text type="secondary">{doc.description}</Text>}
+                        </Space>
+                      }
                     />
                   </List.Item>
                 )}

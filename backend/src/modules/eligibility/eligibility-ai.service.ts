@@ -156,10 +156,49 @@ Write a 3–5 sentence summary that a front-desk staff member can read in under 
     }>;
     summary: string;
   }> {
+    // Extract only relevant fields — sending the full verification object
+    // (which includes raw X12 requestPayload/responsePayload) causes reasoning
+    // models to generate 14K+ tokens and take 30-60s to respond.
+    const v = verification;
+    const benefits = (v.benefits || []).map((b: any) => ({
+      type: b.type || b.serviceType || '',
+      status: b.status || b.coverageStatus || '',
+      copay: b.copay ?? null,
+      coinsurance: b.coinsurance ?? null,
+      network: b.network ?? null,
+    }));
+
+    const verificationData = {
+      patientName: v.patientName ?? null,
+      payerName: v.payerName ?? null,
+      planName: v.planName ?? null,
+      planType: v.planType ?? null,
+      network: v.network ?? null,
+      policyNumber: v.policyNumber ?? null,
+      groupNumber: v.groupNumber ?? null,
+      coverageStatus: v.coverageStatus ?? null,
+      subscriberName: v.subscriberName ?? null,
+      subscriberRelation: v.subscriberRelation ?? null,
+      copayAmount: v.copayAmount ?? null,
+      coinsurancePercentage: v.coinsurancePercentage ?? null,
+      deductibleIndividual: v.deductibleIndividual ?? null,
+      deductibleFamily: v.deductibleFamily ?? null,
+      deductibleRemaining: v.deductibleRemaining ?? null,
+      outOfPocketIndividual: v.outOfPocketIndividual ?? null,
+      outOfPocketFamily: v.outOfPocketFamily ?? null,
+      outOfPocketRemaining: v.outOfPocketRemaining ?? null,
+      authorizationRequired: v.authorizationRequired ?? null,
+      referralRequired: v.referralRequired ?? null,
+      effectiveDate: v.effectiveDate ?? null,
+      expirationDate: v.expirationDate ?? null,
+      serviceType: v.serviceType ?? null,
+      benefits: benefits.length > 0 ? benefits : undefined,
+    };
+
     const prompt = `You are a medical insurance eligibility expert. Analyze the following eligibility verification and generate actionable alerts for clinical and front-desk staff.
 
 Verification Data:
-${JSON.stringify(verification, null, 2)}
+${JSON.stringify(verificationData)}
 
 Return JSON with this structure:
 {

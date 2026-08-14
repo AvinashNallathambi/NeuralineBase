@@ -38,6 +38,28 @@ export interface UpdateProviderAvailabilityDto {
   expiryDate?: string;
 }
 
+export interface CreateProviderAvailabilityOverrideDto {
+  providerId: string;
+  overrideDate: string;
+  overrideType: string;
+  isAvailable?: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  isRecurring?: boolean;
+}
+
+export interface UpdateProviderAvailabilityOverrideDto {
+  providerId?: string;
+  overrideDate?: string;
+  overrideType?: string;
+  isAvailable?: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+  isRecurring?: boolean;
+}
+
 export interface CreateGroupAppointmentDto {
   providerId: string;
   appointmentType: string;
@@ -89,6 +111,31 @@ class ProviderAvailabilityService {
   async findOverridesByProvider(providerId: string): Promise<ProviderAvailabilityOverride[]> {
     const all = await this.findAllOverrides();
     return all.filter((o) => o.providerId === providerId);
+  }
+
+  async createOverride(dto: CreateProviderAvailabilityOverrideDto): Promise<ProviderAvailabilityOverride> {
+    const response = await axios.post(
+      `${API_BASE}/appointments/availability-overrides`,
+      dto,
+      this.getHeaders(),
+    );
+    return response.data;
+  }
+
+  async updateOverride(id: string, dto: UpdateProviderAvailabilityOverrideDto): Promise<ProviderAvailabilityOverride> {
+    const response = await axios.patch(
+      `${API_BASE}/appointments/availability-overrides/${id}`,
+      dto,
+      this.getHeaders(),
+    );
+    return response.data;
+  }
+
+  async deleteOverride(id: string): Promise<void> {
+    await axios.delete(
+      `${API_BASE}/appointments/availability-overrides/${id}`,
+      this.getHeaders(),
+    );
   }
 
   async createAvailability(dto: CreateProviderAvailabilityDto): Promise<ProviderAvailability> {

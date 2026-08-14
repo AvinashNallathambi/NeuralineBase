@@ -39,6 +39,7 @@ import { ProvidersModule } from './modules/providers/providers.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { TrialsModule } from './modules/trials/trials.module';
+import { EpcsModule } from './modules/epcs/epcs.module';
 import { HealthModule } from './modules/health/health.module';
 import { CommonModule } from './common/common.module';
 import { RedisModule, REDIS_CLIENT } from './common/redis/redis.module';
@@ -272,6 +273,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     MessagingModule,
     SubscriptionsModule,
     TrialsModule,
+    EpcsModule,
     HealthModule,
   ],
   providers: [

@@ -18,6 +18,7 @@ import {
   ExperimentOutlined,
   DollarOutlined,
   SafetyOutlined,
+  SafetyCertificateOutlined,
   FileDoneOutlined,
   CloseCircleOutlined,
   VideoCameraOutlined,
@@ -69,6 +70,7 @@ const menuItems = [
       { key: 'clinical', icon: <FileTextOutlined />, label: 'Clinical' },
       { key: 'clinical/documentation-sessions', icon: <FileTextOutlined />, label: 'Documentation Sessions' },
       { key: 'prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
+      { key: 'epcs', icon: <SafetyCertificateOutlined />, label: 'EPCS' },
       { key: 'laboratory', icon: <ExperimentOutlined />, label: 'Laboratory' },
       { key: 'ai-encounter', icon: <RobotOutlined />, label: 'AI Encounter' },
     ],
@@ -101,12 +103,72 @@ const menuItems = [
   },
 ];
 
+// Flatten the menu tree into all selectable (leaf) keys. Menu item keys are
+// absolute route paths (e.g. 'clinical/documentation-sessions' maps to
+// '/clinical/documentation-sessions'), so we do NOT prepend the parent key.
+const collectLeafKeys = (items: typeof menuItems): string[] => {
+  const keys: string[] = [];
+  for (const item of items) {
+    if (item.children && item.children.length > 0) {
+      keys.push(...collectLeafKeys(item.children));
+    } else {
+      keys.push(item.key);
+    }
+  }
+  return keys;
+};
+
+const allLeafKeys = collectLeafKeys(menuItems);
+
+// Given the current pathname, find the menu key that best matches.
+// Prefers an exact match (e.g. '/clinical/documentation-sessions' →
+// 'clinical/documentation-sessions'), then falls back to the first path
+// segment (e.g. '/clinical/123' → 'clinical') so detail pages still
+// highlight their parent section.
+const resolveSelectedKey = (pathname: string): string => {
+  const stripped = pathname.startsWith('/') ? pathname.slice(1) : pathname;
+  // Exact match against a known leaf key
+  if (allLeafKeys.includes(stripped)) {
+    return stripped;
+  }
+  // Longest prefix match: '/clinical/documentation-sessions/xyz' →
+  // 'clinical/documentation-sessions'
+  const prefixMatch = allLeafKeys
+    .filter((k) => stripped === k || stripped.startsWith(`${k}/`))
+    .sort((a, b) => b.length - a.length)[0];
+  if (prefixMatch) {
+    return prefixMatch;
+  }
+  // Fall back to the first path segment (handles '/clinical/:id', '/patients/:id')
+  return stripped.split('/')[0] || 'dashboard';
+};
+
+// Compute the set of parent menu keys that should be expanded so the selected
+// item is visible. For 'clinical/documentation-sessions' this opens 'patients'.
+const resolveOpenKeys = (selectedKey: string): string[] => {
+  const firstSegment = selectedKey.split('/')[0];
+  const openKeys: string[] = [];
+  const contains = (children: typeof menuItems, target: string): boolean =>
+    children.some(
+      (c) => c.key === target || (c.children ? contains(c.children, target) : false),
+    );
+  for (const item of menuItems) {
+    if (item.children && (contains(item.children, selectedKey) || contains(item.children, firstSegment))) {
+      openKeys.push(item.key);
+    }
+  }
+  return openKeys;
+};
+
 const MainLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { sidebarCollapsed, toggleSidebar, unreadCount } = useAppStore();
   const { user, logout } = useAuthStore();
   const [isMobile, setIsMobile] = useState(false);
+  const [openKeys, setOpenKeys] = useState<string[]>(() =>
+    resolveOpenKeys(resolveSelectedKey(location.pathname)),
+  );
 
   useEffect(() => {
     const handleResize = () => {
@@ -123,7 +185,26 @@ const MainLayout: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedKey = location.pathname.split('/')[1] || 'dashboard';
+  const selectedKey = resolveSelectedKey(location.pathname);
+
+  // When the route changes, ensure the selected item's parent submenu is open
+  // (so direct navigation to a nested path reveals the item). We only ADD — we
+  // never force-close submenus the user has manually opened. The user can still
+  // collapse any submenu via onOpenChange afterwards.
+  useEffect(() => {
+    const required = resolveOpenKeys(selectedKey);
+    setOpenKeys((prev) => {
+      const merged = Array.from(new Set([...prev, ...required]));
+      // Avoid unnecessary state update
+      return merged.length === prev.length && merged.every((k) => prev.includes(k))
+        ? prev
+        : merged;
+    });
+  }, [selectedKey]);
+
+  const handleOpenChange = (keys: string[]) => {
+    setOpenKeys(keys);
+  };
 
   const handleMenuClick = (info: { key: string }) => {
     navigate(`/${info.key}`);
@@ -241,6 +322,8 @@ const MainLayout: React.FC = () => {
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
+          openKeys={openKeys}
+          onOpenChange={handleOpenChange}
           items={user?.role === 'super_admin' ? menuItems : menuItems.filter((item) => item.key !== 'admin')}
           onClick={handleMenuClick}
           style={{

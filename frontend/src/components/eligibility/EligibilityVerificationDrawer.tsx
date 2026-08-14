@@ -1,10 +1,38 @@
-import React from 'react';
-import { Drawer, Descriptions, Tag, Card, Row, Col, Statistic, Divider, Space, Progress, Table, Typography } from 'antd';
+import React, { useState } from 'react';
+import {
+  Drawer,
+  Descriptions,
+  Tag,
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Divider,
+  Space,
+  Progress,
+  Table,
+  Typography,
+  Button,
+  Alert,
+  Spin,
+  Input,
+  Empty,
+  message,
+} from 'antd';
+import {
+  ThunderboltOutlined,
+  FileTextOutlined,
+  WarningOutlined,
+  DollarOutlined,
+  MedicineBoxOutlined,
+  CopyOutlined,
+} from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { EligibilityVerification, CoverageBenefit } from '../../types';
 import EligibilityStatusBadge from './EligibilityStatusBadge';
+import { eligibilityService } from '../../services/eligibilityService';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 interface Props {
   open: boolean;
@@ -12,11 +40,26 @@ interface Props {
   onClose: () => void;
 }
 
+interface AiAlert {
+  severity: 'info' | 'warning' | 'critical';
+  category: string;
+  message: string;
+  action: string;
+}
+
 export const EligibilityVerificationDrawer: React.FC<Props> = ({
   open,
   verification,
   onClose,
 }) => {
+  const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [aiAlerts, setAiAlerts] = useState<AiAlert[] | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [denialRisk, setDenialRisk] = useState<any>(null);
+  const [costEstimate, setCostEstimate] = useState<any>(null);
+  const [priorAuthLetter, setPriorAuthLetter] = useState<string | null>(null);
+  const [cptInput, setCptInput] = useState('99213, 99214');
+
   if (!verification) return null;
 
   const limitation = verification.benefitLimitations || {};
@@ -73,12 +116,104 @@ export const EligibilityVerificationDrawer: React.FC<Props> = ({
 
   const benefits: CoverageBenefit[] = (verification.benefits || []) as CoverageBenefit[];
 
+  const resetAi = () => {
+    setAiAlerts(null);
+    setAiSummary(null);
+    setDenialRisk(null);
+    setCostEstimate(null);
+    setPriorAuthLetter(null);
+  };
+
+  const handleFetchAlerts = async () => {
+    setAiLoading('alerts');
+    resetAi();
+    try {
+      const result = await eligibilityService.generateAlerts(verification.id);
+      setAiAlerts(result.alerts);
+      setAiSummary(result.summary);
+    } catch {
+      message.error('Failed to generate AI alerts');
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleFetchSummary = async () => {
+    setAiLoading('summary');
+    resetAi();
+    try {
+      const result = await eligibilityService.generateSummary(verification.id);
+      setAiSummary(result.summary);
+    } catch {
+      message.error('Failed to generate AI summary');
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleFetchDenialRisk = async () => {
+    setAiLoading('denial');
+    resetAi();
+    try {
+      const result = await eligibilityService.assessDenialRisk(verification.id);
+      setDenialRisk(result);
+    } catch {
+      message.error('Failed to assess denial risk');
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleFetchCostEstimate = async () => {
+    setAiLoading('cost');
+    resetAi();
+    try {
+      const codes = cptInput.split(',').map((c) => c.trim()).filter(Boolean);
+      const result = await eligibilityService.estimateResponsibility(verification.id, codes);
+      setCostEstimate(result);
+    } catch {
+      message.error('Failed to estimate patient responsibility');
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleFetchPriorAuth = async () => {
+    setAiLoading('priorauth');
+    resetAi();
+    try {
+      const result = await eligibilityService.generatePriorAuthLetter(verification.id);
+      setPriorAuthLetter(result.letter);
+    } catch {
+      message.error('Failed to generate prior auth letter');
+    } finally {
+      setAiLoading(null);
+    }
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    message.success('Copied to clipboard');
+  };
+
+  const severityColor = (sev: string) => {
+    if (sev === 'critical') return 'error';
+    if (sev === 'warning') return 'warning';
+    return 'info';
+  };
+
+  const riskColor = (level: string) => {
+    if (level === 'high') return 'red';
+    if (level === 'medium') return 'orange';
+    return 'green';
+  };
+
   return (
     <Drawer
       title="Eligibility Verification Details"
       width={720}
       open={open}
-      onClose={onClose}
+      onClose={() => { resetAi(); onClose(); }}
     >
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         {/* General Info */}
@@ -109,6 +244,183 @@ export const EligibilityVerificationDrawer: React.FC<Props> = ({
             </Descriptions.Item>
             <Descriptions.Item label="Verified By">{verification.verifiedByName || '—'}</Descriptions.Item>
           </Descriptions>
+        </Card>
+
+        {/* AI Analysis Section */}
+        <Card
+          title={<Space><ThunderboltOutlined /> AI Analysis</Space>}
+          size="small"
+        >
+          <Space wrap style={{ marginBottom: 12 }}>
+            <Button
+              icon={<WarningOutlined />}
+              loading={aiLoading === 'alerts'}
+              onClick={handleFetchAlerts}
+            >
+              AI Alerts
+            </Button>
+            <Button
+              icon={<FileTextOutlined />}
+              loading={aiLoading === 'summary'}
+              onClick={handleFetchSummary}
+            >
+              Summary
+            </Button>
+            <Button
+              icon={<WarningOutlined />}
+              loading={aiLoading === 'denial'}
+              onClick={handleFetchDenialRisk}
+            >
+              Denial Risk
+            </Button>
+            <Button
+              icon={<DollarOutlined />}
+              loading={aiLoading === 'cost'}
+              onClick={handleFetchCostEstimate}
+            >
+              Cost Estimate
+            </Button>
+            <Button
+              icon={<MedicineBoxOutlined />}
+              loading={aiLoading === 'priorauth'}
+              onClick={handleFetchPriorAuth}
+            >
+              Prior Auth Letter
+            </Button>
+          </Space>
+
+          {/* CPT input for cost estimate */}
+          {aiLoading === 'cost' || costEstimate !== undefined ? null : null}
+
+          {aiLoading && (
+            <div style={{ textAlign: 'center', padding: 24 }}>
+              <Spin tip="AI is analyzing... this may take up to a minute" />
+              <div style={{ marginTop: 12 }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  Running {aiLoading} analysis. Please wait...
+                </Text>
+              </div>
+            </div>
+          )}
+
+          {/* AI Alerts */}
+          {aiAlerts && (
+            <>
+              {aiSummary && (
+                <Alert
+                  type="info"
+                  message="Summary"
+                  description={aiSummary}
+                  style={{ marginBottom: 12 }}
+                  showIcon
+                />
+              )}
+              {aiAlerts.map((alert, i) => (
+                <Alert
+                  key={i}
+                  type={severityColor(alert.severity) as any}
+                  message={`[${alert.category}] ${alert.message}`}
+                  description={`Action: ${alert.action}`}
+                  style={{ marginBottom: 8 }}
+                  showIcon
+                />
+              ))}
+            </>
+          )}
+
+          {/* AI Summary only */}
+          {aiSummary && !aiAlerts && (
+            <Card size="small" style={{ background: '#f6ffed' }}>
+              <Paragraph>{aiSummary}</Paragraph>
+            </Card>
+          )}
+
+          {/* Denial Risk */}
+          {denialRisk && (
+            <>
+              <Space style={{ marginBottom: 12 }}>
+                <Tag color={riskColor(denialRisk.riskLevel)} style={{ fontSize: 14, padding: '4px 12px' }}>
+                  {denialRisk.riskLevel?.toUpperCase()} RISK ({denialRisk.riskScore}/100)
+                </Tag>
+              </Space>
+              <Paragraph type="secondary">{denialRisk.summary}</Paragraph>
+              {denialRisk.riskFactors?.length > 0 && (
+                <>
+                  <Text strong>Risk Factors:</Text>
+                  {denialRisk.riskFactors.map((rf: any, i: number) => (
+                    <Alert
+                      key={i}
+                      type={rf.severity === 'high' ? 'error' : rf.severity === 'medium' ? 'warning' : 'info'}
+                      message={rf.factor}
+                      description={rf.recommendation}
+                      style={{ marginBottom: 8, marginTop: 4 }}
+                      showIcon
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
+          {/* Cost Estimate */}
+          {costEstimate && (
+            <>
+              <Input
+                placeholder="CPT codes (comma-separated)"
+                value={cptInput}
+                onChange={(e) => setCptInput(e.target.value)}
+                style={{ marginBottom: 12, maxWidth: 300 }}
+              />
+              {costEstimate.estimates?.length > 0 && (
+                <Table
+                  dataSource={costEstimate.estimates}
+                  columns={[
+                    { title: 'CPT', dataIndex: 'cptCode', key: 'cptCode', width: 80 },
+                    { title: 'Description', dataIndex: 'description', key: 'description' },
+                    { title: 'Allowed', dataIndex: 'allowedAmount', key: 'allowedAmount', render: (v: number) => `$${v?.toFixed(2)}` },
+                    { title: 'Patient', dataIndex: 'patientResponsibility', key: 'patientResponsibility', render: (v: number) => `$${v?.toFixed(2)}` },
+                    { title: 'Payer', dataIndex: 'payerResponsibility', key: 'payerResponsibility', render: (v: number) => `$${v?.toFixed(2)}` },
+                  ]}
+                  rowKey="cptCode"
+                  pagination={false}
+                  size="small"
+                  bordered
+                  style={{ marginBottom: 12 }}
+                />
+              )}
+              <Statistic
+                title="Total Patient Responsibility"
+                value={costEstimate.totalPatientResponsibility}
+                prefix="$"
+                precision={2}
+                valueStyle={{ color: '#1890ff' }}
+              />
+              {costEstimate.notes && (
+                <Paragraph type="secondary" style={{ marginTop: 8 }}>{costEstimate.notes}</Paragraph>
+              )}
+            </>
+          )}
+
+          {/* Prior Auth Letter */}
+          {priorAuthLetter && (
+            <Card
+              size="small"
+              title={<Space><MedicineBoxOutlined /> Prior Authorization Letter</Space>}
+              extra={<Button size="small" icon={<CopyOutlined />} onClick={() => handleCopy(priorAuthLetter)}>Copy</Button>}
+            >
+              <Paragraph style={{ whiteSpace: 'pre-wrap', maxHeight: 400, overflow: 'auto' }}>
+                {priorAuthLetter}
+              </Paragraph>
+            </Card>
+          )}
+
+          {/* Empty state when no AI result loaded */}
+          {!aiLoading && !aiAlerts && !aiSummary && !denialRisk && !costEstimate && !priorAuthLetter && (
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description="Click a button above to run AI analysis on this verification"
+            />
+          )}
         </Card>
 
         {/* Coverage Period */}

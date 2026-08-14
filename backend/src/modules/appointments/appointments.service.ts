@@ -17,6 +17,7 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentDto } from './dto/query-appointment.dto';
 import { CreateAppointmentWithWorkflowDto, TransitionAppointmentDto } from './dto/appointment-workflow.dto';
 import { CreateProviderAvailabilityDto, UpdateProviderAvailabilityDto, CreateGroupAppointmentDto, UpdateGroupAppointmentDto } from './dto/provider-availability.dto';
+import { CreateProviderAvailabilityOverrideDto, UpdateProviderAvailabilityOverrideDto } from './dto/provider-availability-override.dto';
 import { WorkflowService } from '../workflow/workflow.service';
 import { CreateWorkflowInstanceDto } from '../workflow/dto/workflow-instance.dto';
 import { IntegrationsService } from '../integrations/integrations.service';
@@ -268,6 +269,19 @@ export class AppointmentsService {
     const startTime = new Date(dto.startTime);
     const endTime = new Date(dto.endTime);
 
+    // Prevent booking appointments in the past
+    const now = new Date();
+    if (startTime < now) {
+      throw new BadRequestException(
+        'Cannot book an appointment in the past. Please select a future date and time.',
+      );
+    }
+    if (endTime <= startTime) {
+      throw new BadRequestException(
+        'Appointment end time must be after the start time.',
+      );
+    }
+
     const overlapping = await this.appointmentRepository
       .createQueryBuilder('appointment')
       .where('appointment.tenantId = :tenantId', { tenantId })
@@ -387,6 +401,19 @@ export class AppointmentsService {
       const startTime = dto.startTime ? new Date(dto.startTime) : appointment.startTime;
       const endTime = dto.endTime ? new Date(dto.endTime) : appointment.endTime;
       const providerId = dto.providerId || appointment.providerId;
+
+      // Prevent rescheduling to a past time
+      const now = new Date();
+      if (startTime < now) {
+        throw new BadRequestException(
+          'Cannot reschedule an appointment to a past date and time.',
+        );
+      }
+      if (endTime <= startTime) {
+        throw new BadRequestException(
+          'Appointment end time must be after the start time.',
+        );
+      }
 
       const overlapping = await this.appointmentRepository
         .createQueryBuilder('appointment')
@@ -706,6 +733,65 @@ export class AppointmentsService {
   }
 
   /**
+   * Find all overrides for a specific provider
+   */
+  async findOverridesByProvider(
+    tenantId: string,
+    providerId: string,
+  ): Promise<ProviderAvailabilityOverride[]> {
+    return this.overrideRepository.find({
+      where: { tenantId, providerId },
+      order: { overrideDate: 'ASC' },
+    });
+  }
+
+  /**
+   * Create a provider availability override
+   */
+  async createOverride(
+    tenantId: string,
+    dto: CreateProviderAvailabilityOverrideDto,
+  ): Promise<ProviderAvailabilityOverride> {
+    const override = this.overrideRepository.create({
+      ...dto,
+      tenantId,
+    });
+    const saved = await this.overrideRepository.save(override);
+    return saved;
+  }
+
+  /**
+   * Update a provider availability override
+   */
+  async updateOverride(
+    tenantId: string,
+    id: string,
+    dto: UpdateProviderAvailabilityOverrideDto,
+  ): Promise<ProviderAvailabilityOverride> {
+    const existing = await this.overrideRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Override with id "${id}" not found`);
+    }
+    Object.assign(existing, dto);
+    return this.overrideRepository.save(existing);
+  }
+
+  /**
+   * Soft-delete a provider availability override
+   */
+  async deleteOverride(tenantId: string, id: string): Promise<void> {
+    const existing = await this.overrideRepository.findOne({
+      where: { id, tenantId },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Override with id "${id}" not found`);
+    }
+    await this.overrideRepository.softDelete(id);
+  }
+
+  /**
    * Find availability for a provider on a specific day
    */
   async findAvailabilityByProviderAndDay(
@@ -817,9 +903,20 @@ export class AppointmentsService {
       const slotDurationMin = availability.slotDuration || 30;
       const bufferMin = availability.bufferMinutes || 0;
 
+      // Determine the current time so we can skip slots that are already in
+      // the past. We compare against the slot start, so a slot whose start has
+      // not yet passed remains bookable even if it is "today".
+      const now = new Date();
+
       for (let t = new Date(windowStart); t < windowEnd; ) {
         const slotEnd = new Date(t.getTime() + slotDurationMin * 60000);
         if (slotEnd > windowEnd) break;
+
+        // Skip slots that have already started — no booking in the past
+        if (t <= now) {
+          t.setTime(slotEnd.getTime() + bufferMin * 60000);
+          continue;
+        }
 
         // Check whether an existing appointment overlaps this slot
         const existingCount = await this.appointmentRepository

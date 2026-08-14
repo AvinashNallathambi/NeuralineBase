@@ -292,7 +292,9 @@ export class EligibilityService {
       policyNumber: v.policyNumber || insurance?.policyNumber || null,
       groupNumber: v.groupNumber || insurance?.groupNumber || null,
       subscriberName: insurance?.subscriberName || null,
-      subscriberDob: insurance?.subscriberDob ? insurance.subscriberDob.toISOString().split('T')[0] : null,
+      subscriberDob: insurance?.subscriberDob
+        ? new Date(insurance.subscriberDob as Date | string).toISOString().split('T')[0]
+        : null,
       subscriberRelation: insurance?.subscriberRelation || null,
       serviceType: v.serviceType || '30',
       appointmentId: v.appointmentId,

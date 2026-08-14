@@ -202,6 +202,12 @@ jobs:
             exit 1
           fi
 
+          # Check that .env.example doesn't ship a live Stripe key (security risk)
+          if grep -qE 'STRIPE_API_KEY=sk_live_' .env.example backend/.env.example 2>/dev/null; then
+            echo "❌ Live Stripe key found in .env.example — never commit real keys"
+            exit 1
+          fi
+
           # Check that all CREATE TABLE/INDEX use IF NOT EXISTS (prevent re-run failures)
           BARE_CREATE=$(grep -r 'CREATE TABLE "' backend/src/migrations/ | grep -v 'IF NOT EXISTS' | wc -l)
           if [ "$BARE_CREATE" -gt 0 ]; then

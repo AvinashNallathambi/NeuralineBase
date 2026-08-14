@@ -138,6 +138,18 @@ const AppointmentPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
+
+  // Expose filter setters on window for E2E tests. Ant Design v6 Select
+  // doesn't respond reliably to Playwright's click/keyboard events, so
+  // tests set filters via this global API instead.
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__setProviderFilter = setProviderFilter;
+      (window as any).__setStatusFilter = setStatusFilter;
+      (window as any).__setTypeFilter = setTypeFilter;
+      (window as any).__setDateRange = setDateRange;
+    }
+  }, [setProviderFilter, setStatusFilter, setTypeFilter, setDateRange]);
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [form] = Form.useForm();
   const [isTelehealth, setIsTelehealth] = useState(false);
@@ -430,6 +442,18 @@ const AppointmentPage: React.FC = () => {
   // ── New appointment handler ──
   const handleNewAppointment = async (values: Record<string, unknown>) => {
     try {
+      // Guard against past-time bookings even if the picker validation is
+      // somehow bypassed (e.g. via time-slot click).
+      const apptDate = values.date as dayjs.Dayjs;
+      const timeRange = values.timeRange as [dayjs.Dayjs, dayjs.Dayjs] | undefined;
+      if (apptDate && timeRange) {
+        const start = apptDate.hour(timeRange[0].hour()).minute(timeRange[0].minute());
+        if (start.isBefore(dayjs())) {
+          message.error('Cannot book an appointment in the past. Please select a future time.');
+          return;
+        }
+      }
+
       if (isGroupAppointment) {
         // Create group appointment
         const groupDto = {
@@ -520,7 +544,33 @@ const AppointmentPage: React.FC = () => {
 
   // ── Click on time slot to create appointment ──
   const handleTimeSlotClick = (hour: number) => {
-    const startTime = selectedDate.hour(hour).minute(0);
+    let startTime = selectedDate.hour(hour).minute(0);
+    const now = dayjs();
+
+    // If the top of the hour is in the past (but the hour itself hasn't
+    // fully elapsed), round up to the next 15-minute increment so the user
+    // can still book within the current hour.
+    if (startTime.isBefore(now)) {
+      const endOfHour = selectedDate.hour(hour).minute(59).second(59);
+      if (endOfHour.isBefore(now)) {
+        // The entire hour has passed — block the click
+        message.warning('Cannot book an appointment in the past. Please select a future time slot.');
+        return;
+      }
+      // Round up to the next 15-minute mark that's still in the future
+      const nowPlusBuffer = now.add(1, 'minute');
+      let minute = Math.ceil(nowPlusBuffer.minute() / 15) * 15;
+      let roundedHour = nowPlusBuffer.hour();
+      if (minute >= 60) {
+        minute = 0;
+        roundedHour += 1;
+      }
+      startTime = selectedDate.hour(roundedHour).minute(minute);
+      if (startTime.isBefore(nowPlusBuffer)) {
+        startTime = startTime.add(15, 'minute');
+      }
+    }
+
     const endTime = startTime.add(1, 'hour');
 
     form.setFieldsValue({
@@ -624,7 +674,7 @@ const AppointmentPage: React.FC = () => {
   //  DAY VIEW - Hourly timeline for one day
   // ═══════════════════════════════════════════
   const DayView: React.FC = () => {
-    const dayAppts = appointments
+    const dayAppts = filtered
       .filter((a) => dayjs(a.startTime).isSame(selectedDate, 'day'))
       .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
@@ -670,6 +720,12 @@ const AppointmentPage: React.FC = () => {
 
           {HOURS.map((hour) => {
             const hourAppts = dayAppts.filter((a) => dayjs(a.startTime).hour() === hour);
+            // An hour row is fully past only when the entire hour has elapsed.
+            // This keeps the current hour clickable so users can still book
+            // upcoming 15-min slots within it (e.g. at 13:29 the 1 PM row
+            // remains active for 13:30 / 13:45 bookings).
+            const hourEnd = selectedDate.hour(hour).minute(59).second(59);
+            const isPast = hourEnd.isBefore(dayjs());
             return (
               <div
                 key={hour}
@@ -677,6 +733,7 @@ const AppointmentPage: React.FC = () => {
                   display: 'flex',
                   minHeight: 80,
                   borderBottom: '1px solid #f0f0f0',
+                  background: isPast ? '#f5f5f5' : 'transparent',
                 }}
               >
                 {/* Time label */}
@@ -687,9 +744,10 @@ const AppointmentPage: React.FC = () => {
                     padding: '8px 12px 8px 8px',
                     textAlign: 'right',
                     borderRight: '1px solid #f0f0f0',
-                    color: '#8c8c8c',
+                    color: isPast ? '#bfbfbf' : '#8c8c8c',
                     fontSize: 12,
                     fontWeight: 500,
+                    textDecoration: isPast ? 'line-through' : 'none',
                   }}
                 >
                   {dayjs().hour(hour).minute(0).format('h:mm A')}
@@ -697,12 +755,23 @@ const AppointmentPage: React.FC = () => {
 
                 {/* Appointments in this hour */}
                 <div
-                  style={{ flex: 1, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer' }}
-                  onClick={() => handleTimeSlotClick(hour)}
+                  data-testid={`time-slot-${hour}`}
+                  style={{
+                    flex: 1,
+                    padding: '4px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4,
+                    cursor: isPast ? 'not-allowed' : 'pointer',
+                    opacity: isPast ? 0.5 : 1,
+                  }}
+                  onClick={() => !isPast && handleTimeSlotClick(hour)}
                 >
                   {hourAppts.map((appt) => (
                     <div
                       key={appt.id}
+                      data-testid="appointment-card"
+                      data-appt-id={appt.id}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -802,7 +871,7 @@ const AppointmentPage: React.FC = () => {
       apptsByDayHour[key] = {};
       HOURS.forEach((h) => { apptsByDayHour[key][h] = []; });
     });
-    appointments.forEach((a) => {
+    filtered.forEach((a) => {
       const d = dayjs(a.startTime);
       const key = d.format('YYYY-MM-DD');
       const h = d.hour();
@@ -819,7 +888,8 @@ const AppointmentPage: React.FC = () => {
             <div style={{ borderRight: '1px solid #f0f0f0' }} />
             {weekDays.map((d) => {
               const isToday = d.format('YYYY-MM-DD') === todayStr;
-              const dayCount = appointments.filter((a) => dayjs(a.startTime).isSame(d, 'day')).length;
+              const isPastDay = d.endOf('day').isBefore(dayjs());
+              const dayCount = filtered.filter((a) => dayjs(a.startTime).isSame(d, 'day')).length;
               return (
                 <div
                   key={d.format('YYYY-MM-DD')}
@@ -827,12 +897,13 @@ const AppointmentPage: React.FC = () => {
                     textAlign: 'center',
                     padding: '12px 4px',
                     borderRight: '1px solid #f0f0f0',
-                    background: isToday ? '#e6f7f8' : '#fafafa',
+                    background: isToday ? '#e6f7f8' : isPastDay ? '#f0f0f0' : '#fafafa',
                     cursor: 'pointer',
+                    opacity: isPastDay ? 0.6 : 1,
                   }}
                   onClick={() => { setSelectedDate(d); setView('day'); }}
                 >
-                  <div style={{ fontSize: 11, color: '#8c8c8c', textTransform: 'uppercase', fontWeight: 600 }}>
+                  <div style={{ fontSize: 11, color: isPastDay ? '#bfbfbf' : '#8c8c8c', textTransform: 'uppercase', fontWeight: 600 }}>
                     {d.format('ddd')}
                   </div>
                   <div
@@ -846,8 +917,9 @@ const AppointmentPage: React.FC = () => {
                       fontSize: 16,
                       fontWeight: isToday ? 700 : 500,
                       background: isToday ? '#0D7C8A' : 'transparent',
-                      color: isToday ? '#fff' : '#1a2b3c',
+                      color: isToday ? '#fff' : isPastDay ? '#bfbfbf' : '#1a2b3c',
                       margin: '4px auto',
+                      textDecoration: isPastDay ? 'line-through' : 'none',
                     }}
                   >
                     {d.date()}
@@ -870,8 +942,21 @@ const AppointmentPage: React.FC = () => {
                 {weekDays.map((d) => {
                   const key = d.format('YYYY-MM-DD');
                   const hourAppts = apptsByDayHour[key]?.[hour] || [];
+                  // Only grey out the cell when the entire hour has passed,
+                  // so the current hour remains usable for partial bookings.
+                  const cellEnd = d.hour(hour).minute(59).second(59);
+                  const isPastCell = cellEnd.isBefore(dayjs());
                   return (
-                    <div key={key} style={{ borderRight: '1px solid #f5f5f5', padding: '2px 3px', minHeight: 64 }}>
+                    <div
+                      key={key}
+                      style={{
+                        borderRight: '1px solid #f5f5f5',
+                        padding: '2px 3px',
+                        minHeight: 64,
+                        background: isPastCell ? '#f5f5f5' : 'transparent',
+                        opacity: isPastCell ? 0.5 : 1,
+                      }}
+                    >
                       {hourAppts.map((appt) => (
                         <ApptCard key={appt.id} appt={appt} compact />
                       ))}
@@ -916,7 +1001,7 @@ const AppointmentPage: React.FC = () => {
 
     // Group appointments by day
     const apptsByDay: Record<string, Appointment[]> = {};
-    appointments.forEach((a) => {
+    filtered.forEach((a) => {
       const key = dayjs(a.startTime).format('YYYY-MM-DD');
       if (!apptsByDay[key]) apptsByDay[key] = [];
       apptsByDay[key].push(a);
@@ -938,24 +1023,26 @@ const AppointmentPage: React.FC = () => {
           {cells.map((cell, idx) => {
             const dateStr = cell.date.format('YYYY-MM-DD');
             const isToday = dateStr === todayStr;
+            const isPast = cell.date.endOf('day').isBefore(dayjs());
             const dayAppts = (apptsByDay[dateStr] || []).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
 
             return (
               <div
                 key={idx}
+                data-testid={`calendar-day-${dateStr}`}
                 style={{
                   minHeight: 100,
                   padding: 4,
                   borderRight: '1px solid #f0f0f0',
                   borderBottom: '1px solid #f0f0f0',
-                  background: isToday ? '#e6f7f8' : cell.inMonth ? '#fff' : '#fafafa',
-                  opacity: cell.inMonth ? 1 : 0.5,
+                  background: isToday ? '#e6f7f8' : isPast ? '#f0f0f0' : cell.inMonth ? '#fff' : '#fafafa',
+                  opacity: cell.inMonth ? (isPast ? 0.5 : 1) : 0.5,
                   cursor: 'pointer',
                   transition: 'background 0.15s',
                 }}
                 onClick={() => { setSelectedDate(cell.date); setView('day'); }}
-                onMouseEnter={(e) => { if (!isToday) e.currentTarget.style.background = '#f5f5f5'; }}
-                onMouseLeave={(e) => { if (!isToday) e.currentTarget.style.background = cell.inMonth ? '#fff' : '#fafafa'; }}
+                onMouseEnter={(e) => { if (!isToday && !isPast) e.currentTarget.style.background = '#f5f5f5'; }}
+                onMouseLeave={(e) => { if (!isToday && !isPast) e.currentTarget.style.background = cell.inMonth ? '#fff' : '#fafafa'; }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                   <div
@@ -969,7 +1056,8 @@ const AppointmentPage: React.FC = () => {
                       fontSize: 13,
                       fontWeight: isToday ? 700 : 400,
                       background: isToday ? '#0D7C8A' : 'transparent',
-                      color: isToday ? '#fff' : cell.inMonth ? '#1a2b3c' : '#bfbfbf',
+                      color: isToday ? '#fff' : isPast ? '#bfbfbf' : cell.inMonth ? '#1a2b3c' : '#bfbfbf',
+                      textDecoration: isPast ? 'line-through' : 'none',
                     }}
                   >
                     {cell.date.date()}
@@ -1003,7 +1091,7 @@ const AppointmentPage: React.FC = () => {
 
     // Count appointments per day for the whole year
     const apptCounts: Record<string, number> = {};
-    appointments.forEach((a) => {
+    filtered.forEach((a) => {
       const d = dayjs(a.startTime);
       if (d.year() === year) {
         const key = d.format('YYYY-MM-DD');
@@ -1072,6 +1160,7 @@ const AppointmentPage: React.FC = () => {
                     const dateStr = month.date(day).format('YYYY-MM-DD');
                     const count = apptCounts[dateStr] || 0;
                     const isToday = dateStr === todayStr;
+                    const isPast = month.date(day).endOf('day').isBefore(dayjs());
 
                     return (
                       <Tooltip key={idx} title={count > 0 ? `${month.date(day).format('MMM D')}: ${count} appointment${count > 1 ? 's' : ''}` : month.date(day).format('MMM D')}>
@@ -1086,10 +1175,11 @@ const AppointmentPage: React.FC = () => {
                             justifyContent: 'center',
                             fontSize: 10,
                             fontWeight: isToday ? 700 : 400,
-                            background: isToday ? '#0D7C8A' : getHeatColor(count),
-                            color: isToday ? '#fff' : count > 2 ? '#fff' : '#595959',
+                            background: isToday ? '#0D7C8A' : isPast ? '#f0f0f0' : getHeatColor(count),
+                            color: isToday ? '#fff' : isPast ? '#bfbfbf' : count > 2 ? '#fff' : '#595959',
                             cursor: 'pointer',
                             transition: 'transform 0.15s',
+                            textDecoration: isPast ? 'line-through' : 'none',
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1248,17 +1338,17 @@ const AppointmentPage: React.FC = () => {
               // Fallback to hardcoded status-based actions when no workflow
               <>
                 {s === 'scheduled' && (
-                  <Button size="small" type="primary" ghost icon={<LoginOutlined />} onClick={() => changeStatus(record.id, 'checked_in')}>Check In</Button>
+                  <Button size="small" type="primary" ghost icon={<LoginOutlined />} data-testid="action-check-in" onClick={() => changeStatus(record.id, 'checked_in')}>Check In</Button>
                 )}
                 {(s === 'confirmed' || s === 'checked_in') && (
-                  <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => changeStatus(record.id, 'in_progress')}>Start</Button>
+                  <Button size="small" type="primary" icon={<PlayCircleOutlined />} data-testid="action-start" onClick={() => changeStatus(record.id, 'in_progress')}>Start</Button>
                 )}
                 {s === 'in_progress' && (
-                  <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => changeStatus(record.id, 'completed')}>Complete</Button>
+                  <Button size="small" style={{ borderColor: '#52c41a', color: '#52c41a' }} icon={<CheckCircleOutlined />} data-testid="action-complete" onClick={() => changeStatus(record.id, 'completed')}>Complete</Button>
                 )}
                 {s !== 'completed' && s !== 'cancelled' && s !== 'no_show' && (
                   <Popconfirm title="Cancel this appointment?" onConfirm={() => changeStatus(record.id, 'cancelled')}>
-                    <Button size="small" danger icon={<CloseCircleOutlined />}>Cancel</Button>
+                    <Button size="small" danger icon={<CloseCircleOutlined />} data-testid="action-cancel">Cancel</Button>
                   </Popconfirm>
                 )}
               </>
@@ -1270,6 +1360,7 @@ const AppointmentPage: React.FC = () => {
                   size="small"
                   icon={<VideoCameraOutlined />}
                   type="link"
+                  data-testid="join-call-button"
                   onClick={async (e) => {
                     e.stopPropagation();
                     try {
@@ -1362,7 +1453,7 @@ const AppointmentPage: React.FC = () => {
               { label: 'List', value: 'list', icon: <UnorderedListOutlined /> },
             ]}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openNewAppointmentDrawer}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openNewAppointmentDrawer} data-testid="new-appointment-button">
             New Appointment
           </Button>
         </Space>
@@ -1379,10 +1470,12 @@ const AppointmentPage: React.FC = () => {
               <Title level={4} style={{ margin: 0, minWidth: 200 }}>{getHeaderLabel()}</Title>
             </Space>
             <Space wrap>
-              <Select placeholder="Provider" allowClear style={{ minWidth: 180 }} value={providerFilter} onChange={setProviderFilter}
+              <Select placeholder="Provider" allowClear showSearch style={{ minWidth: 180 }} value={providerFilter} onChange={setProviderFilter}
+                data-testid="calendar-provider-filter"
                 options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
               />
-              <Select placeholder="Status" allowClear style={{ minWidth: 130 }} value={statusFilter} onChange={setStatusFilter}
+              <Select placeholder="Status" allowClear showSearch style={{ minWidth: 130 }} value={statusFilter} onChange={setStatusFilter}
+                data-testid="calendar-status-filter"
                 options={uniqueStatuses.map((status) => ({
                   label: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
                   value: status,
@@ -1398,28 +1491,40 @@ const AppointmentPage: React.FC = () => {
         <Card bodyStyle={{ padding: 16 }} style={{ marginBottom: 16 }}>
           <Row gutter={[16, 16]} align="middle">
             <Col xs={24} sm={12} md={6}>
-              <Select placeholder="Provider" allowClear style={{ width: '100%' }} value={providerFilter} onChange={setProviderFilter}
+              <Select placeholder="Provider" allowClear showSearch style={{ width: '100%' }} value={providerFilter} onChange={setProviderFilter}
+                data-testid="list-provider-filter"
                 options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
               />
             </Col>
             <Col xs={12} sm={6} md={4}>
-              <Select placeholder="Status" allowClear style={{ width: '100%' }} value={statusFilter} onChange={setStatusFilter}
-                options={uniqueStatuses.map((status) => ({
-                  label: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-                  value: status,
-                }))}
+              <Select placeholder="Status" allowClear showSearch style={{ width: '100%' }} value={statusFilter} onChange={setStatusFilter}
+                data-testid="list-status-filter"
+                options={[
+                  { label: 'Scheduled', value: 'scheduled' },
+                  { label: 'Checked In', value: 'checked_in' },
+                  { label: 'In Progress', value: 'in_progress' },
+                  { label: 'Completed', value: 'completed' },
+                  { label: 'Cancelled', value: 'cancelled' },
+                  { label: 'No Show', value: 'no_show' },
+                ]}
               />
             </Col>
             <Col xs={12} sm={6} md={4}>
-              <Select placeholder="Type" allowClear style={{ width: '100%' }} value={typeFilter} onChange={setTypeFilter}
-                options={uniqueTypes.map((type) => ({
-                  label: type.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-                  value: type,
-                }))}
+              <Select placeholder="Type" allowClear showSearch style={{ width: '100%' }} value={typeFilter} onChange={setTypeFilter}
+                data-testid="list-type-filter"
+                options={[
+                  { label: 'New Patient', value: 'new_patient' },
+                  { label: 'Follow Up', value: 'follow_up' },
+                  { label: 'Annual Physical', value: 'annual_physical' },
+                  { label: 'Urgent Care', value: 'urgent_care' },
+                  { label: 'Telehealth', value: 'telehealth' },
+                  { label: 'Procedure', value: 'procedure' },
+                  { label: 'Consultation', value: 'consultation' },
+                ]}
               />
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <RangePicker style={{ width: '100%' }} onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null] | null)} />
+              <RangePicker style={{ width: '100%' }} data-testid="list-date-range-picker" onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null] | null)} />
             </Col>
           </Row>
         </Card>
@@ -1441,6 +1546,7 @@ const AppointmentPage: React.FC = () => {
                 pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}` }}
                 scroll={{ x: 1000 }}
                 size="middle"
+                onRow={(record) => ({ 'data-appointment-id': record.id, className: `appt-row-${record.id}` } as any)}
               />
             </Card>
           )}
@@ -1462,7 +1568,7 @@ const AppointmentPage: React.FC = () => {
         extra={
           <Space>
             <Button onClick={() => { setDrawerOpen(false); form.resetFields(); setIsTelehealth(false); setAvailableSlots([]); setSlotsChecked(false); }}>Cancel</Button>
-            <Button type="primary" onClick={() => form.submit()}>Schedule</Button>
+            <Button type="primary" onClick={() => form.submit()} data-testid="appointment-schedule-button">Schedule</Button>
           </Space>
         }
       >
@@ -1482,6 +1588,7 @@ const AppointmentPage: React.FC = () => {
                 optionFilterProp="label"
                 loading={patientsLoading}
                 options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+                data-testid="appointment-patient-select"
               />
             </Form.Item>
           ) : (
@@ -1529,6 +1636,7 @@ const AppointmentPage: React.FC = () => {
               loading={staffUsersLoading}
               options={providerOptions.map((p) => ({ label: p.name, value: p.id }))}
               notFoundContent={staffUsersLoading ? 'Loading…' : 'No providers found. Add users in Settings → Users & Roles.'}
+              data-testid="appointment-provider-select"
             />
           </Form.Item>
           <Form.Item name="type" label="Appointment Type" rules={[{ required: true, message: 'Select type' }]}>
@@ -1543,6 +1651,7 @@ const AppointmentPage: React.FC = () => {
                   { label: 'Group Session', value: 'group_session' },
                 ] : []),
               ]}
+              data-testid="appointment-type-select"
             />
           </Form.Item>
 
@@ -1560,12 +1669,43 @@ const AppointmentPage: React.FC = () => {
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="date" label="Date" rules={[{ required: true, message: 'Select date' }]}>
-                <DatePicker style={{ width: '100%' }} />
+                <DatePicker
+                  style={{ width: '100%' }}
+                  data-testid="appointment-date-picker"
+                  disabledDate={(current) =>
+                    current && current.endOf('day') < dayjs().startOf('day')
+                  }
+                />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="timeRange" label="Time" rules={[{ required: true, message: 'Select time' }]}>
-                <DatePicker.RangePicker picker="time" format="h:mm A" minuteStep={15} style={{ width: '100%' }} />
+                <DatePicker.RangePicker
+                  picker="time"
+                  format="h:mm A"
+                  minuteStep={15}
+                  style={{ width: '100%' }}
+                  data-testid="appointment-time-range-picker"
+                  disabledTime={(current) => {
+                    // Disable past hours/minutes/seconds when the selected
+                    // date is today.
+                    const now = dayjs();
+                    if (!current || !current.isSame(now, 'day')) {
+                      return {};
+                    }
+                    return {
+                      disabledHours: () => Array.from({ length: now.hour() }, (_, i) => i),
+                      disabledMinutes: (selectedHour: number) =>
+                        selectedHour === now.hour()
+                          ? Array.from({ length: now.minute() }, (_, i) => i)
+                          : [],
+                      disabledSeconds: (selectedHour: number, selectedMinute: number) =>
+                        selectedHour === now.hour() && selectedMinute === now.minute()
+                          ? Array.from({ length: now.second() }, (_, i) => i)
+                          : [],
+                    };
+                  }}
+                />
               </Form.Item>
             </Col>
           </Row>
@@ -1615,7 +1755,7 @@ const AppointmentPage: React.FC = () => {
             />
           )}
           <Form.Item name="isTelehealth" label="Telehealth" valuePropName="checked">
-            <Switch onChange={setIsTelehealth} />
+            <Switch onChange={setIsTelehealth} data-testid="appointment-telehealth-switch" />
           </Form.Item>
           {isTelehealth && (
             <div style={{ background: '#e6f7ff', border: '1px solid #91d5ff', borderRadius: 8, padding: '8px 12px', marginBottom: 24, marginTop: -12 }}>

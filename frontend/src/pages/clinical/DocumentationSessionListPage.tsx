@@ -158,7 +158,7 @@ const DocumentationSessionListPage: React.FC = () => {
     <div >
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
-          <Title level={5} style={{ margin: 0 }}>
+          <Title level={4} style={{ margin: 0 }}>
             <FileTextOutlined style={{ marginRight: 8, color: '#0D7C8A' }} />
             Documentation Sessions
           </Title>

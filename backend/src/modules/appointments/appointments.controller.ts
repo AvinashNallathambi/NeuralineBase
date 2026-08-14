@@ -27,6 +27,7 @@ import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentDto } from './dto/query-appointment.dto';
 import { CreateAppointmentWithWorkflowDto, TransitionAppointmentDto } from './dto/appointment-workflow.dto';
 import { CreateProviderAvailabilityDto, UpdateProviderAvailabilityDto, CreateGroupAppointmentDto, UpdateGroupAppointmentDto } from './dto/provider-availability.dto';
+import { CreateProviderAvailabilityOverrideDto, UpdateProviderAvailabilityOverrideDto } from './dto/provider-availability-override.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -81,6 +82,47 @@ export class AppointmentsController {
   @ApiResponse({ status: 200, description: 'List of all provider availability overrides' })
   async findAllOverrides(@Request() req: AuthenticatedRequest) {
     return this.appointmentsService.findAllOverrides(req.tenantId);
+  }
+
+  @Post('availability-overrides')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a provider availability override' })
+  @ApiResponse({ status: 201, description: 'Override created' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  async createOverride(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateProviderAvailabilityOverrideDto,
+  ) {
+    return this.appointmentsService.createOverride(req.tenantId, dto);
+  }
+
+  @Patch('availability-overrides/:id')
+  @Roles('admin', 'doctor', 'receptionist')
+  @ApiOperation({ summary: 'Update a provider availability override' })
+  @ApiParam({ name: 'id', type: String, description: 'Override UUID' })
+  @ApiResponse({ status: 200, description: 'Override updated' })
+  @ApiResponse({ status: 404, description: 'Override not found' })
+  async updateOverride(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateProviderAvailabilityOverrideDto,
+  ) {
+    return this.appointmentsService.updateOverride(req.tenantId, id, dto);
+  }
+
+  @Delete('availability-overrides/:id')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a provider availability override' })
+  @ApiParam({ name: 'id', type: String, description: 'Override UUID' })
+  @ApiResponse({ status: 204, description: 'Override deleted' })
+  @ApiResponse({ status: 404, description: 'Override not found' })
+  async deleteOverride(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.appointmentsService.deleteOverride(req.tenantId, id);
   }
 
   @Get(':id')

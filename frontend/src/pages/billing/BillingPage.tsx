@@ -35,12 +35,11 @@ import {
   CreditCardOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { billingService, EncounterClaim, ClaimLineItem } from '../../services/billingService';
+import { billingService, EncounterClaim } from '../../services/billingService';
 import { patientService } from '../../services/patientService';
-import {
-  commonDiagnosisCodes,
-  commonCPTCodes,
-} from '../../data/mockData';
+import { providerService, Provider } from '../../services/providerService';
+import { useAuthStore } from '../../store';
+import CptSearchInput from '../../components/superbills/CptSearchInput';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Title, Text } = Typography;
@@ -64,6 +63,7 @@ const BillingPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [claims, setClaims] = useState<EncounterClaim[]>([]);
   const [patients, setPatients] = useState<any[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
   const [form] = Form.useForm();
   const [serviceLines, setServiceLines] = useState<Array<{
     codeType?: string;
@@ -73,9 +73,14 @@ const BillingPage: React.FC = () => {
     unitPrice?: number;
   }>>([{}]);
 
+  const user = useAuthStore((state) => state.user);
+  const tenant = useAuthStore((state) => state.tenant);
+  const tenantId = tenant?.id || user?.tenantId || '';
+
   useEffect(() => {
     fetchClaims();
     fetchPatients();
+    fetchProviders();
   }, []);
 
   const fetchClaims = async () => {
@@ -96,6 +101,15 @@ const BillingPage: React.FC = () => {
       setPatients(result.data);
     } catch (error) {
       message.error('Failed to load patients');
+    }
+  };
+
+  const fetchProviders = async () => {
+    try {
+      const result = await providerService.findAll();
+      setProviders(result);
+    } catch (error) {
+      message.error('Failed to load providers');
     }
   };
 
@@ -141,15 +155,14 @@ const BillingPage: React.FC = () => {
     0
   );
 
-  const handleCPTSelect = (index: number, code: string) => {
-    const cpt = commonCPTCodes.find((c) => c.code === code);
+  const handleCPTSelect = (index: number, code: string, description: string, price?: number) => {
     const updated = [...serviceLines];
     updated[index] = {
       ...updated[index],
       codeType: 'CPT',
       code,
-      description: cpt?.description || '',
-      unitPrice: cpt?.price || 0,
+      description: description || '',
+      unitPrice: price || 0,
       quantity: updated[index].quantity || 1,
     };
     setServiceLines(updated);
@@ -158,13 +171,16 @@ const BillingPage: React.FC = () => {
   const handleSubmitClaim = async () => {
     try {
       const values = await form.validateFields();
+      const selectedProvider = providers.find((p) => p.id === values.providerId);
       const claimData = {
-        tenantId: 'default-tenant-id',
+        tenantId,
         patientId: values.patientId,
         patientName: patients.find((p) => p.id === values.patientId)?.fullName || '',
         providerId: values.providerId,
-        providerName: 'Dr. Sarah Chen',
-        providerNPI: '1234567890',
+        providerName: selectedProvider
+          ? `${selectedProvider.firstName} ${selectedProvider.lastName}`
+          : '',
+        providerNPI: selectedProvider?.npi || '',
         serviceDate: values.serviceDate.format('YYYY-MM-DD'),
         lineItems: serviceLines.filter((line) => line.code).map((line) => ({
           codeType: line.codeType || 'CPT',
@@ -455,11 +471,17 @@ const BillingPage: React.FC = () => {
             name="providerId"
             label="Provider"
             rules={[{ required: true, message: 'Select provider' }]}
-            initialValue="default-provider-id"
           >
             <Select
+              showSearch
               placeholder="Select provider..."
-              options={[{ value: 'default-provider-id', label: 'Dr. Sarah Chen' }]}
+              filterOption={(input, option) =>
+                (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+              }
+              options={providers.map((p) => ({
+                value: p.id,
+                label: `${p.firstName} ${p.lastName}${p.specialization ? ` (${p.specialization})` : ''}`,
+              }))}
             />
           </Form.Item>
 
@@ -487,19 +509,14 @@ const BillingPage: React.FC = () => {
               <Row gutter={8}>
                 <Col span={10}>
                   <Form.Item label="CPT Code" style={{ marginBottom: 8 }}>
-                    <Select
-                      showSearch
-                      placeholder="Select CPT..."
+                    <CptSearchInput
                       value={line.code}
-                      onChange={(val) => handleCPTSelect(index, val)}
-                      filterOption={(input, option) =>
-                        (option?.label as string)?.toLowerCase().includes(input.toLowerCase()) ?? false
+                      onSelect={(code, description, price) =>
+                        handleCPTSelect(index, code, description, price)
                       }
-                      options={commonCPTCodes.map((c) => ({
-                        value: c.code,
-                        label: `${c.code} - ${c.description}`,
-                      }))}
+                      placeholder="Search CPT..."
                       size="small"
+                      style={{ width: '100%' }}
                     />
                   </Form.Item>
                 </Col>

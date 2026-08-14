@@ -58,6 +58,47 @@ export class EligibilityController {
     return this.eligibilityService.findAll(req.tenantId, query);
   }
 
+  @Get('counts')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get verification counts grouped by status' })
+  @ApiResponse({ status: 200, description: 'Status counts for dashboard' })
+  async getCounts(@Request() req: AuthenticatedRequest) {
+    return this.eligibilityService.getCounts(req.tenantId);
+  }
+
+  @Get('patients/:patientId/history')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get verification history for a patient' })
+  @ApiParam({ name: 'patientId', type: String, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'Paginated verification history' })
+  async findHistoryByPatient(
+    @Request() req: AuthenticatedRequest,
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+    @Query() query: QueryInsuranceVerificationDto,
+  ) {
+    return this.eligibilityService.findHistoryByPatient(req.tenantId, patientId, query);
+  }
+
+  @Get('patients/:patientId/coverage')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get latest coverage summary for a patient' })
+  @ApiParam({ name: 'patientId', type: String, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'Coverage summary' })
+  async coverageSummary(
+    @Request() req: AuthenticatedRequest,
+    @Param('patientId', ParseUUIDPipe) patientId: string,
+  ): Promise<CoverageSummaryDto | null> {
+    return this.eligibilityService.coverageSummary(req.tenantId, patientId);
+  }
+
+  @Get('scheduled/status')
+  @Roles('admin')
+  @ApiOperation({ summary: 'Get status of scheduled eligibility verification jobs' })
+  @ApiResponse({ status: 200, description: 'Status of repeatable jobs' })
+  async getScheduledJobsStatus(@Request() req: AuthenticatedRequest) {
+    return this.eligibilitySchedulerService.getRepeatableJobs();
+  }
+
   @Get(':id')
   @Roles('admin', 'doctor', 'nurse', 'receptionist')
   @ApiOperation({ summary: 'Get verification by ID' })
@@ -88,6 +129,34 @@ export class EligibilityController {
       req.user.email,
       req.user.role,
     );
+  }
+
+  @Post('batch')
+  @Roles('admin', 'doctor', 'receptionist')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Run batch eligibility verification for multiple patients' })
+  @ApiBody({ schema: { type: 'object', properties: { patientIds: { type: 'array', items: { type: 'string' } } } } })
+  @ApiResponse({ status: 200, description: 'Batch verification results' })
+  async batchVerify(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: { patientIds: string[] },
+  ) {
+    return this.eligibilityService.batchVerify(
+      req.tenantId,
+      body.patientIds,
+      req.user.id,
+      req.user.email,
+      req.user.role,
+    );
+  }
+
+  @Post('scheduled/trigger')
+  @Roles('admin')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Manually trigger scheduled eligibility verification' })
+  @ApiResponse({ status: 200, description: 'Scheduled verification job triggered successfully' })
+  async triggerScheduledVerification(@Request() req: AuthenticatedRequest) {
+    return this.eligibilitySchedulerService.triggerScheduledVerification(req.tenantId);
   }
 
   @Post(':id/rerun')
@@ -145,75 +214,6 @@ export class EligibilityController {
       req.user.email,
       req.user.role,
     );
-  }
-
-  @Get('counts')
-  @Roles('admin', 'doctor', 'nurse', 'receptionist')
-  @ApiOperation({ summary: 'Get verification counts grouped by status' })
-  @ApiResponse({ status: 200, description: 'Status counts for dashboard' })
-  async getCounts(@Request() req: AuthenticatedRequest) {
-    return this.eligibilityService.getCounts(req.tenantId);
-  }
-
-  @Post('batch')
-  @Roles('admin', 'doctor', 'receptionist')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Run batch eligibility verification for multiple patients' })
-  @ApiBody({ schema: { type: 'object', properties: { patientIds: { type: 'array', items: { type: 'string' } } } } })
-  @ApiResponse({ status: 200, description: 'Batch verification results' })
-  async batchVerify(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: { patientIds: string[] },
-  ) {
-    return this.eligibilityService.batchVerify(
-      req.tenantId,
-      body.patientIds,
-      req.user.id,
-      req.user.email,
-      req.user.role,
-    );
-  }
-
-  @Get('patients/:patientId/history')
-  @Roles('admin', 'doctor', 'nurse', 'receptionist')
-  @ApiOperation({ summary: 'Get verification history for a patient' })
-  @ApiParam({ name: 'patientId', type: String, description: 'Patient UUID' })
-  @ApiResponse({ status: 200, description: 'Paginated verification history' })
-  async findHistoryByPatient(
-    @Request() req: AuthenticatedRequest,
-    @Param('patientId', ParseUUIDPipe) patientId: string,
-    @Query() query: QueryInsuranceVerificationDto,
-  ) {
-    return this.eligibilityService.findHistoryByPatient(req.tenantId, patientId, query);
-  }
-
-  @Get('patients/:patientId/coverage')
-  @Roles('admin', 'doctor', 'nurse', 'receptionist')
-  @ApiOperation({ summary: 'Get latest coverage summary for a patient' })
-  @ApiParam({ name: 'patientId', type: String, description: 'Patient UUID' })
-  @ApiResponse({ status: 200, description: 'Coverage summary' })
-  async coverageSummary(
-    @Request() req: AuthenticatedRequest,
-    @Param('patientId', ParseUUIDPipe) patientId: string,
-  ): Promise<CoverageSummaryDto | null> {
-    return this.eligibilityService.coverageSummary(req.tenantId, patientId);
-  }
-
-  @Post('scheduled/trigger')
-  @Roles('admin')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Manually trigger scheduled eligibility verification' })
-  @ApiResponse({ status: 200, description: 'Scheduled verification job triggered successfully' })
-  async triggerScheduledVerification(@Request() req: AuthenticatedRequest) {
-    return this.eligibilitySchedulerService.triggerScheduledVerification(req.tenantId);
-  }
-
-  @Get('scheduled/status')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Get status of scheduled eligibility verification jobs' })
-  @ApiResponse({ status: 200, description: 'Status of repeatable jobs' })
-  async getScheduledJobsStatus(@Request() req: AuthenticatedRequest) {
-    return this.eligibilitySchedulerService.getRepeatableJobs();
   }
 
   @Delete('scheduled')

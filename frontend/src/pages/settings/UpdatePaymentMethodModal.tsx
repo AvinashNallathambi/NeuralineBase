@@ -43,7 +43,21 @@ const StripeConfirmButton: React.FC<{
       });
 
       if (confirmError) {
-        setError(confirmError.message || 'Failed to confirm payment method');
+        // Handle specific Indian card 3DS/mandate errors with helpful guidance
+        const errMsg = confirmError.message || 'Failed to confirm payment method';
+        if (confirmError.code === 'authentication_required') {
+          setError(
+            'Your bank requires 3D Secure authentication. Please complete the OTP/verification ' +
+              'challenge prompted by your bank, then try again.',
+          );
+        } else if (confirmError.code === 'card_declined') {
+          setError(
+            `${errMsg} If this is an Indian card, ensure your bank supports e-mandates for ` +
+              'recurring payments and that you completed the OTP authentication.',
+          );
+        } else {
+          setError(errMsg);
+        }
         return;
       }
 
@@ -57,7 +71,18 @@ const StripeConfirmButton: React.FC<{
         message.success('Payment method updated successfully');
         onSuccess();
       } else if (setupIntent && setupIntent.status === 'requires_action') {
-        setError('Additional authentication required. Please complete the verification.');
+        // 3DS / OTP authentication is required (common for Indian cards with e-mandates).
+        // With PaymentElement + redirect:'if_required', Stripe usually handles this inline.
+        // If we reach here, the next_action may need a redirect.
+        const nextAction = (setupIntent as any).next_action;
+        if (nextAction?.redirect_to_url?.url) {
+          window.location.href = nextAction.redirect_to_url.url;
+        } else {
+          setError(
+            'Additional authentication (3D Secure / OTP) is required by your bank. ' +
+              'Please complete the verification challenge and try again.',
+          );
+        }
       }
     } catch (err: any) {
       setError(
@@ -396,6 +421,16 @@ const UpdatePaymentMethodModal: React.FC<UpdatePaymentMethodModalProps> = ({
           type="info"
           message="ACH Bank Transfer"
           description="You'll need your bank routing number and account number. ACH payments typically take 3-5 business days to process and have lower fees than card payments."
+          style={{ marginBottom: 16 }}
+          showIcon
+        />
+      )}
+
+      {paymentMethodType === 'card' && !isMockMode && (
+        <Alert
+          type="info"
+          message="Secure Card Verification"
+          description="Your card details are processed securely by Stripe. For Indian cards, your bank may require 3D Secure (OTP) authentication to set up recurring billing."
           style={{ marginBottom: 16 }}
           showIcon
         />

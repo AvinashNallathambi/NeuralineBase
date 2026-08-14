@@ -21,6 +21,7 @@ import { PatientFlagsController } from './patient-flags.controller';
 import { PatientFlagsService } from './patient-flags.service';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem } from './entities/patient-problem.entity';
+import { PatientDocument } from './entities/patient-document.entity';
 import { PatientFlag, PatientFlagAcknowledgement } from './entities/patient-flag.entity';
 import { PatientGroup, PatientGroupAuditLog } from './entities/patient-group.entity';
 import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
@@ -36,7 +37,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Patient, PatientProblem, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
+    TypeOrmModule.forFeature([Patient, PatientProblem, PatientDocument, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

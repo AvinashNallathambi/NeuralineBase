@@ -18,6 +18,7 @@ import {
   Input,
   Tabs,
 } from 'antd';
+import type { UploadFile } from 'antd/es/upload/interface';
 import {
   UploadOutlined,
   DollarOutlined,
@@ -79,6 +80,7 @@ const RemittancePage: React.FC = () => {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [fileContent, setFileContent] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [detailDrawer, setDetailDrawer] = useState<Remittance | null>(null);
   const [claimDetails, setClaimDetails] = useState<RemittanceClaim[]>([]);
   const [claimLoading, setClaimLoading] = useState(false);
@@ -113,14 +115,38 @@ const RemittancePage: React.FC = () => {
       setLoading(true);
       const result = await remittanceService.importEra(fileContent, fileName);
       message.success(`ERA imported: ${result.totalClaimCount} claims from ${result.payerName}`);
-      setImportModalVisible(false);
-      setFileContent('');
-      setFileName('');
+      handleCloseImport();
       loadData();
     } catch (err: any) {
       message.error(err.response?.data?.message || 'Failed to import ERA file');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resetImportForm = () => {
+    setFileContent('');
+    setFileName('');
+    setFileList([]);
+  };
+
+  const handleCloseImport = () => {
+    setImportModalVisible(false);
+    resetImportForm();
+  };
+
+  const handleCancelImport = () => {
+    if (fileContent || fileName) {
+      Modal.confirm({
+        title: 'Discard changes?',
+        content: 'You have a file selected or content pasted. Are you sure you want to cancel?',
+        okText: 'Discard',
+        cancelText: 'Keep',
+        okButtonProps: { danger: true },
+        onOk: handleCloseImport,
+      });
+    } else {
+      handleCloseImport();
     }
   };
 
@@ -130,9 +156,24 @@ const RemittancePage: React.FC = () => {
       const content = e.target?.result as string;
       setFileContent(content);
       setFileName(file.name);
+      setFileList([
+        {
+          uid: file.uid || file.name,
+          name: file.name,
+          status: 'done',
+          size: file.size,
+        },
+      ]);
     };
     reader.readAsText(file);
     return false; // Prevent auto upload
+  };
+
+  const handleFileRemove = () => {
+    setFileContent('');
+    setFileName('');
+    setFileList([]);
+    return true;
   };
 
   const handleViewDetail = async (record: Remittance) => {
@@ -401,10 +442,11 @@ const RemittancePage: React.FC = () => {
         title="Import ERA File (X12 835)"
         open={importModalVisible}
         onOk={handleImport}
-        onCancel={() => setImportModalVisible(false)}
+        onCancel={handleCancelImport}
         confirmLoading={loading}
         okText="Import & Auto-Post"
         width={600}
+        destroyOnClose
       >
         <Tabs
           items={[
@@ -415,6 +457,8 @@ const RemittancePage: React.FC = () => {
                 <Upload.Dragger
                   accept=".835,.edi,.txt,.x12"
                   beforeUpload={handleFileUpload}
+                  onRemove={handleFileRemove}
+                  fileList={fileList}
                   maxCount={1}
                 >
                   <p className="ant-upload-drag-icon">
@@ -435,7 +479,14 @@ const RemittancePage: React.FC = () => {
                   rows={10}
                   placeholder="Paste raw X12 835 file content here..."
                   value={fileContent}
-                  onChange={(e) => setFileContent(e.target.value)}
+                  onChange={(e) => {
+                    setFileContent(e.target.value);
+                    // If user pastes content, clear any previously uploaded file
+                    if (fileName) {
+                      setFileName('');
+                      setFileList([]);
+                    }
+                  }}
                 />
               ),
             },

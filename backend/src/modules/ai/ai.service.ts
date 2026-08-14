@@ -66,6 +66,10 @@ interface OpenAiChatRequest {
   temperature?: number;
   max_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
+  // OpenRouter reasoning control — disables thinking/reasoning traces
+  // on models like Nemotron, DeepSeek-R1, gpt-oss that generate hidden
+  // reasoning tokens. Disabling reduces latency from 50s to ~5s.
+  reasoning?: { enabled?: boolean; max_tokens?: number; exclude?: boolean; effort?: 'low' | 'medium' | 'high' };
 }
 
 interface OpenAiChatResponse {
@@ -127,15 +131,13 @@ export class AiService {
           'OPENROUTER_MODEL',
           'nvidia/nemotron-3-super-120b-a12b:free',
         );
-        // Free fallback models on OpenRouter (tried in order on 429/404).
-        // Nemotron reliably returns JSON with response_format; the others are
-        // backups for when it is rate-limited.
+        // Fallback models on OpenRouter (tried in order on 429/404).
+        // Ordered by JSON reliability and reasoning quality.
         this.fallbackModels = [
           'nvidia/nemotron-3-super-120b-a12b:free',
-          'meta-llama/llama-3.3-70b-instruct:free',
+          'nvidia/nemotron-3-ultra-550b-a55b:free',
           'qwen/qwen3-next-80b-a3b-instruct:free',
-          'openai/gpt-oss-20b:free',
-          'google/gemini-2.0-flash-exp:free',
+          'meta-llama/llama-3.3-70b-instruct:free',
         ].filter((m) => m !== this.defaultModel);
         break;
       case 'groq':
@@ -865,6 +867,7 @@ export class AiService {
       stream: false,
       temperature: options?.temperature ?? 0.2,
       max_tokens: options?.maxTokens ?? 1024,
+      reasoning: { effort: 'low', exclude: true },
     };
 
     const result = await this.openaiFetch(body, false);
@@ -885,6 +888,12 @@ export class AiService {
       // safe default that all providers support.
       max_tokens: options?.maxTokens ?? 4096,
       response_format: { type: 'json_object' },
+      // Limit reasoning effort — reasoning models like gpt-oss-20b and
+      // Nemotron generate 10K+ hidden reasoning tokens by default, causing
+      // 50-170s latency. Setting effort to 'low' reduces token generation
+      // by ~3x (743→276 tokens on gpt-oss-20b) while maintaining JSON
+      // quality. exclude:true strips reasoning from the response content.
+      reasoning: { effort: 'low', exclude: true },
     };
 
     const result = await this.openaiFetch(body, true);

@@ -81,6 +81,8 @@ export class RemittanceService {
       totalBilledAmount: parsed.claims.reduce((sum, c) => sum + c.billedAmount, 0),
       rawFileContent: dto.fileContent,
       fileName: dto.fileName || null,
+      postedCount: 0,
+      postedAmount: 0,
     });
 
     const savedRemittance = await this.remittanceRepository.save(remittance);

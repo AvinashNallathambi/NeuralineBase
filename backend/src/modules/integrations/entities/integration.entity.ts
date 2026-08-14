@@ -47,7 +47,7 @@ export class Integration {
   @Column({ type: 'boolean', default: false })
   enabled!: boolean;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true })
   icon!: string | null;
 
   @Column({ type: 'varchar', length: 50, default: 'disconnected' })

@@ -116,6 +116,7 @@ const SettingsPage = lazyWithRetry(
 const AdminTrialsPage = lazyWithRetry(
   () => import("../pages/admin/AdminTrialsPage"),
 );
+const EpcsPage = lazyWithRetry(() => import("../pages/epcs/EpcsPage"));
 const LoginPage = lazyWithRetry(() => import("../pages/auth/LoginPage"));
 const RegisterPage = lazyWithRetry(() => import("../pages/auth/RegisterPage"));
 const ForgotPasswordPage = lazyWithRetry(
@@ -343,6 +344,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PrescriptionDetailPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/epcs",
+        element: (
+          <LazyPage>
+            <EpcsPage />
           </LazyPage>
         ),
       },

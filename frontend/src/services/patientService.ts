@@ -183,6 +183,34 @@ class PatientService {
     return response.data;
   }
 
+  async getDocuments(patientId: string): Promise<PatientDocumentRecord[]> {
+    const response = await api.get(`${this.baseUrl}/${patientId}/documents`);
+    return response.data;
+  }
+
+  async deleteDocument(patientId: string, documentId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/documents/${documentId}`);
+  }
+
+  async downloadDocument(patientId: string, documentId: string): Promise<void> {
+    const response = await api.get(
+      `${this.baseUrl}/${patientId}/documents/${documentId}/download`,
+      { responseType: 'blob' },
+    );
+    const blob = new Blob([response.data]);
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    // Try to recover the original filename from Content-Disposition, fall back to a generic name
+    const disposition = response.headers['content-disposition'] || '';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    link.download = match ? decodeURIComponent(match[1]) : 'document';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+
   // ─── Portal Admin (staff-only) ──────────────────────────────────
 
   async getPortalStatus(patientId: string): Promise<PortalStatus> {
@@ -233,6 +261,23 @@ export interface ResetPasswordResult {
   resetToken?: string;
   resetUrl?: string;
   emailSent: boolean;
+}
+
+export interface PatientDocumentRecord {
+  id: string;
+  tenantId: string;
+  patientId: string;
+  fileName: string;
+  storedFileName: string;
+  mimeType: string;
+  fileSize: number;
+  documentType: string;
+  description: string | null;
+  uploadedByUserId: string | null;
+  storagePath: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
 }
 
 export const patientService = new PatientService();

@@ -6,8 +6,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere, Brackets } from 'typeorm';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { createReadStream } from 'fs';
+import { ConfigService } from '@nestjs/config';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem, ProblemClinicalStatus, ProblemVerificationStatus, DiagnosisCodingSystem } from './entities/patient-problem.entity';
+import { PatientDocument, PatientDocumentType } from './entities/patient-document.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { CreatePatientProblemDto } from './dto/create-patient-problem.dto';
 import { UpdatePatientProblemDto } from './dto/update-patient-problem.dto';
@@ -43,6 +48,9 @@ export class PatientsService {
     private readonly patientRepository: Repository<Patient>,
     @InjectRepository(PatientProblem)
     private readonly problemRepository: Repository<PatientProblem>,
+    @InjectRepository(PatientDocument)
+    private readonly documentRepository: Repository<PatientDocument>,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -245,7 +253,9 @@ export class PatientsService {
   }
 
   /**
-   * Upload a document for a patient
+   * Upload a document for a patient.
+   * Persists the file to disk under UPLOAD_DIR/{tenantId}/{patientId}/ and
+   * records metadata in the patient_documents table.
    */
   async uploadDocument(
     tenantId: string,
@@ -253,25 +263,110 @@ export class PatientsService {
     file: Express.Multer.File,
     documentType: string,
     description: string,
+    uploadedByUserId?: string,
   ): Promise<{ id: string; fileName: string; documentType: string; url: string }> {
     // Verify patient exists
     await this.findOne(tenantId, patientId);
 
-    // TODO: Save file to storage (S3 or local)
-    // TODO: Create document record in database
-    const documentId = 'placeholder-id';
-    const fileUrl = `/uploads/${tenantId}/${patientId}/${file.originalname}`;
+    const uploadDir = this.configService.get<string>('UPLOAD_DIR', 'uploads');
+    const relDir = path.join(tenantId, patientId);
+    const absDir = path.resolve(uploadDir, relDir);
+    await fs.mkdir(absDir, { recursive: true });
+
+    const ext = path.extname(file.originalname);
+    const storedFileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`;
+    const absPath = path.join(absDir, storedFileName);
+    // Multer memoryStorage keeps the file in `file.buffer`; diskStorage writes to `file.path`.
+    if (file.buffer) {
+      await fs.writeFile(absPath, file.buffer);
+    } else if (file.path) {
+      await fs.copyFile(file.path, absPath);
+    } else {
+      throw new Error('Uploaded file has no buffer or path');
+    }
+
+    const storagePath = path.join(relDir, storedFileName);
+    const doc = this.documentRepository.create({
+      tenantId,
+      patientId,
+      fileName: file.originalname,
+      storedFileName,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      documentType: (documentType as PatientDocumentType) || PatientDocumentType.OTHER,
+      description: description || null,
+      uploadedByUserId: uploadedByUserId || null,
+      storagePath,
+    });
+    const saved = await this.documentRepository.save(doc);
 
     this.logger.log(
       `Document uploaded for patient ${patientId}: ${file.originalname} (${documentType})`,
     );
 
     return {
-      id: documentId,
-      fileName: file.originalname,
-      documentType,
-      url: fileUrl,
+      id: saved.id,
+      fileName: saved.fileName,
+      documentType: saved.documentType,
+      url: `/patients/${patientId}/documents/${saved.id}/download`,
     };
+  }
+
+  /**
+   * List all (non-deleted) documents for a patient.
+   */
+  async getDocuments(
+    tenantId: string,
+    patientId: string,
+  ): Promise<PatientDocument[]> {
+    await this.findOne(tenantId, patientId);
+    return this.documentRepository.find({
+      where: { tenantId, patientId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
+   * Resolve a document record (tenant-scoped) for download.
+   */
+  async getDocumentForDownload(
+    tenantId: string,
+    patientId: string,
+    documentId: string,
+  ): Promise<{ document: PatientDocument; absPath: string }> {
+    await this.findOne(tenantId, patientId);
+    const doc = await this.documentRepository.findOne({
+      where: { id: documentId, tenantId, patientId },
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document with ID "${documentId}" not found`);
+    }
+    const uploadDir = this.configService.get<string>('UPLOAD_DIR', 'uploads');
+    const absPath = path.resolve(uploadDir, doc.storagePath);
+    return { document: doc, absPath };
+  }
+
+  /**
+   * Soft-delete a document record and remove the underlying file from disk.
+   */
+  async deleteDocument(
+    tenantId: string,
+    patientId: string,
+    documentId: string,
+  ): Promise<void> {
+    const { document, absPath } = await this.getDocumentForDownload(
+      tenantId,
+      patientId,
+      documentId,
+    );
+    await this.documentRepository.softRemove(document);
+    try {
+      await fs.unlink(absPath);
+    } catch (err) {
+      // File may already be gone — log but don't fail the request
+      this.logger.warn(`Failed to remove file ${absPath}: ${(err as Error).message}`);
+    }
+    this.logger.log(`Document ${documentId} deleted for patient ${patientId}`);
   }
 
   async findProblems(

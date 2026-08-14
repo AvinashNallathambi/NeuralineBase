@@ -141,7 +141,11 @@ const IntegrationCard: React.FC<{ integration: Integration; onConfigure: () => v
     >
       <Row align="middle" gutter={16}>
         <Col>
-          <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
+          {integration.icon && (integration.icon.startsWith('/') || integration.icon.startsWith('http') || integration.icon.startsWith('data:')) ? (
+            <img src={integration.icon} alt={integration.name} style={{ width: 40, height: 40, objectFit: 'contain' }} />
+          ) : (
+            <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
+          )}
         </Col>
         <Col flex={1}>
           <Space direction="vertical" size={2} style={{ width: '100%' }}>

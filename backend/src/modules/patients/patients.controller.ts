@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Res,
   UseGuards,
   Request,
   ParseUUIDPipe,
@@ -15,6 +16,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { StreamableFile } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -26,6 +28,7 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { createReadStream } from 'fs';
 import { PatientsService, PaginatedResult } from './patients.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { CreatePatientProblemDto } from './dto/create-patient-problem.dto';
@@ -153,7 +156,7 @@ export class PatientsController {
 
   @Post(':id/documents')
   @Roles('admin', 'doctor', 'nurse')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 25 * 1024 * 1024 } }))
   @ApiOperation({ summary: 'Upload a document for a patient' })
   @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
   @ApiConsumes('multipart/form-data')
@@ -162,7 +165,7 @@ export class PatientsController {
       type: 'object',
       properties: {
         file: { type: 'string', format: 'binary' },
-        documentType: { type: 'string', enum: ['lab_report', 'imaging', 'consent', 'referral', 'other'] },
+        documentType: { type: 'string', enum: ['lab_report', 'imaging', 'consent', 'referral', 'insurance_card', 'identity', 'other'] },
         description: { type: 'string' },
       },
     },
@@ -181,7 +184,60 @@ export class PatientsController {
       file,
       documentType,
       description,
+      req.user.id,
     );
+  }
+
+  @Get(':id/documents')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'List documents for a patient' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'List of patient documents' })
+  async getDocuments(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.patientsService.getDocuments(req.user.tenantId, id);
+  }
+
+  @Get(':id/documents/:documentId/download')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Download a patient document' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiParam({ name: 'documentId', type: String, description: 'Document UUID' })
+  @ApiResponse({ status: 200, description: 'Document file stream' })
+  async downloadDocument(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Res({ passthrough: true }) res: import('express').Response,
+  ): Promise<StreamableFile> {
+    const { document, absPath } = await this.patientsService.getDocumentForDownload(
+      req.user.tenantId,
+      id,
+      documentId,
+    );
+    res.set({
+      'Content-Type': document.mimeType || 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(document.fileName)}"`,
+      'Content-Length': String(document.fileSize),
+    });
+    return new StreamableFile(createReadStream(absPath));
+  }
+
+  @Delete(':id/documents/:documentId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a patient document' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  @ApiParam({ name: 'documentId', type: String, description: 'Document UUID' })
+  @ApiResponse({ status: 204, description: 'Document deleted' })
+  async deleteDocument(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    await this.patientsService.deleteDocument(req.user.tenantId, id, documentId);
   }
 
   @Get(':id/problems')

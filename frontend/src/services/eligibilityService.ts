@@ -75,18 +75,48 @@ class EligibilityService {
     return response.data;
   }
 
-  // ─── AI Eligibility Alerts ─────────────────────────────────────
+  // ─── AI Eligibility Features ─────────────────────────────────────
+  // AI calls can take up to 60s, so we use a longer timeout.
 
   async generateAlerts(verificationId: string): Promise<{
     alerts: Array<{ severity: 'info' | 'warning' | 'critical'; category: string; message: string; action: string }>;
     summary: string;
   }> {
-    const response = await api.post(`/eligibility/ai/alerts/${verificationId}`);
+    const response = await api.post(`/eligibility/ai/alerts/${verificationId}`, undefined, { timeout: 120000 });
     return response.data;
   }
 
   async generateSummary(verificationId: string): Promise<{ summary: string }> {
-    const response = await api.post(`/eligibility/ai/summary/${verificationId}`);
+    const response = await api.post(`/eligibility/ai/summary/${verificationId}`, undefined, { timeout: 120000 });
+    return response.data;
+  }
+
+  async estimateResponsibility(verificationId: string, cptCodes?: string[]): Promise<{
+    estimates: Array<{ cptCode: string; description: string; allowedAmount: number; patientResponsibility: number; payerResponsibility: number }>;
+    totalPatientResponsibility: number;
+    notes: string;
+  }> {
+    const response = await api.post(`/eligibility/ai/estimate-responsibility/${verificationId}`, { cptCodes }, { timeout: 120000 });
+    return response.data;
+  }
+
+  async assessDenialRisk(verificationId: string): Promise<{
+    riskLevel: 'low' | 'medium' | 'high';
+    riskScore: number;
+    riskFactors: Array<{ factor: string; severity: string; recommendation: string }>;
+    summary: string;
+  }> {
+    const response = await api.post(`/eligibility/ai/denial-risk/${verificationId}`, undefined, { timeout: 120000 });
+    return response.data;
+  }
+
+  async generatePriorAuthLetter(verificationId: string): Promise<{ letter: string }> {
+    const response = await api.post(`/eligibility/ai/prior-auth/${verificationId}`, undefined, { timeout: 120000 });
+    return response.data;
+  }
+
+  async parse271(verificationId: string): Promise<{ parsed: Record<string, unknown>; summary: string }> {
+    const response = await api.post(`/eligibility/ai/parse-271/${verificationId}`, undefined, { timeout: 120000 });
     return response.data;
   }
 }

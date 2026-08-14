@@ -97,6 +97,7 @@ const DenialsPage: React.FC = () => {
   const [clusters, setClusters] = useState<DenialCluster[]>([]);
   const [priorities, setPriorities] = useState<WorklistPriority[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiScoringId, setAiScoringId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -152,7 +153,7 @@ const DenialsPage: React.FC = () => {
   };
 
   const handleAiScore = async (id: string) => {
-    setAiLoading(true);
+    setAiScoringId(id);
     try {
       await denialsService.aiScoreRecovery(id);
       message.success('AI recovery score generated');
@@ -160,7 +161,7 @@ const DenialsPage: React.FC = () => {
     } catch (err: any) {
       message.error('AI scoring failed — is Ollama running?');
     } finally {
-      setAiLoading(false);
+      setAiScoringId(null);
     }
   };
 
@@ -290,7 +291,7 @@ const DenialsPage: React.FC = () => {
             View
           </Button>
           <Tooltip title="AI Score Recovery">
-            <Button size="small" icon={<RobotOutlined />} loading={aiLoading} onClick={() => handleAiScore(r.id)} />
+            <Button size="small" icon={<RobotOutlined />} loading={aiScoringId === r.id} onClick={() => handleAiScore(r.id)} />
           </Tooltip>
         </Space>
       ),

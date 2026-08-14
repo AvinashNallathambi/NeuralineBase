@@ -25,6 +25,7 @@ import {
   CheckCircleOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
 import patientPortalService from '../../services/patientPortalService';
 
 const { Title, Text } = Typography;
@@ -275,11 +276,29 @@ const PortalAppointmentsPage: React.FC = () => {
             </Radio.Group>
           </Form.Item>
 
-          <Form.Item name="preferredDate" label="Preferred Date" rules={[{ required: true }]}>
+          <Form.Item name="preferredDate" label="Preferred Date & Time" rules={[{ required: true }]}>
             <DatePicker
               style={{ width: '100%' }}
+              showTime={{ format: 'h:mm A', minuteStep: 15 }}
+              format="YYYY-MM-DD h:mm A"
               onChange={handleDateChange}
-              disabledDate={(current) => current && current < new Date().setHours(0, 0, 0, 0)}
+              disabledDate={(current) =>
+                current && current.endOf('day') < dayjs().startOf('day')
+              }
+              disabledTime={(current) => {
+                const now = dayjs();
+                if (!current || !current.isSame(now, 'day')) {
+                  return {};
+                }
+                return {
+                  disabledHours: () => Array.from({ length: now.hour() }, (_, i) => i),
+                  disabledMinutes: (selectedHour: number) =>
+                    selectedHour === now.hour()
+                      ? Array.from({ length: now.minute() }, (_, i) => i)
+                      : [],
+                  disabledSeconds: () => Array.from({ length: 60 }, (_, i) => i),
+                };
+              }}
             />
           </Form.Item>
 
@@ -289,7 +308,13 @@ const PortalAppointmentsPage: React.FC = () => {
             <div style={{ marginBottom: 16 }}>
               <Text strong>Available Time Slots:</Text>
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {slots.map((slot, i) => (
+                {slots
+                  .filter((slot) => {
+                    const slotTime = slot.startTime || slot.time;
+                    if (!slotTime) return true;
+                    return dayjs(slotTime).isAfter(dayjs());
+                  })
+                  .map((slot, i) => (
                   <Tag
                     key={i}
                     style={{ cursor: 'pointer', padding: '4px 12px', fontSize: 14 }}

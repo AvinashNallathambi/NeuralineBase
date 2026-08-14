@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Form, Select, Input, DatePicker, Button, message, Drawer, Space } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { EligibilityVerificationType, CreateEligibilityVerificationDto } from '../../types';
 import { patientService } from '../../services/patientService';
+import { billingService, type PatientInsurance } from '../../services/billingService';
 
 interface Props {
   open: boolean;
@@ -37,21 +38,30 @@ export const CreateEligibilityVerificationModal: React.FC<Props> = ({
   const [form] = Form.useForm();
   const [patients, setPatients] = useState<PatientOption[]>([]);
   const [patientLoading, setPatientLoading] = useState(false);
+  const [insurances, setInsurances] = useState<PatientInsurance[]>([]);
+  const [insuranceLoading, setInsuranceLoading] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>(patientId);
 
   useEffect(() => {
     if (open) {
       form.resetFields();
-      if (patientId) form.setFieldsValue({ patientId });
+      if (patientId) {
+        form.setFieldsValue({ patientId });
+        setSelectedPatientId(patientId);
+      } else {
+        setSelectedPatientId(undefined);
+      }
       if (appointmentId) form.setFieldsValue({ appointmentId });
     }
   }, [open, patientId, appointmentId, form]);
 
+  // Load initial patient list (first 50) when modal opens
   useEffect(() => {
     const loadPatients = async () => {
       if (patientId) return;
       setPatientLoading(true);
       try {
-        const result = await patientService.findAll({ page: 1, limit: 100 });
+        const result = await patientService.findAll({ page: 1, limit: 50 });
         setPatients(result.data);
       } catch {
         message.error('Failed to load patients');
@@ -61,6 +71,40 @@ export const CreateEligibilityVerificationModal: React.FC<Props> = ({
     };
     if (open) loadPatients();
   }, [open, patientId]);
+
+  // Server-side patient search as user types
+  const handlePatientSearch = useCallback(async (searchTerm: string) => {
+    if (!searchTerm || searchTerm.length < 2) return;
+    setPatientLoading(true);
+    try {
+      const result = await patientService.findAll({ page: 1, limit: 50, search: searchTerm });
+      setPatients(result.data);
+    } catch {
+      // keep existing list on error
+    } finally {
+      setPatientLoading(false);
+    }
+  }, []);
+
+  // Load insurance policies when a patient is selected
+  const loadInsurances = useCallback(async (pid: string) => {
+    setInsuranceLoading(true);
+    setInsurances([]);
+    try {
+      const result = await billingService.findPatientInsurances(pid);
+      setInsurances(result);
+    } catch {
+      // patient may have no insurance — not an error
+    } finally {
+      setInsuranceLoading(false);
+    }
+  }, []);
+
+  const handlePatientChange = (pid: string) => {
+    setSelectedPatientId(pid);
+    form.setFieldValue('patientInsuranceId', undefined);
+    loadInsurances(pid);
+  };
 
   const handleFinish = async (values: CreateEligibilityVerificationDto) => {
     await onSubmit(values);
@@ -97,8 +141,11 @@ export const CreateEligibilityVerificationModal: React.FC<Props> = ({
             showSearch
             loading={patientLoading}
             disabled={!!patientId}
-            placeholder="Select patient"
-            optionFilterProp="children"
+            placeholder="Search by name, MRN, email, or phone..."
+            optionFilterProp="label"
+            onSearch={handlePatientSearch}
+            onChange={handlePatientChange}
+            filterOption={false}
             options={patients.map((p) => ({
               value: p.id,
               label: `${p.firstName} ${p.lastName}`,
@@ -110,8 +157,17 @@ export const CreateEligibilityVerificationModal: React.FC<Props> = ({
           <Input disabled />
         </Form.Item>
 
-        <Form.Item name="patientInsuranceId" label="Insurance Policy (optional)">
-          <Input placeholder="Patient insurance UUID" />
+        <Form.Item name="patientInsuranceId" label="Insurance Policy">
+          <Select
+            loading={insuranceLoading}
+            disabled={!selectedPatientId}
+            placeholder={selectedPatientId ? 'Select insurance policy' : 'Select a patient first'}
+            allowClear
+            options={insurances.map((ins) => ({
+              value: ins.id,
+              label: `${ins.payer?.name || 'Unknown Payer'} — ${ins.policyNumber} (${ins.priority})`,
+            }))}
+          />
         </Form.Item>
 
         <Form.Item name="verificationType" label="Verification Type" initialValue="real-time">

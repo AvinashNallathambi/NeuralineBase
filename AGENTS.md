@@ -137,6 +137,14 @@ The subscriptions module (`backend/src/modules/subscriptions/`) provides SaaS bi
 - **Plan change proration**: Upgrades use `create_prorations`; downgrades use `none` to avoid surprising credits/charges.
 - **Mock billing simulation**: When `STRIPE_API_KEY` is empty, the daily job simulates trial conversion, renewals, and dunning/expiration using the database as the source of truth for payment methods.
 - **Stripe Price IDs** are loaded from environment variables (`STRIPE_PRICE_*`) during plan seeding. Create the products/prices in Stripe first, then populate `.env` before enabling Stripe mode.
+- **Production Stripe guard**: The backend refuses to boot if `NODE_ENV=production` and `STRIPE_API_KEY` is empty (see `main.ts`). This prevents accidental mock-mode billing in production, where `MockSubscriptionProvider` would accept fake payment methods. CI also checks that `.env.example` files don't ship a live `sk_live_` key.
+- **India recurring billing (RBI e-mandate)**: `StripeSubscriptionProvider` now passes `payment_method_options[card][mandate_options]` to the SetupIntent, derived from the subscription's `priceCents`, `currency`, and `billingCycle`. Stripe only activates the mandate for Indian cards (`card.country === 'IN'`), so passing these options is safe for US/EU cards — they use the normal SCA flow. RBI requirements:
+  - An explicit **e-mandate** created at first authentication with `amount`, `currency`, `start_date`, `interval`, `interval_count`, and `supported_countries: ['IN']`.
+  - **3DS / OTP** on mandate setup and on the first charge (handled by Stripe Elements `confirmSetup` inline).
+  - Recurring debits must stay within the mandate amount (₹15,000 per-mandate cap for some categories).
+  - **Re-authentication** may be required for amount increases or plan upgrades.
+  - One-time payments (e.g., patient portal `/invoices/:id/pay`) only need 3DS, not a mandate.
+  - The frontend `UpdatePaymentMethodModal` handles `requires_action` (3DS redirect) and shows helpful error messages for `authentication_required` and `card_declined` errors.
 
 ### Notification System
 - **SubscriptionNotificationService**: Daily cron job checks for:

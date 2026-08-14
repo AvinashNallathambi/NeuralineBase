@@ -114,6 +114,13 @@ const ProviderScheduleDetailPage: React.FC = () => {
   const [scheduleForm] = Form.useForm();
   const [overrideForm] = Form.useForm();
 
+  // E2E test hook: expose form instances on the window object
+  React.useEffect(() => {
+    (window as any).__E2E_scheduleForm = scheduleForm;
+    (window as any).__E2E_overrideForm = overrideForm;
+    (window as any).__E2E_dayjs = dayjs;
+  }, [scheduleForm, overrideForm]);
+
   const loadData = async () => {
     if (!providerId) return;
     setLoading(true);
@@ -515,6 +522,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               openScheduleDrawer(record);
             }}
             style={{ color: '#0D7C8A' }}
+            data-testid="edit-schedule-button"
           />
           <Popconfirm
             title="Delete this schedule block?"
@@ -530,6 +538,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               size="small"
               danger
               onClick={(e) => e.stopPropagation()}
+              data-testid="delete-schedule-button"
             />
           </Popconfirm>
         </span>
@@ -595,6 +604,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               openOverrideDrawer(record);
             }}
             style={{ color: '#0D7C8A' }}
+            data-testid="edit-override-button"
           />
           <Popconfirm
             title="Delete this override?"
@@ -610,6 +620,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               size="small"
               danger
               onClick={(e) => e.stopPropagation()}
+              data-testid="delete-override-button"
             />
           </Popconfirm>
         </span>
@@ -696,6 +707,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
         <Card>
           <Tabs
             defaultActiveKey="schedules"
+            data-testid="provider-detail-tabs"
             items={[
               {
                 key: 'schedules',
@@ -712,6 +724,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
                       icon={<PlusOutlined />}
                       onClick={() => openScheduleDrawer()}
                       style={{ marginBottom: 16, backgroundColor: '#0D7C8A', borderColor: '#0D7C8A' }}
+                      data-testid="add-schedule-block-button"
                     >
                       Add Schedule Block
                     </Button>
@@ -721,6 +734,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
                       pagination={false}
                       size="middle"
                       scroll={{ x: 1100 }}
+                      data-testid="schedule-table"
                     />
                   </>
                 ),
@@ -740,6 +754,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
                       icon={<PlusOutlined />}
                       onClick={() => openOverrideDrawer()}
                       style={{ marginBottom: 16, backgroundColor: '#0D7C8A', borderColor: '#0D7C8A' }}
+                      data-testid="add-override-button"
                     >
                       Add Override
                     </Button>
@@ -748,6 +763,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
                       dataSource={providerOverrides.map((o) => ({ ...o, key: o.id }))}
                       pagination={{ pageSize: 10 }}
                       size="middle"
+                      data-testid="override-table"
                     />
                   </>
                 ),
@@ -761,8 +777,8 @@ const ProviderScheduleDetailPage: React.FC = () => {
                   </span>
                 ),
                 children: (
-                  <Descriptions bordered column={{ xs: 1, sm: 2 }}>
-                    <Descriptions.Item label="Name">{providerName}</Descriptions.Item>
+                  <Descriptions bordered column={{ xs: 1, sm: 2 }} data-testid="provider-info-descriptions">
+                    <Descriptions.Item label="Name" data-testid="provider-info-name">{providerName}</Descriptions.Item>
                     <Descriptions.Item label="Role">
                       <Tag color={roles.find((r) => r.key === provider.role)?.color || 'default'}>
                         {roles.find((r) => r.key === provider.role)?.label ||
@@ -798,23 +814,25 @@ const ProviderScheduleDetailPage: React.FC = () => {
           scheduleForm.resetFields();
         }}
         width={460}
+        data-testid="schedule-drawer"
       >
         <Form form={scheduleForm} layout="vertical" onFinish={handleScheduleSubmit}>
           <Form.Item name="dayOfWeek" label="Day of Week" rules={[{ required: true, message: 'Select a day' }]}>
             <Select
               options={DAY_NAMES.map((name, i) => ({ label: name, value: i }))}
               placeholder="Select day"
+              data-testid="schedule-day-of-week"
             />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="startTime" label="Start Time" rules={[{ required: true, message: 'Select start time' }]}>
-                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} />
+                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} data-testid="schedule-start-time" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="endTime" label="End Time" rules={[{ required: true, message: 'Select end time' }]}>
-                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} />
+                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} data-testid="schedule-end-time" />
               </Form.Item>
             </Col>
           </Row>
@@ -827,6 +845,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
                 { label: '45 minutes', value: 45 },
                 { label: '60 minutes', value: 60 },
               ]}
+              data-testid="schedule-slot-duration"
             />
           </Form.Item>
           <Form.Item name="appointmentTypes" label="Appointment Types">
@@ -834,43 +853,44 @@ const ProviderScheduleDetailPage: React.FC = () => {
               mode="multiple"
               placeholder="Select applicable types"
               options={appointmentTypeOptions}
+              data-testid="schedule-appointment-types"
             />
           </Form.Item>
           <Form.Item name="locationId" label="Location">
-            <Input placeholder="e.g. main-clinic, room-201" />
+            <Input placeholder="e.g. main-clinic, room-201" data-testid="schedule-location" />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="maxAppointments" label="Max Appointments">
-                <InputNumber min={1} style={{ width: '100%' }} />
+                <InputNumber min={1} style={{ width: '100%' }} data-testid="schedule-max-appointments" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="bufferMinutes" label="Buffer Minutes">
-                <InputNumber min={0} style={{ width: '100%' }} />
+                <InputNumber min={0} style={{ width: '100%' }} data-testid="schedule-buffer-minutes" />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="effectiveDate" label="Effective Date">
-                <DatePicker style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} data-testid="schedule-effective-date" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="expiryDate" label="Expiry Date">
-                <DatePicker style={{ width: '100%' }} />
+                <DatePicker style={{ width: '100%' }} data-testid="schedule-expiry-date" />
               </Form.Item>
             </Col>
           </Row>
           <Form.Item name="isRecurring" label="Recurring" valuePropName="checked">
-            <Switch />
+            <Switch data-testid="schedule-is-recurring" />
           </Form.Item>
           <Form.Item name="isAvailable" label="Available" valuePropName="checked">
-            <Switch />
+            <Switch data-testid="schedule-is-available" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
-            <TextArea rows={3} placeholder="Notes" />
+            <TextArea rows={3} placeholder="Notes" data-testid="schedule-notes" />
           </Form.Item>
           <Form.Item>
             <Button
@@ -878,6 +898,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               htmlType="submit"
               block
               style={{ backgroundColor: '#0D7C8A', borderColor: '#0D7C8A' }}
+              data-testid="schedule-submit-button"
             >
               {editingSchedule ? 'Update Schedule' : 'Add Schedule'}
             </Button>
@@ -894,10 +915,11 @@ const ProviderScheduleDetailPage: React.FC = () => {
           overrideForm.resetFields();
         }}
         width={400}
+        data-testid="override-drawer"
       >
         <Form form={overrideForm} layout="vertical" onFinish={handleOverrideSubmit}>
           <Form.Item name="overrideDate" label="Date" rules={[{ required: true, message: 'Select a date' }]}>
-            <DatePicker style={{ width: '100%' }} />
+            <DatePicker style={{ width: '100%' }} data-testid="override-date" />
           </Form.Item>
           <Form.Item name="overrideType" label="Override Type" rules={[{ required: true, message: 'Select a type' }]}>
             <Select
@@ -910,28 +932,29 @@ const ProviderScheduleDetailPage: React.FC = () => {
                 { label: 'Out of Office', value: 'out_of_office' },
               ]}
               placeholder="Select type"
+              data-testid="override-type"
             />
           </Form.Item>
           <Form.Item name="isAvailable" label="Available During Override" valuePropName="checked">
-            <Switch />
+            <Switch data-testid="override-is-available" />
           </Form.Item>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="startTime" label="Start Time">
-                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} />
+                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} data-testid="override-start-time" />
               </Form.Item>
             </Col>
             <Col span={12}>
               <Form.Item name="endTime" label="End Time">
-                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} />
+                <TimePicker format="HH:mm" minuteStep={15} style={{ width: '100%' }} data-testid="override-end-time" />
               </Form.Item>
             </Col>
           </Row>
           <Form.Item name="reason" label="Reason">
-            <TextArea rows={3} placeholder="Reason for override" />
+            <TextArea rows={3} placeholder="Reason for override" data-testid="override-reason" />
           </Form.Item>
           <Form.Item name="isRecurring" label="Recurring Annually" valuePropName="checked">
-            <Switch />
+            <Switch data-testid="override-is-recurring" />
           </Form.Item>
           <Form.Item>
             <Button
@@ -939,6 +962,7 @@ const ProviderScheduleDetailPage: React.FC = () => {
               htmlType="submit"
               block
               style={{ backgroundColor: '#0D7C8A', borderColor: '#0D7C8A' }}
+              data-testid="override-submit-button"
             >
               {editingOverride ? 'Update Override' : 'Add Override'}
             </Button>
