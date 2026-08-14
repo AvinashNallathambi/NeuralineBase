@@ -106,6 +106,22 @@ export interface CreateSetupIntentRequest {
   stripeCustomerId: string;
   paymentMethodTypes?: string[]; // ['card', 'us_bank_account']
   metadata?: Record<string, unknown>;
+  /**
+   * India RBI e-mandate options for recurring billing on Indian cards.
+   * When provided, the provider passes `payment_method_options[card][mandate_options]`
+   * to Stripe so the SetupIntent creates a valid e-mandate during 3DS authentication.
+   * Omit this for US/EU cards (no mandate needed — Stripe handles SCA implicitly).
+   */
+  mandateOptions?: {
+    amount: number; // in the smallest currency unit (e.g. cents/paise)
+    amountType?: 'fixed' | 'maximum'; // defaults to 'fixed'
+    currency: string; // 3-letter ISO code (e.g. 'usd', 'inr')
+    interval: 'day' | 'week' | 'month' | 'year';
+    intervalCount: number; // e.g. 1 for monthly, 12 for annual
+    startDate?: Date; // defaults to now if omitted
+    supportedTypes?: string[]; // defaults to ['india']
+    reference?: string; // unique mandate reference (required by Stripe for India mandates)
+  };
 }
 
 export interface CreateSetupIntentResponse {
@@ -173,8 +189,26 @@ export interface RetryInvoiceResponse {
   rawResponse?: Record<string, unknown> | null;
 }
 
+// ── Customer Management ──────────────────────────────────────────────
+
+export interface EnsureCustomerRequest {
+  tenantId: string;
+  tenantName: string;
+  tenantEmail: string;
+  /** Existing customer ID if any (may be a stale mock ID from dev mode). */
+  existingCustomerId?: string | null;
+}
+
+export interface EnsureCustomerResponse {
+  customerId: string;
+  created: boolean; // true if a new customer was created, false if reused
+}
+
 export interface SubscriptionProvider {
   readonly name: string;
+
+  // ── Customer management ───────────────────────────────────────────
+  ensureCustomer(request: EnsureCustomerRequest): Promise<EnsureCustomerResponse>;
 
   // ── Subscription lifecycle ────────────────────────────────────────
   createSubscription(request: CreateSubscriptionRequest): Promise<CreateSubscriptionResponse>;

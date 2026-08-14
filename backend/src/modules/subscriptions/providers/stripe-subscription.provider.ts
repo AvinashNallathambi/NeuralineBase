@@ -24,6 +24,8 @@ import {
   CreateCustomerPortalSessionResponse,
   RetryInvoiceRequest,
   RetryInvoiceResponse,
+  EnsureCustomerRequest,
+  EnsureCustomerResponse,
 } from './subscription-provider.interface';
 
 /**
@@ -59,6 +61,50 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
     if (this.apiKey) {
       this.stripeSdk = new Stripe(this.apiKey, { apiVersion: '2024-06-20' as any });
     }
+  }
+
+  // ── Customer Management ────────────────────────────────────────────
+
+  /**
+   * Ensure a Stripe Customer exists for the tenant.
+   *
+   * If `existingCustomerId` is a valid Stripe customer ID (not a mock ID),
+   * retrieve and reuse it. Otherwise, search by email and reuse if found,
+   * or create a new customer. This handles the transition from mock mode
+   * to real Stripe mode — mock customer IDs (`mock_cus_*`) are detected
+   * and replaced with real Stripe customers.
+   */
+  async ensureCustomer(request: EnsureCustomerRequest): Promise<EnsureCustomerResponse> {
+    // If we have an existing ID that looks like a real Stripe ID, try to reuse it
+    if (request.existingCustomerId && !request.existingCustomerId.startsWith('mock_')) {
+      try {
+        const customer = await this.getCustomer(request.existingCustomerId);
+        if (customer && !customer.deleted) {
+          return { customerId: customer.id, created: false };
+        }
+      } catch {
+        // Customer was deleted or doesn't exist — fall through to create
+        this.logger.warn(
+          `Existing customer ${request.existingCustomerId} not found in Stripe, creating new one`,
+        );
+      }
+    }
+
+    // Search by email to avoid duplicates
+    if (request.tenantEmail) {
+      const existing = await this.findCustomerByEmail(request.tenantEmail);
+      if (existing) {
+        return { customerId: existing.id, created: false };
+      }
+    }
+
+    // Create a new customer
+    const customer = await this.createCustomer(
+      request.tenantId,
+      request.tenantName,
+      request.tenantEmail,
+    );
+    return { customerId: customer.id, created: true };
   }
 
   async createSubscription(request: CreateSubscriptionRequest): Promise<CreateSubscriptionResponse> {
@@ -407,6 +453,42 @@ export class StripeSubscriptionProvider implements SubscriptionProvider {
       for (const [key, val] of Object.entries(request.metadata)) {
         params.append(`metadata[${key}]`, String(val));
       }
+    }
+
+    // ── India RBI e-mandate options ───────────────────────────────────
+    // When mandateOptions is provided, pass payment_method_options[card][mandate_options]
+    // to Stripe. Stripe only activates the mandate for Indian cards (card.country === 'IN'),
+    // so this is safe to pass for US/EU cards — they use the normal SCA flow instead.
+    // This enables recurring billing on Indian credit/debit cards per RBI guidelines.
+    if (request.mandateOptions && types.includes('card')) {
+      const m = request.mandateOptions;
+      params.append('payment_method_options[card][mandate_options][amount]', m.amount.toString());
+      params.append(
+        'payment_method_options[card][mandate_options][amount_type]',
+        m.amountType ?? 'fixed',
+      );
+      params.append('payment_method_options[card][mandate_options][currency]', m.currency);
+      params.append('payment_method_options[card][mandate_options][interval]', m.interval);
+      params.append(
+        'payment_method_options[card][mandate_options][interval_count]',
+        m.intervalCount.toString(),
+      );
+      const startDate = m.startDate ?? new Date();
+      params.append(
+        'payment_method_options[card][mandate_options][start_date]',
+        Math.floor(startDate.getTime() / 1000).toString(),
+      );
+      const typesList = m.supportedTypes ?? ['india'];
+      for (const t of typesList) {
+        params.append('payment_method_options[card][mandate_options][supported_types][]', t);
+      }
+      if (m.reference) {
+        params.append('payment_method_options[card][mandate_options][reference]', m.reference);
+      }
+      this.logger.log(
+        `SetupIntent includes India e-mandate options: amount=${m.amount} ${m.currency}, ` +
+          `interval=${m.interval}/${m.intervalCount}`,
+      );
     }
 
     const response = await fetch(`${this.baseUrl}/setup_intents`, {

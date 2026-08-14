@@ -22,6 +22,8 @@ import {
   CreateCustomerPortalSessionResponse,
   RetryInvoiceRequest,
   RetryInvoiceResponse,
+  EnsureCustomerRequest,
+  EnsureCustomerResponse,
 } from './subscription-provider.interface';
 
 /**
@@ -36,6 +38,12 @@ export class MockSubscriptionProvider implements SubscriptionProvider {
 
   // In-memory payment method store: keyed by stripeCustomerId
   private paymentMethods: Map<string, PaymentMethodDetails[]> = new Map();
+
+  async ensureCustomer(request: EnsureCustomerRequest): Promise<EnsureCustomerResponse> {
+    const mockId = `mock_cus_${request.tenantId.substring(0, 8)}`;
+    this.logger.log(`Mock ensureCustomer: ${mockId} for tenant ${request.tenantId}`);
+    return { customerId: mockId, created: true };
+  }
 
   async createSubscription(request: CreateSubscriptionRequest): Promise<CreateSubscriptionResponse> {
     const now = new Date();
