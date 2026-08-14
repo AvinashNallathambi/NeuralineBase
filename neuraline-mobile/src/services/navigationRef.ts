@@ -13,6 +13,7 @@ export type RootStackParamList = {
   Loading: undefined;
 
   // Auth
+  Auth: undefined;
   Login: undefined;
   BiometricUnlock: undefined;
   ForgotPassword: undefined;
@@ -31,7 +32,7 @@ export function navigateToLogin(): void {
   if (navigationRef.isReady()) {
     navigationRef.reset({
       index: 0,
-      routes: [{ name: 'Login' }],
+      routes: [{ name: 'Auth' }],
     });
   }
 }

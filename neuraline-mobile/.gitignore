@@ -61,3 +61,4 @@ yarn-error.log
 
 # Temporary files
 *.log
+android/app/src/main/assets/index.android.bundle

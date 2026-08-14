@@ -1,10 +1,11 @@
 /**
  * Neuraline Mobile — entry point.
  *
- * This file registers the root React component. The actual app logic
- * lives in src/app/AppRoot.tsx.
+ * `react-native-gesture-handler` must be the first import so its native
+ * handlers are registered before any navigator mounts.
  */
 
+import 'react-native-gesture-handler';
 import { AppRegistry } from 'react-native';
 import App from './App';
 import { name as appName } from './app.json';
