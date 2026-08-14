@@ -32,6 +32,7 @@ import {
   SubscriptionProvider,
   SUBSCRIPTION_PROVIDER,
   PaymentMethodDetails,
+  CreateSetupIntentRequest,
 } from './providers/subscription-provider.interface';
 import { SubscriptionNotificationService } from './subscription-notification.service';
 
@@ -210,9 +211,10 @@ export class SubscriptionsService {
     const isUpgrade = newPriceCents > oldPriceCents;
     const prorate = isUpgrade;
 
-    // Update via provider if Stripe is configured
+    // Update via provider if Stripe is configured and we have a real (non-mock) subscription ID
     if (
       subscription.stripeSubscriptionId &&
+      !subscription.stripeSubscriptionId.startsWith('mock_') &&
       this.subscriptionProvider.name === 'stripe'
     ) {
       const stripePriceId =
@@ -260,7 +262,11 @@ export class SubscriptionsService {
   ): Promise<Subscription> {
     const subscription = await this.getSubscription(tenantId);
 
-    if (subscription.stripeSubscriptionId && this.subscriptionProvider.name === 'stripe') {
+    if (
+      subscription.stripeSubscriptionId &&
+      !subscription.stripeSubscriptionId.startsWith('mock_') &&
+      this.subscriptionProvider.name === 'stripe'
+    ) {
       try {
         const result = await this.subscriptionProvider.cancelSubscription({
           providerSubscriptionId: subscription.stripeSubscriptionId,
@@ -823,9 +829,10 @@ export class SubscriptionsService {
     const subscription = await this.getSubscription(tenantId);
 
     // Only sync from Stripe in production/stripe mode. In mock mode, the DB is authoritative.
-    if (subscription.stripeCustomerId && this.subscriptionProvider.name === 'stripe') {
+    if (this.subscriptionProvider.name === 'stripe') {
       try {
-        await this.syncPaymentMethodsFromProvider(tenantId, subscription.stripeCustomerId);
+        const customerId = await this.ensureRealStripeCustomer(tenantId, subscription);
+        await this.syncPaymentMethodsFromProvider(tenantId, customerId);
       } catch (err) {
         this.logger.error(`Failed to sync payment methods: ${(err as Error).message}`);
       }
@@ -839,6 +846,14 @@ export class SubscriptionsService {
 
   /**
    * Create a SetupIntent for collecting new payment method details.
+   *
+   * For card SetupIntents, passes India RBI e-mandate options derived from the
+   * subscription's price/billing cycle. Stripe only enforces the mandate when
+   * the card is Indian (card.country === 'IN'), so passing these options is
+   * safe for US/EU cards — they simply don't trigger mandate creation.
+   *
+   * If the subscription has a stale mock customer ID (from dev mode) or no
+   * customer ID at all, a real Stripe customer is created via `ensureCustomer`.
    */
   async createSetupIntent(
     tenantId: string,
@@ -846,20 +861,36 @@ export class SubscriptionsService {
   ): Promise<{ clientSecret: string; setupIntentId: string }> {
     const subscription = await this.getSubscription(tenantId);
 
-    if (!subscription.stripeCustomerId) {
-      // In mock mode, create a mock customer ID if needed
-      if (this.subscriptionProvider.name === 'mock') {
-        subscription.stripeCustomerId = `mock_cus_${tenantId.substring(0, 8)}`;
-        await this.subscriptionRepository.save(subscription);
-      } else {
-        throw new BadRequestException('No Stripe customer found. Please contact support.');
-      }
+    // Ensure we have a valid Stripe customer ID.
+    // Mock customer IDs (mock_cus_*) from dev mode are replaced with real ones.
+    const customerId = await this.ensureRealStripeCustomer(tenantId, subscription);
+
+    // Build India e-mandate options for card SetupIntents.
+    // Stripe only activates the mandate for Indian cards, so this is safe to
+    // pass for all cards. US/EU cards ignore it and use the normal SCA flow.
+    const types = paymentMethodTypes ?? ['card'];
+    let mandateOptions: CreateSetupIntentRequest['mandateOptions'];
+
+    if (types.includes('card') && subscription.priceCents > 0) {
+      const interval: 'month' | 'year' =
+        subscription.billingCycle === BillingCycle.ANNUAL ? 'year' : 'month';
+      const intervalCount = subscription.billingCycle === BillingCycle.ANNUAL ? 1 : 1;
+      mandateOptions = {
+        amount: subscription.priceCents,
+        currency: subscription.currency || 'usd',
+        interval,
+        intervalCount,
+        startDate: new Date(),
+        supportedTypes: ['india'],
+        reference: `neuraline-${tenantId.substring(0, 8)}-${Date.now()}`,
+      };
     }
 
     const result = await this.subscriptionProvider.createSetupIntent({
-      stripeCustomerId: subscription.stripeCustomerId,
-      paymentMethodTypes: paymentMethodTypes ?? ['card'],
+      stripeCustomerId: customerId,
+      paymentMethodTypes: types,
       metadata: { tenantId },
+      mandateOptions,
     });
 
     return { clientSecret: result.clientSecret, setupIntentId: result.setupIntentId };
@@ -875,12 +906,10 @@ export class SubscriptionsService {
   ): Promise<SubscriptionPaymentMethod> {
     const subscription = await this.getSubscription(tenantId);
 
-    if (!subscription.stripeCustomerId) {
-      throw new BadRequestException('No Stripe customer found');
-    }
+    const customerId = await this.ensureRealStripeCustomer(tenantId, subscription);
 
     const result = await this.subscriptionProvider.attachPaymentMethod({
-      stripeCustomerId: subscription.stripeCustomerId,
+      stripeCustomerId: customerId,
       stripePaymentMethodId,
       setAsDefault: setAsDefault ?? true,
       stripeSubscriptionId: subscription.stripeSubscriptionId,
@@ -953,8 +982,10 @@ export class SubscriptionsService {
 
     const subscription = await this.getSubscription(tenantId);
 
+    const customerId = await this.ensureRealStripeCustomer(tenantId, subscription);
+
     await this.subscriptionProvider.setDefaultPaymentMethod({
-      stripeCustomerId: subscription.stripeCustomerId ?? '',
+      stripeCustomerId: customerId,
       stripePaymentMethodId: pm.stripePaymentMethodId,
       stripeSubscriptionId: subscription.stripeSubscriptionId,
     });
@@ -984,12 +1015,11 @@ export class SubscriptionsService {
     returnUrl: string,
   ): Promise<{ url: string }> {
     const subscription = await this.getSubscription(tenantId);
-    if (!subscription.stripeCustomerId) {
-      throw new BadRequestException('No Stripe customer found');
-    }
+
+    const customerId = await this.ensureRealStripeCustomer(tenantId, subscription);
 
     const result = await this.subscriptionProvider.createCustomerPortalSession({
-      stripeCustomerId: subscription.stripeCustomerId,
+      stripeCustomerId: customerId,
       returnUrl,
     });
 
@@ -1411,6 +1441,49 @@ export class SubscriptionsService {
   }
 
   // ── Private helpers for payment methods ───────────────────────────
+
+  /**
+   * Ensure the subscription has a real Stripe customer ID (not a mock ID).
+   *
+   * When transitioning from mock mode to real Stripe mode, the database may
+   * contain stale mock customer IDs (`mock_cus_*`). Calling Stripe with those
+   * IDs fails with "No such customer". This helper detects mock/missing IDs,
+   * creates a real Stripe customer via `ensureCustomer`, and persists the new
+   * ID. In mock mode, this is a no-op (mock IDs are valid there).
+   *
+   * Returns the valid customer ID.
+   */
+  private async ensureRealStripeCustomer(
+    tenantId: string,
+    subscription: Subscription,
+  ): Promise<string> {
+    const needsCustomer =
+      !subscription.stripeCustomerId ||
+      subscription.stripeCustomerId.startsWith('mock_');
+
+    if (!needsCustomer) {
+      return subscription.stripeCustomerId!;
+    }
+
+    const tenantName =
+      (subscription.metadata?.tenantName as string) ?? `Tenant ${tenantId.substring(0, 8)}`;
+    const tenantEmail =
+      (subscription.metadata?.tenantEmail as string) ?? `tenant-${tenantId.substring(0, 8)}@neuraline.health`;
+
+    const result = await this.subscriptionProvider.ensureCustomer({
+      tenantId,
+      tenantName,
+      tenantEmail,
+      existingCustomerId: subscription.stripeCustomerId,
+    });
+
+    subscription.stripeCustomerId = result.customerId;
+    await this.subscriptionRepository.save(subscription);
+    this.logger.log(
+      `ensureCustomer for tenant ${tenantId}: ${result.created ? 'created' : 'reused'} customer ${result.customerId}`,
+    );
+    return result.customerId;
+  }
 
   /**
    * Sync payment methods from Stripe provider into the local DB.
