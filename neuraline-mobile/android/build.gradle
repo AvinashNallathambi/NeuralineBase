@@ -19,3 +19,26 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+/**
+ * Redirect CMake/NDK intermediates for every module to a short path.
+ *
+ * Set `cxxStagingRoot` in gradle.properties (or pass -PcxxStagingRoot=...) on hosts
+ * where the checkout path is long enough to hit CMAKE_OBJECT_PATH_MAX (Windows).
+ * Doing it here keeps the workaround in the repo instead of in hand-edited
+ * node_modules/*/android/build.gradle files, which npm install wipes out.
+ */
+def cxxStagingRoot = (project.findProperty("cxxStagingRoot") ?: "").toString().trim()
+if (cxxStagingRoot) {
+    subprojects { sub ->
+        ["com.android.application", "com.android.library"].each { pluginId ->
+            sub.plugins.withId(pluginId) {
+                def androidExt = sub.extensions.findByName("android")
+                if (androidExt != null) {
+                    androidExt.externalNativeBuild.cmake.buildStagingDirectory =
+                        new File(cxxStagingRoot, sub.name)
+                }
+            }
+        }
+    }
+}
