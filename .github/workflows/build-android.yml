@@ -68,11 +68,13 @@ jobs:
           STRIPE_PUBLISHABLE_KEY=
           EOF
 
-      - name: Build Debug APK
+      - name: Build Debug APK (with JS bundle)
         working-directory: neuraline-mobile/android
         run: |
           chmod +x gradlew
           ./gradlew clean
+          # Build release debug variant with JS bundle bundled
+          # Since debuggableVariants=["debug"], we need to override to force bundling
           ./gradlew assembleDebug --no-daemon --no-build-cache -PreactNativeArchitectures=arm64-v8a
 
       - name: Upload APK artifact

@@ -24,7 +24,8 @@ react {
     // debuggableVariants = ["liteDebug", "prodDebug"]
     //
     // Debug variant loads JS from Metro dev server; other variants bundle JS into APK
-    debuggableVariants = ["debug"]
+    // Temporarily disabled to force JS bundling in debug builds for cloud builds
+    // debuggableVariants = ["debug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
