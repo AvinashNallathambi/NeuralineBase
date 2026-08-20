@@ -1,0 +1,77 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'neuraline-mobile/**'
+      - 'shared/**'
+      - '.github/workflows/build-android.yml'
+
+jobs:
+  build-apk:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: neuraline-mobile/package-lock.json
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-35
+            build-tools;35.0.0
+            ndk;26.1.10909125
+            cmake;3.22.1
+
+      - name: Install shared package
+        working-directory: shared
+        run: |
+          npm install --legacy-peer-deps
+          npm run build || true
+
+      - name: Install mobile dependencies
+        working-directory: neuraline-mobile
+        run: npm install --legacy-peer-deps
+
+      - name: Create .env
+        working-directory: neuraline-mobile
+        run: |
+          cat > .env << 'EOF'
+          API_URL=http://localhost:4000/api/v1
+          APP_VERSION=1.0.0
+          SENTRY_DSN=
+          TURN_SERVERS=[{"urls":"stun:stun.l.google.com:19302"},{"urls":"stun:stun1.l.google.com:19302"}]
+          STRIPE_PUBLISHABLE_KEY=
+          EOF
+
+      - name: Build Debug APK
+        working-directory: neuraline-mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon -PreactNativeArchitectures=arm64-v8a
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuraline-debug-apk
+          path: neuraline-mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          compression-level: 0

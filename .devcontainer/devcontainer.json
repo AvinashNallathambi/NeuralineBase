@@ -1,0 +1,50 @@
+{
+  "name": "Neuraline Mobile - Android Build",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:18",
+
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "17",
+      "jdkDistro": "temurin"
+    },
+    "ghcr.io/devcontainers-contrib/features/android-sdk:1": {
+      "platforms": "platforms;android-35,build-tools;35.0.0",
+      "ndk": "26.1.10909125",
+      "cmake": "3.22.1"
+    }
+  },
+
+  "containerEnv": {
+    "ANDROID_HOME": "/usr/lib/android-sdk",
+    "ANDROID_SDK_ROOT": "/usr/lib/android-sdk",
+    "ANDROID_NDK_HOME": "/usr/lib/android-sdk/ndk/26.1.10909125",
+    "ANDROID_NDK_ROOT": "/usr/lib/android-sdk/ndk/26.1.10909125",
+    "ORG_GRADLE_PROJECT_hermesEnabled": "true",
+    "ORG_GRADLE_PROJECT_newArchEnabled": "false"
+  },
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "forwardPorts": [8081, 4000],
+
+  "remoteEnv": {
+    "LOCAL_API_URL": "http://localhost:4000/api/v1"
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "16gb",
+    "storage": "64gb"
+  }
+}
