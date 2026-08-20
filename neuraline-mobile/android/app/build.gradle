@@ -23,9 +23,9 @@ react {
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
     // debuggableVariants = ["liteDebug", "prodDebug"]
     //
-    // Debug variant loads JS from Metro dev server; other variants bundle JS into APK
-    // Temporarily disabled to force JS bundling in debug builds for cloud builds
-    // debuggableVariants = ["debug"]
+    // Force JS bundling for ALL variants (including debug) for cloud builds
+    // When developing locally with Metro, change this to ["debug"]
+    debuggableVariants = []
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
