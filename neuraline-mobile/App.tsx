@@ -1,24 +1,19 @@
 import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PaperProvider } from 'react-native-paper';
-import { AppNavigator } from './src/navigation/AppNavigator';
-import { paperTheme } from './src/theme';
-
-import { GluestackUIProvider } from '@/components/ui/gluestack-ui-provider';
-import '@/global.css';
-
-const queryClient = new QueryClient();
+import { Text, View, StyleSheet } from 'react-native';
 
 const App: React.FC = () => {
   return (
-    <GluestackUIProvider mode="light">
-      <QueryClientProvider client={queryClient}>
-        <PaperProvider theme={paperTheme}>
-          <AppNavigator />
-        </PaperProvider>
-      </QueryClientProvider>
-    </GluestackUIProvider>
+    <View style={styles.container}>
+      <Text style={styles.text}>Neuraline Mobile - Test Build</Text>
+      <Text style={styles.subtext}>If you see this, the app is working!</Text>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  text: { fontSize: 24, fontWeight: 'bold', color: '#0D7C8A' },
+  subtext: { fontSize: 16, color: '#666', marginTop: 8 },
+});
 
 export default App;
