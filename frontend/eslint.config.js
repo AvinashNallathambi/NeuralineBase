@@ -34,4 +34,13 @@ export default tseslint.config(
       '@typescript-eslint/no-empty-object-type': 'off',
     },
   },
+  {
+    // Playwright fixtures require an empty destructure and use a `use`
+    // callback that the React hooks rule misreads as a hook call.
+    files: ['e2e/**/*.{ts,tsx}'],
+    rules: {
+      'no-empty-pattern': 'off',
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 )
