@@ -49,9 +49,7 @@ jobs:
 
       - name: Install shared package
         working-directory: shared
-        run: |
-          npm install --legacy-peer-deps
-          npm run build || true
+        run: npm install --legacy-peer-deps
 
       - name: Install mobile dependencies
         working-directory: neuraline-mobile

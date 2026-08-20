@@ -1,7 +1,12 @@
 const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
 const { withNativeWind } = require('nativewind/metro');
+const path = require('path');
 
 const config = getDefaultConfig(__dirname);
+
+// Include the shared package directory so Metro can resolve @neuraline/shared
+// which lives outside the mobile project root as a file: dependency.
+config.watchFolders = [path.resolve(__dirname, '..', 'shared')];
 
 // Force Metro to resolve compiled JS instead of TypeScript source.
 // Some packages (e.g. @tanstack/query-core) set "react-native": "src/index.ts"
@@ -14,8 +19,5 @@ config.resolver.resolverMainFields = ['module', 'main'];
 // Limit workers for machines with limited RAM (8GB).
 // Default scales with CPU cores which can cause OOM and extreme slowdowns.
 config.maxWorkers = 2;
-
-// Increase cache size to reduce re-bundling
-config.transformer.cacheStores = undefined;
 
 module.exports = withNativeWind(config, { input: './global.css', inlineRem: 16 });
