@@ -2,14 +2,10 @@
   "name": "Neuraline Mobile - Android Build",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:18",
 
-  "features": {
-    "ghcr.io/devcontainers/features/java:1": {
-      "version": "17",
-      "jdkDistro": "temurin"
-    }
-  },
+  "features": {},
 
   "containerEnv": {
+    "JAVA_HOME": "/usr/lib/jvm/temurin-17-jdk",
     "ANDROID_HOME": "/usr/lib/android-sdk",
     "ANDROID_SDK_ROOT": "/usr/lib/android-sdk",
     "ANDROID_NDK_HOME": "/usr/lib/android-sdk/ndk/26.1.10909125",

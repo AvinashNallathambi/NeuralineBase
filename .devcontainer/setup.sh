@@ -7,6 +7,28 @@ echo "=== Neuraline Mobile — Codespaces Setup ==="
 WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo ">>> Workspace root: ${WORKSPACE_ROOT}"
 
+# --- JDK 17 (Temurin) — installed manually because the devcontainers java
+#     feature relies on SDKMAN, which intermittently fails to resolve "17" ---
+JDK_HOME="/usr/lib/jvm/temurin-17-jdk"
+echo ">>> Installing Temurin JDK 17 to ${JDK_HOME}..."
+
+if [ ! -x "${JDK_HOME}/bin/java" ]; then
+  mkdir -p /usr/lib/jvm
+  # Adoptium Temurin 17 (x64 Linux). Update URL if a newer patch is needed.
+  JDK_URL="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.13%2B11/OpenJDK17U-jdk_x64_linux_hotspot_17.0.13_11.tar.gz"
+  curl -fsSL -o /tmp/jdk17.tar.gz "${JDK_URL}"
+  tar -xzf /tmp/jdk17.tar.gz -C /usr/lib/jvm
+  # The extracted folder is named like jdk-17.0.13+11 — normalize it.
+  mv /usr/lib/jvm/jdk-17.* "${JDK_HOME}"
+  rm -f /tmp/jdk17.tar.gz
+fi
+
+export JAVA_HOME="${JDK_HOME}"
+export PATH="${JDK_HOME}/bin:${PATH}"
+
+# Verify Java installed
+java -version
+
 # --- Android SDK (installed manually; the devcontainers-contrib/android-sdk
 #     feature registry was deprecated and no longer pullable from Codespaces) ---
 ANDROID_HOME="${ANDROID_HOME:-/usr/lib/android-sdk}"
@@ -45,14 +67,15 @@ sdkmanager --install \
 export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/26.1.10909125"
 export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
 
-# Persist Android env for interactive shells (profile.d is sourced by login shells)
-echo ">>> Writing Android env profile for interactive shells..."
+# Persist Android + Java env for interactive shells (profile.d is sourced by login shells)
+echo ">>> Writing Android + Java env profile for interactive shells..."
 cat > /etc/profile.d/android-sdk.sh << 'PROFILEEOF'
+export JAVA_HOME="/usr/lib/jvm/temurin-17-jdk"
 export ANDROID_HOME="/usr/lib/android-sdk"
 export ANDROID_SDK_ROOT="/usr/lib/android-sdk"
 export ANDROID_NDK_HOME="/usr/lib/android-sdk/ndk/26.1.10909125"
 export ANDROID_NDK_ROOT="/usr/lib/android-sdk/ndk/26.1.10909125"
-export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+export PATH="${JAVA_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
 PROFILEEOF
 
 # Install shared package (the mobile app depends on @neuraline/shared via file:../shared)
