@@ -1,12 +1,18 @@
 /**
- * Forgot Password Screen — staff password reset request.
+ * Forgot Password Screen — staff password reset request (Gluestack UI v5).
  */
 import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, TextInput, Button, Card, Title, HelperText } from 'react-native-paper';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
 
 import { authApi } from '../../services';
-import { colors } from '../../theme';
+
+import { VStack } from '@/components/ui/vstack';
+import { Box } from '@/components/ui/box';
+import { Text } from '@/components/ui/text';
+import { Heading } from '@/components/ui/heading';
+import { Input, InputField } from '@/components/ui/input';
+import { Button, ButtonText } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 
 export const ForgotPasswordScreen: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -39,90 +45,68 @@ export const ForgotPasswordScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
     >
-      <View style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <Title style={styles.title}>Forgot Password</Title>
-            <Text style={styles.subtitle}>
+      <Box className="flex-1 justify-center bg-background p-6">
+        <Card className="rounded-xl p-6" size="default">
+          <VStack space="md">
+            <Heading size="lg" className="text-foreground">Forgot Password</Heading>
+            <Text size="sm" className="text-muted-foreground">
               Enter your email and we'll send you a reset link.
             </Text>
 
             {sent ? (
-              <Text style={styles.successText}>
-                If an account exists for {email}, a password reset link has been sent.
-              </Text>
+              <Box className="bg-success/10 rounded-lg px-4 py-4 mt-2">
+                <Text className="text-success" size="sm">
+                  If an account exists for {email}, a password reset link has been sent.
+                </Text>
+              </Box>
             ) : (
-              <>
-                <TextInput
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  style={styles.input}
-                  disabled={loading}
-                />
-                <TextInput
-                  label="Tenant ID (optional)"
-                  value={tenantId}
-                  onChangeText={setTenantId}
-                  autoCapitalize="none"
-                  style={styles.input}
-                  disabled={loading}
-                />
+              <VStack space="md">
+                <VStack space="xs">
+                  <Text size="sm" className="text-foreground font-medium">Email</Text>
+                  <Input className="rounded-lg" variant="outline">
+                    <InputField
+                      value={email}
+                      onChangeText={setEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      placeholder="Enter your email"
+                      editable={!loading}
+                    />
+                  </Input>
+                </VStack>
+
+                <VStack space="xs">
+                  <Text size="sm" className="text-foreground font-medium">Tenant ID (optional)</Text>
+                  <Input className="rounded-lg" variant="outline">
+                    <InputField
+                      value={tenantId}
+                      onChangeText={setTenantId}
+                      autoCapitalize="none"
+                      placeholder="Enter tenant ID"
+                      editable={!loading}
+                    />
+                  </Input>
+                </VStack>
+
                 {error && (
-                  <HelperText type="error" visible={!!error}>
-                    {error}
-                  </HelperText>
+                  <Box className="bg-destructive/10 rounded-lg px-4 py-3">
+                    <Text size="sm" className="text-destructive">{error}</Text>
+                  </Box>
                 )}
+
                 <Button
-                  mode="contained"
                   onPress={handleSubmit}
                   disabled={loading}
-                  style={styles.button}
+                  className="rounded-lg"
+                  size="lg"
                 >
-                  {loading ? 'Sending...' : 'Send Reset Link'}
+                  <ButtonText>{loading ? 'Sending...' : 'Send Reset Link'}</ButtonText>
                 </Button>
-              </>
+              </VStack>
             )}
-          </Card.Content>
+          </VStack>
         </Card>
-      </View>
+      </Box>
     </KeyboardAvoidingView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  card: {
-    borderRadius: 12,
-    padding: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  button: {
-    marginTop: 8,
-    paddingVertical: 6,
-  },
-  successText: {
-    color: colors.success,
-    fontSize: 14,
-    lineHeight: 20,
-    marginVertical: 16,
-  },
-});

@@ -20,7 +20,7 @@ import { navigateToLogin, navigateToPatientLogin } from './navigationRef';
 // NOTE: 10.0.2.2 is the Android emulator's alias for the host machine's
 // localhost. On a physical device, use your computer's LAN IP instead
 // (e.g. http://192.168.1.100:4000/api/v1).
-const API_BASE_URL = (process.env as any).API_URL || 'http://10.0.2.2:4000/api/v1';
+const API_BASE_URL = (process.env as any).API_URL || 'http://localhost:4000/api/v1';
 const APP_VERSION = (process.env as any).APP_VERSION || '1.0.0';
 
 export const http = createApiClient({ baseURL: API_BASE_URL, timeout: 30000 });

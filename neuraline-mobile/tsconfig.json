@@ -4,16 +4,41 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@neuraline/shared": ["../shared"],
-      "@neuraline/shared/*": ["../shared/*"],
-      "@app/*": ["./src/*"]
+      "@neuraline/shared": [
+        "../shared"
+      ],
+      "@neuraline/shared/*": [
+        "../shared/*"
+      ],
+      "@app/*": [
+        "./src/*"
+      ],
+      "@/*": [
+        "./*"
+      ],
+      "tailwind.config": [
+        "./tailwind.config.js"
+      ]
     },
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "types": ["node", "react-native", "react-native-vector-icons"]
+    "types": [
+      "node",
+      "react-native",
+      "react-native-vector-icons"
+    ]
   },
-  "include": ["src/**/*", "index.js", "App.tsx"],
-  "exclude": ["node_modules", "ios", "android"]
+  "include": [
+    "src/**/*",
+    "index.js",
+    "App.tsx",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "ios",
+    "android"
+  ]
 }

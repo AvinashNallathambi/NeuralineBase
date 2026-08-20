@@ -1,0 +1,141 @@
+﻿{
+  "total_count": 2,
+  "jobs": [
+    {
+      "id": 93520251041,
+      "run_id": 31408393263,
+      "workflow_name": "Deploy to AWS",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/actions/runs/31408393263",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSxJhds8AAAAVxj3IoQ",
+      "head_sha": "459ecd8832871b4ac77a77c08d37c172a8739d56",
+      "url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/actions/jobs/93520251041",
+      "html_url": "https://github.com/AvinashNallathambi/NeuralineBase/actions/runs/31408393263/job/93520251041",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-08-10T16:20:08Z",
+      "started_at": "2026-08-10T16:20:10Z",
+      "completed_at": "2026-08-10T16:20:15Z",
+      "name": "Verify CI Passed",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-10T16:20:11Z",
+          "completed_at": "2026-08-10T16:20:12Z"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-10T16:20:12Z",
+          "completed_at": "2026-08-10T16:20:13Z"
+        },
+        {
+          "name": "Skip CI check (manual deploy with skip_ci=true)",
+          "status": "completed",
+          "conclusion": "skipped",
+          "number": 3,
+          "started_at": "2026-08-10T16:20:13Z",
+          "completed_at": "2026-08-10T16:20:13Z"
+        },
+        {
+          "name": "Check CI result from workflow_run event",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-10T16:20:13Z",
+          "completed_at": "2026-08-10T16:20:13Z"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 8,
+          "started_at": "2026-08-10T16:20:13Z",
+          "completed_at": "2026-08-10T16:20:13Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9,
+          "started_at": "2026-08-10T16:20:13Z",
+          "completed_at": "2026-08-10T16:20:13Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/check-runs/93520251041",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000350,
+      "runner_name": "GitHub Actions 1000000350",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    },
+    {
+      "id": 93520289062,
+      "run_id": 31408393263,
+      "workflow_name": "Deploy to AWS",
+      "head_branch": "main",
+      "run_url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/actions/runs/31408393263",
+      "run_attempt": 1,
+      "node_id": "CR_kwDOSxJhds8AAAAVxj5dJg",
+      "head_sha": "459ecd8832871b4ac77a77c08d37c172a8739d56",
+      "url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/actions/jobs/93520289062",
+      "html_url": "https://github.com/AvinashNallathambi/NeuralineBase/actions/runs/31408393263/job/93520289062",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-08-10T16:20:15Z",
+      "started_at": "2026-08-10T16:20:17Z",
+      "completed_at": "2026-08-10T16:31:50Z",
+      "name": "Deploy to AWS EC2",
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1,
+          "started_at": "2026-08-10T16:20:18Z",
+          "completed_at": "2026-08-10T16:20:19Z"
+        },
+        {
+          "name": "Build appleboy/ssh-action@v1.0.3",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2,
+          "started_at": "2026-08-10T16:20:19Z",
+          "completed_at": "2026-08-10T16:20:21Z"
+        },
+        {
+          "name": "Deploy via SSH",
+          "status": "completed",
+          "conclusion": "failure",
+          "number": 3,
+          "started_at": "2026-08-10T16:20:21Z",
+          "completed_at": "2026-08-10T16:31:49Z"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4,
+          "started_at": "2026-08-10T16:31:49Z",
+          "completed_at": "2026-08-10T16:31:49Z"
+        }
+      ],
+      "check_run_url": "https://api.github.com/repos/AvinashNallathambi/NeuralineBase/check-runs/93520289062",
+      "labels": [
+        "ubuntu-latest"
+      ],
+      "runner_id": 1000000351,
+      "runner_name": "GitHub Actions 1000000351",
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions"
+    }
+  ]
+}

@@ -8,7 +8,7 @@
 import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { ActivityIndicator, View } from 'react-native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 
 import type { RootStackParamList } from '../services';
 import { navigationRef } from '../services';
@@ -20,7 +20,7 @@ import { AuthNavigator } from './AuthNavigator';
 import { StaffNavigator } from './StaffNavigator';
 import type { User, Tenant } from '@neuraline/shared';
 
-const RootStack = createNativeStackNavigator<RootStackParamList>();
+const RootStack = createStackNavigator<RootStackParamList>();
 
 const LoadingScreen: React.FC = () => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

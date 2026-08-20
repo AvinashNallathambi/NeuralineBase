@@ -1,51 +1,54 @@
 /**
  * Staff Navigator — main app for clinicians/admins.
  *
- * On tablets: a Drawer navigator with a wide sidebar.
- * On phones: a Drawer navigator with a standard hamburger menu.
- *
- * This is a scaffold — feature screens will be added incrementally.
+ * Uses a stack navigator for local testing (drawer requires reanimated JSI).
  */
 import React from 'react';
-import { createDrawerNavigator } from '@react-navigation/drawer';
+import { createStackNavigator } from '@react-navigation/stack';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import { PatientListScreen } from '../features/patients/PatientListScreen';
-import { useIsTablet } from '../hooks/useIsTablet';
-import { StaffDrawerContent } from './StaffDrawerContent';
+import { AppointmentsScreen } from '../features/appointments/AppointmentsScreen';
+import { AppointmentDetailScreen } from '../features/appointments/AppointmentDetailScreen';
+import { CreateAppointmentScreen } from '../features/appointments/CreateAppointmentScreen';
 
 export type StaffDrawerParamList = {
   Dashboard: undefined;
   Patients: undefined;
-  // TODO: Appointments, Clinical, Prescriptions, Laboratory, Billing,
-  //       Telemedicine, Messaging, Settings, etc.
+  Appointments: undefined;
+  AppointmentDetail: { appointmentId: string };
+  CreateAppointment: { appointmentId?: string } | undefined;
 };
 
-const Drawer = createDrawerNavigator<StaffDrawerParamList>();
+const Stack = createStackNavigator<StaffDrawerParamList>();
 
 export const StaffNavigator: React.FC = () => {
-  const isTablet = useIsTablet();
-
   return (
-    <Drawer.Navigator
-      drawerContent={(props) => <StaffDrawerContent {...props} />}
-      screenOptions={{
-        drawerType: isTablet ? 'permanent' : 'front',
-        drawerStyle: {
-          width: isTablet ? 280 : 300,
-        },
-        headerShown: true,
-      }}
-    >
-      <Drawer.Screen
+    <Stack.Navigator screenOptions={{ headerShown: true }}>
+      <Stack.Screen
         name="Dashboard"
         component={DashboardScreen}
         options={{ title: 'Dashboard' }}
       />
-      <Drawer.Screen
+      <Stack.Screen
         name="Patients"
         component={PatientListScreen}
         options={{ title: 'Patients' }}
       />
-    </Drawer.Navigator>
+      <Stack.Screen
+        name="Appointments"
+        component={AppointmentsScreen}
+        options={{ title: 'Appointments' }}
+      />
+      <Stack.Screen
+        name="AppointmentDetail"
+        component={AppointmentDetailScreen}
+        options={{ title: 'Appointment Details' }}
+      />
+      <Stack.Screen
+        name="CreateAppointment"
+        component={CreateAppointmentScreen}
+        options={{ title: 'New Appointment' }}
+      />
+    </Stack.Navigator>
   );
 };

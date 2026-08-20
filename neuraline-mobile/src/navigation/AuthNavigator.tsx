@@ -4,13 +4,14 @@
  * Shown when the user is not authenticated.
  */
 import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
 import type { RootStackParamList } from '../services';
+
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { BiometricUnlockScreen } from '../features/auth/BiometricUnlockScreen';
 import { ForgotPasswordScreen } from '../features/auth/ForgotPasswordScreen';
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
+const Stack = createStackNavigator<RootStackParamList>();
 
 export const AuthNavigator: React.FC = () => {
   return (

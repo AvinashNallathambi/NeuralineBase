@@ -1,0 +1,17 @@
+fix: CORS preflight blocked for marketing site trial submissions
+
+The marketing website (neura-line.com) submits trial requests to the API
+cross-origin, but the browser blocked preflight requests because:
+1. CORS_ORIGINS="*".split(",") produces ["*"] which the cors package
+   treats as a literal string, not a wildcard -- no origin ever matches
+2. credentials:true + origin:["*"] is invalid per CORS spec
+3. Production .env didn't include neura-line.com in CORS_ORIGINS
+
+Fix:
+- main.ts: use origin:true when CORS_ORIGINS="*" (reflects Origin header)
+- deploy.sh: idempotently add marketing origins to .env on deploy
+- .env.example: include neura-line.com origins by default
+
+Generated with [Devin](https://cli.devin.ai/docs)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>

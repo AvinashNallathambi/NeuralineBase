@@ -16,8 +16,8 @@ import { clearSecureToken } from '../services';
 const MENU_ITEMS = [
   { label: 'Dashboard', icon: 'view-dashboard', route: 'Dashboard' },
   { label: 'Patients', icon: 'account-group', route: 'Patients' },
+  { label: 'Appointments', icon: 'calendar', route: 'Appointments' },
   // TODO: add remaining modules as screens are built
-  // { label: 'Appointments', icon: 'calendar', route: 'Appointments' },
   // { label: 'Clinical', icon: 'file-document-edit', route: 'Clinical' },
   // { label: 'Prescriptions', icon: 'pill', route: 'Prescriptions' },
   // { label: 'Laboratory', icon: 'test-tube', route: 'Laboratory' },

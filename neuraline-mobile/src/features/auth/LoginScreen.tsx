@@ -1,42 +1,35 @@
 /**
- * Login Screen — staff authentication.
+ * Login Screen — staff authentication (Gluestack UI v5).
  *
- * Mirrors the web app's LoginPage.tsx flow:
- * 1. Fetch RSA public key from /auth/public-key
- * 2. Encrypt password with RSA-OAEP (react-native-quick-crypto)
- * 3. POST /auth/login with encrypted password
- * 4. On success: save token to keychain, hydrate auth store
- *
- * HIPAA: Password is encrypted before leaving the device. No PHI
- * is stored. Token goes to Keychain (not AsyncStorage).
+ * Flow:
+ * 1. POST /auth/login with plain password (dev mode, no RSA encryption)
+ * 2. Save token to keychain
+ * 3. Hydrate auth store → navigates to StaffApp
  */
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Alert,
 } from 'react-native';
-import {
-  Text,
-  TextInput,
-  Button,
-  Card,
-  Title,
-  Paragraph,
-  ActivityIndicator,
-  HelperText,
-} from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { authApi } from '../../services';
-import { encryptPassword } from '../../services';
 import { saveSecureToken } from '../../services';
 import { useAuthStore } from '../../store';
-import { colors } from '../../theme';
+
+import { VStack } from '@/components/ui/vstack';
+import { HStack } from '@/components/ui/hstack';
+import { Box } from '@/components/ui/box';
+import { Text } from '@/components/ui/text';
+import { Heading } from '@/components/ui/heading';
+import { Input, InputField } from '@/components/ui/input';
+import { Button, ButtonText } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Card } from '@/components/ui/card';
+import { Link } from '@/components/ui/link';
 
 type LoginNavProp = NativeStackNavigationProp<{ Login: undefined; ForgotPassword: undefined }, 'Login'>;
 
@@ -44,8 +37,8 @@ export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginNavProp>();
   const setAuth = useAuthStore((s) => s.setAuth);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('dr.sarah.chen@neuraline.health');
+  const [password, setPassword] = useState('Neuraline@2025');
   const [tenantId, setTenantId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,23 +53,13 @@ export const LoginScreen: React.FC = () => {
     setError(null);
 
     try {
-      // Step 1: Fetch RSA public key
-      const { publicKey } = await authApi.getPublicKey();
-
-      // Step 2: Encrypt password with RSA-OAEP
-      const encryptedPassword = encryptPassword(password, publicKey);
-
-      // Step 3: Login
       const response = await authApi.login({
         email,
-        password: encryptedPassword,
+        password,
         tenantId: tenantId || undefined,
-      });
+      } as any);
 
-      // Step 4: Save token to keychain
       await saveSecureToken('staff', response.accessToken, response.refreshToken);
-
-      // Step 5: Hydrate auth store (navigates to StaffApp automatically)
       setAuth(response.user, response.accessToken, response.tenant, response.refreshToken);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.message || 'Login failed';
@@ -91,134 +74,109 @@ export const LoginScreen: React.FC = () => {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.container}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.appName}>Neuraline</Text>
-            <Text style={styles.tagline}>Electronic Medical Records</Text>
-          </View>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} className="bg-background">
+        <VStack className="flex-1 justify-center px-6 py-8" space="md">
+          {/* Logo / Brand */}
+          <VStack className="items-center mb-6" space="xs">
+            <Box className="w-16 h-16 rounded-2xl bg-primary items-center justify-center mb-2">
+              <Text className="text-3xl font-bold text-white">N</Text>
+            </Box>
+            <Heading size="2xl" className="text-primary">Neuraline</Heading>
+            <Text size="sm" className="text-muted-foreground">Electronic Medical Records</Text>
+          </VStack>
 
-          <Card style={styles.card}>
-            <Card.Content>
-              <Title style={styles.title}>Sign In</Title>
-              <Paragraph style={styles.subtitle}>
+          {/* Login Card */}
+          <Card className="p-6 rounded-xl" size="default">
+            <VStack space="md">
+              <Heading size="lg" className="text-foreground">Sign In</Heading>
+              <Text size="sm" className="text-muted-foreground">
                 Enter your credentials to access the EMR
-              </Paragraph>
+              </Text>
 
-              <TextInput
-                label="Email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                style={styles.input}
-                disabled={loading}
-              />
+              {/* Email */}
+              <VStack space="xs">
+                <Text size="sm" className="text-foreground font-medium">Email</Text>
+                <Input className="rounded-lg" variant="outline">
+                  <InputField
+                    value={email}
+                    onChangeText={setEmail}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    placeholder="Enter your email"
+                    editable={!loading}
+                  />
+                </Input>
+              </VStack>
 
-              <TextInput
-                label="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                style={styles.input}
-                disabled={loading}
-              />
+              {/* Password */}
+              <VStack space="xs">
+                <Text size="sm" className="text-foreground font-medium">Password</Text>
+                <Input className="rounded-lg" variant="outline">
+                  <InputField
+                    value={password}
+                    onChangeText={setPassword}
+                    secureTextEntry
+                    placeholder="Enter your password"
+                    editable={!loading}
+                  />
+                </Input>
+              </VStack>
 
-              <TextInput
-                label="Tenant ID (optional)"
-                value={tenantId}
-                onChangeText={setTenantId}
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.input}
-                disabled={loading}
-              />
+              {/* Tenant ID */}
+              <VStack space="xs">
+                <Text size="sm" className="text-foreground font-medium">Tenant ID (optional)</Text>
+                <Input className="rounded-lg" variant="outline">
+                  <InputField
+                    value={tenantId}
+                    onChangeText={setTenantId}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="Enter tenant ID"
+                    editable={!loading}
+                  />
+                </Input>
+              </VStack>
 
+              {/* Error */}
               {error && (
-                <HelperText type="error" visible={!!error}>
-                  {error}
-                </HelperText>
+                <Box className="bg-destructive/10 rounded-lg px-4 py-3">
+                  <Text size="sm" className="text-destructive">{error}</Text>
+                </Box>
               )}
 
+              {/* Sign In Button */}
               <Button
-                mode="contained"
                 onPress={handleLogin}
                 disabled={loading}
-                style={styles.loginButton}
+                className="mt-2 rounded-lg"
+                size="lg"
               >
-                {loading ? <ActivityIndicator color="#fff" /> : 'Sign In'}
+                {loading ? (
+                  <Spinner size="small" color="$white" />
+                ) : (
+                  <ButtonText>Sign In</ButtonText>
+                )}
               </Button>
 
-              <Button
-                mode="text"
-                onPress={() => navigation.navigate('ForgotPassword')}
-                disabled={loading}
-              >
-                Forgot Password?
-              </Button>
-            </Card.Content>
+              {/* Forgot Password */}
+              <HStack className="justify-center mt-2">
+                <Link
+                  onPress={() => navigation.navigate('ForgotPassword')}
+                  isDisabled={loading}
+                >
+                  <Text className="text-primary" size="sm">Forgot Password?</Text>
+                </Link>
+              </HStack>
+            </VStack>
           </Card>
 
-          <Text style={styles.hipaaNotice}>
+          {/* HIPAA Notice */}
+          <Text size="xs" className="text-center text-muted-foreground mt-6 px-4">
             Protected health information is encrypted and never stored on device.
           </Text>
-        </View>
+        </VStack>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
-
-const styles = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: colors.background,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  appName: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: colors.primary,
-  },
-  tagline: {
-    fontSize: 14,
-    color: colors.textSecondary,
-    marginTop: 4,
-  },
-  card: {
-    borderRadius: 12,
-    padding: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    marginBottom: 24,
-  },
-  input: {
-    marginBottom: 12,
-  },
-  loginButton: {
-    marginTop: 8,
-    marginBottom: 8,
-    paddingVertical: 6,
-  },
-  hipaaNotice: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: colors.textSecondary,
-    marginTop: 24,
-    paddingHorizontal: 16,
-  },
-});

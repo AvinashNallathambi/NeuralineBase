@@ -208,6 +208,31 @@ a {
   }
 }
 
+/* ========== Denial Stats Cards ========== */
+/* Keep the prefix icon and value on a single line (flexbox + nowrap) and
+   scale the font down on narrow cards so values like "$3,355.00" don't wrap. */
+.denial-stats .ant-statistic-content {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: 4px;
+  font-size: clamp(1rem, 2.2vw, 1.5rem);
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+.denial-stats .ant-statistic-content-prefix {
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.denial-stats .ant-statistic-content-value {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
 /* ========== Print Styles ========== */
 @media print {
   .ant-layout-sider,

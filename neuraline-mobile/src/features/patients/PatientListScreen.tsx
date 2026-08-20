@@ -1,32 +1,29 @@
 /**
- * Patient List Screen — searchable patient roster.
+ * Patient List Screen — searchable patient roster (Gluestack UI v5).
  *
  * Uses react-query for data fetching with search + pagination.
- * On tablets: 2-column card grid. On phones: single column list.
- *
- * TODO: Add master-detail navigation (tap a patient → PatientDetailScreen)
  */
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  StyleSheet,
   FlatList,
   RefreshControl,
 } from 'react-native';
-import {
-  Text,
-  Searchbar,
-  Card,
-  Avatar,
-  Chip,
-  ActivityIndicator,
-  FAB,
-} from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
 import { patientsApi } from '../../services';
-import { colors, spacing } from '../../theme';
 import type { Patient } from '@neuraline/shared';
+
+import { VStack } from '@/components/ui/vstack';
+import { HStack } from '@/components/ui/hstack';
+import { Box } from '@/components/ui/box';
+import { Text } from '@/components/ui/text';
+import { Input, InputField, InputIcon, InputSlot } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
+import { Badge, BadgeText } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
+import { Fab, FabIcon } from '@/components/ui/fab';
+import { Icon } from '@/components/ui/icon';
 
 export const PatientListScreen: React.FC = () => {
   const [search, setSearch] = useState('');
@@ -50,160 +47,101 @@ export const PatientListScreen: React.FC = () => {
   }, []);
 
   const renderItem = ({ item }: { item: Patient }) => (
-    <Card style={styles.patientCard}>
-      <Card.Content style={styles.cardContent}>
-        <Avatar.Text
-          size={48}
-          label={`${item.firstName[0]}${item.lastName[0]}`}
-          color="#fff"
-          style={{ backgroundColor: colors.primary }}
-        />
-        <View style={styles.patientInfo}>
-          <Text style={styles.patientName}>
+    <Card className="mb-2 rounded-xl p-4" size="default">
+      <HStack className="items-center" space="md">
+        <Avatar size="md" className="bg-primary">
+          <AvatarFallbackText className="text-white">
+            {item.firstName[0]}{item.lastName[0]}
+          </AvatarFallbackText>
+        </Avatar>
+
+        <VStack className="flex-1" space="xs">
+          <Text className="font-semibold text-foreground">
             {item.firstName} {item.lastName}
           </Text>
-          <Text style={styles.patientDetails}>
+          <Text size="xs" className="text-muted-foreground">
             MRN: {item.mrn} · DOB: {new Date(item.dateOfBirth).toLocaleDateString()}
           </Text>
-          <View style={styles.chipRow}>
-            <Chip
-              mode="flat"
-              compact
-              style={[
-                styles.statusChip,
+          <HStack className="gap-1.5 mt-1">
+            <Badge
+              variant="solid"
+              className={
                 item.status === 'active'
-                  ? styles.statusActive
-                  : styles.statusInactive,
-              ]}
+                  ? 'bg-success/15 border-0'
+                  : 'bg-muted/30 border-0'
+              }
             >
-              {item.status}
-            </Chip>
+              <BadgeText className={item.status === 'active' ? 'text-success' : 'text-muted-foreground'}>
+                {item.status}
+              </BadgeText>
+            </Badge>
             {item.gender && (
-              <Chip mode="flat" compact style={styles.genderChip}>
-                {item.gender}
-              </Chip>
+              <Badge variant="solid" className="bg-primary/10 border-0">
+                <BadgeText className="text-primary">{item.gender}</BadgeText>
+              </Badge>
             )}
-          </View>
-        </View>
-      </Card.Content>
+          </HStack>
+        </VStack>
+      </HStack>
     </Card>
   );
 
   if (isLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
+      <Box className="flex-1 justify-center items-center bg-background">
+        <Spinner size="large" color="$primary" />
+      </Box>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Searchbar
-        placeholder="Search patients by name, MRN, or DOB..."
-        onChangeText={handleSearch}
-        value={search}
-        style={styles.searchbar}
-      />
+    <Box className="flex-1 bg-background">
+      {/* Search Bar */}
+      <Box className="p-4">
+        <Input className="rounded-lg" variant="outline">
+          <InputSlot className="pl-3">
+            <InputIcon as={SearchIcon} className="text-muted-foreground" />
+          </InputSlot>
+          <InputField
+            placeholder="Search patients by name, MRN, or DOB..."
+            value={search}
+            onChangeText={handleSearch}
+            className="pl-2"
+          />
+        </Input>
+      </Box>
 
+      {/* Patient List */}
       <FlatList
         data={data?.data || []}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 80 }}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No patients found</Text>
-          </View>
+          <VStack className="items-center py-10" space="xs">
+            <Text className="text-muted-foreground">No patients found</Text>
+          </VStack>
         }
       />
 
-      <FAB
-        icon="plus"
-        style={styles.fab}
+      {/* FAB - Add Patient */}
+      <Fab
+        size="lg"
+        placement="bottom right"
+        className="bg-primary rounded-full"
         onPress={() => {
           // TODO: navigate to NewPatientScreen
         }}
-        color="#fff"
-      />
-    </View>
+      >
+        <FabIcon as={PlusIcon} color="$white" />
+      </Fab>
+    </Box>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  searchbar: {
-    margin: spacing.md,
-    borderRadius: 8,
-  },
-  listContainer: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: 80,
-  },
-  patientCard: {
-    marginBottom: spacing.sm,
-    borderRadius: 12,
-  },
-  cardContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  patientInfo: {
-    marginLeft: spacing.md,
-    flex: 1,
-  },
-  patientName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text,
-  },
-  patientDetails: {
-    fontSize: 13,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  chipRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 6,
-  },
-  statusChip: {
-    height: 24,
-  },
-  statusActive: {
-    backgroundColor: 'rgba(82, 196, 26, 0.15)',
-  },
-  statusInactive: {
-    backgroundColor: 'rgba(100, 116, 139, 0.15)',
-  },
-  genderChip: {
-    height: 24,
-    backgroundColor: 'rgba(13, 124, 138, 0.1)',
-  },
-  emptyContainer: {
-    padding: spacing.xl,
-    alignItems: 'center',
-  },
-  emptyText: {
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  fab: {
-    position: 'absolute',
-    margin: spacing.md,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.primary,
-  },
-});
+// Simple icon placeholders (using text since we don't have icon library set up for Gluestack yet)
+const SearchIcon = () => <Text className="text-muted-foreground">🔍</Text>;
+const PlusIcon = () => <Text className="text-white text-xl">+</Text>;
