@@ -6,7 +6,6 @@ import helmet from "helmet";
 import compression from "compression";
 import { AppModule } from "./app.module";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
-import { AuditInterceptor } from "./common/interceptors/audit.interceptor";
 import { TenantInterceptor } from "./common/interceptors/tenant.interceptor";
 import { DatabaseRetryInterceptor } from "./common/interceptors/db-retry.interceptor";
 import { configureBodyParserWithRawBody } from "./common/middleware/webhook-body-parser.config";
@@ -156,11 +155,11 @@ async function bootstrap() {
   app.useGlobalFilters(new HttpExceptionFilter());
 
   // Global interceptors — order matters:
-  //   1. AuditInterceptor   — logs request start
+  //   1. AuditInterceptor   — logs every request to console + audit_logs table
+  //      (registered via APP_INTERCEPTOR in AuditLogsModule for DI access to AuditLogsService)
   //   2. TenantInterceptor  — sets req.tenantId from JWT
   //   3. DatabaseRetryInterceptor — retries on stale DB connections (after Postgres restart)
   app.useGlobalInterceptors(
-    new AuditInterceptor(),
     new TenantInterceptor(),
     new DatabaseRetryInterceptor(),
   );

@@ -21,6 +21,8 @@ export enum AuditAction {
 
 @Entity('audit_logs')
 @Index(['tenantId', 'entityType'])
+@Index(['tenantId', 'createdAt'])
+@Index(['tenantId', 'performedBy'])
 export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,15 +40,34 @@ export class AuditLog {
   @Column()
   entityId: string;
 
-  @Column({ nullable: true })
-  performedBy: string;
+  @Column({ type: 'varchar', nullable: true })
+  performedBy: string | null;
 
-  @Column({ nullable: true })
-  performedByName: string;
+  @Column({ type: 'varchar', nullable: true })
+  performedByName: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
-  details: Record<string, any>;
+  details: Record<string, any> | null;
 
-  @CreateDateColumn()
+  // ── HTTP request context (populated by AuditInterceptor) ──────────────
+  @Column({ name: 'ip_address', type: 'varchar', length: 45, nullable: true })
+  ipAddress: string | null;
+
+  @Column({ name: 'user_agent', type: 'varchar', length: 500, nullable: true })
+  userAgent: string | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  method: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  url: string | null;
+
+  @Column({ name: 'status_code', type: 'int', nullable: true })
+  statusCode: number | null;
+
+  @Column({ name: 'duration_ms', type: 'int', nullable: true })
+  durationMs: number | null;
+
+  @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }

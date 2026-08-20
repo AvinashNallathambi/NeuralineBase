@@ -41,6 +41,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { TrialsModule } from './modules/trials/trials.module';
 import { EpcsModule } from './modules/epcs/epcs.module';
 import { HealthModule } from './modules/health/health.module';
+import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { CommonModule } from './common/common.module';
 import { RedisModule, REDIS_CLIENT } from './common/redis/redis.module';
 import { EncryptionService } from './common/services/encryption.service';
@@ -275,6 +276,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     TrialsModule,
     EpcsModule,
     HealthModule,
+    AuditLogsModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules
