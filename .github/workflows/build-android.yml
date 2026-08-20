@@ -53,7 +53,11 @@ jobs:
 
       - name: Install mobile dependencies
         working-directory: neuraline-mobile
-        run: npm install --legacy-peer-deps
+        run: |
+          npm install --legacy-peer-deps
+          # Install Linux native binary for lightningcss
+          # (lockfile was generated on Windows and may not include Linux optional deps)
+          npm install lightningcss-linux-x64-gnu@1.27.0 --legacy-peer-deps --no-save
 
       - name: Create .env
         working-directory: neuraline-mobile
