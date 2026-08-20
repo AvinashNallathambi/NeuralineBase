@@ -3,13 +3,57 @@ set -euo pipefail
 
 echo "=== Neuraline Mobile — Codespaces Setup ==="
 
-# Accept Android SDK licenses
-echo ">>> Accepting Android SDK licenses..."
-yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
-
 # Resolve the workspace root (Codespaces mounts the repo at /workspaces/<repo-name>)
 WORKSPACE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 echo ">>> Workspace root: ${WORKSPACE_ROOT}"
+
+# --- Android SDK (installed manually; the devcontainers-contrib/android-sdk
+#     feature registry was deprecated and no longer pullable from Codespaces) ---
+ANDROID_HOME="${ANDROID_HOME:-/usr/lib/android-sdk}"
+echo ">>> Installing Android cmdline-tools + SDK to ${ANDROID_HOME}..."
+
+CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+CMDLINE_TOOLS_ZIP="/tmp/cmdline-tools.zip"
+
+if [ ! -x "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" ]; then
+  mkdir -p "${ANDROID_HOME}/cmdline-tools"
+  curl -fsSL -o "${CMDLINE_TOOLS_ZIP}" "${CMDLINE_TOOLS_URL}"
+  unzip -q "${CMDLINE_TOOLS_ZIP}" -d /tmp/cmdline-tools-extract
+  # sdkmanager expects the layout: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+  mv /tmp/cmdline-tools-extract/cmdline-tools "${ANDROID_HOME}/cmdline-tools/latest"
+  rm -rf /tmp/cmdline-tools-extract "${CMDLINE_TOOLS_ZIP}"
+fi
+
+export ANDROID_HOME
+export ANDROID_SDK_ROOT="${ANDROID_HOME}"
+export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+# Accept Android SDK licenses
+echo ">>> Accepting Android SDK licenses..."
+yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+# Install required SDK packages
+echo ">>> Installing SDK platforms, build-tools, NDK, cmake..."
+sdkmanager --install \
+  "platform-tools" \
+  "platforms;android-35" \
+  "build-tools;35.0.0" \
+  "ndk;26.1.10909125" \
+  "cmake;3.22.1" > /dev/null 2>&1 || true
+
+# Set NDK env vars (used by React Native gradle build)
+export ANDROID_NDK_HOME="${ANDROID_HOME}/ndk/26.1.10909125"
+export ANDROID_NDK_ROOT="${ANDROID_NDK_HOME}"
+
+# Persist Android env for interactive shells (profile.d is sourced by login shells)
+echo ">>> Writing Android env profile for interactive shells..."
+cat > /etc/profile.d/android-sdk.sh << 'PROFILEEOF'
+export ANDROID_HOME="/usr/lib/android-sdk"
+export ANDROID_SDK_ROOT="/usr/lib/android-sdk"
+export ANDROID_NDK_HOME="/usr/lib/android-sdk/ndk/26.1.10909125"
+export ANDROID_NDK_ROOT="/usr/lib/android-sdk/ndk/26.1.10909125"
+export PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+PROFILEEOF
 
 # Install shared package (the mobile app depends on @neuraline/shared via file:../shared)
 echo ">>> Installing shared package..."

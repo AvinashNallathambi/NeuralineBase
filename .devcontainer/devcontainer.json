@@ -6,11 +6,6 @@
     "ghcr.io/devcontainers/features/java:1": {
       "version": "17",
       "jdkDistro": "temurin"
-    },
-    "ghcr.io/devcontainers-contrib/features/android-sdk:1": {
-      "platforms": "platforms;android-35,build-tools;35.0.0",
-      "ndk": "26.1.10909125",
-      "cmake": "3.22.1"
     }
   },
 
