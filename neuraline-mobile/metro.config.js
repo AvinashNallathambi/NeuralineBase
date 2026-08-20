@@ -8,13 +8,15 @@ const config = getDefaultConfig(__dirname);
 // which lives outside the mobile project root as a file: dependency.
 config.watchFolders = [path.resolve(__dirname, '..', 'shared')];
 
-// Force Metro to resolve compiled JS instead of TypeScript source.
-// Some packages (e.g. @tanstack/query-core) set "react-native": "src/index.ts"
-// in package.json, which makes Metro try to transpile TS source with private
-// class methods that the default Babel config can't handle.
-// By clearing the "react-native" resolver field, Metro falls back to the
-// "module" / "main" fields which point to pre-compiled JS.
-config.resolver.resolverMainFields = ['module', 'main'];
+// Keep the default resolver fields including 'react-native'.
+// Native modules like react-native-safe-area-context use the 'react-native'
+// field to point to TypeScript source that contains codegen type annotations.
+// The @react-native/babel-plugin-codegen needs these types to generate
+// component configs. Stripping 'react-native' (as we tried previously)
+// forces compiled JS which has types stripped and breaks codegen.
+// The @tanstack/query-core TS-source issue is now handled by the
+// @babel/plugin-transform-private-methods plugin in babel.config.js.
+config.resolver.resolverMainFields = ['react-native', 'module', 'main'];
 
 // Limit workers for machines with limited RAM (8GB).
 // Default scales with CPU cores which can cause OOM and extreme slowdowns.
