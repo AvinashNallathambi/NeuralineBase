@@ -27,6 +27,13 @@ config.resolver.nodeModulesPaths = [
 // @babel/plugin-transform-private-methods plugin in babel.config.js.
 config.resolver.resolverMainFields = ['react-native', 'module', 'main'];
 
+// Polyfill Node.js core modules that some dependencies (e.g.
+// react-native-quick_crypto -> readable-stream) reference.
+// Without this, Metro fails with "Unable to resolve module stream".
+config.resolver.extraNodeModules = {
+  stream: path.resolve(__dirname, 'node_modules/stream-browserify'),
+};
+
 // Limit workers for machines with limited RAM (8GB).
 // Default scales with CPU cores which can cause OOM and extreme slowdowns.
 config.maxWorkers = 2;
