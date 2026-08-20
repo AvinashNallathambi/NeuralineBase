@@ -8,6 +8,15 @@ const config = getDefaultConfig(__dirname);
 // which lives outside the mobile project root as a file: dependency.
 config.watchFolders = [path.resolve(__dirname, '..', 'shared')];
 
+// Allow Metro to resolve dependencies (like @babel/runtime) from the mobile
+// project's node_modules when bundling files from the shared package.
+// Without this, Metro only looks in shared/node_modules and fails to find
+// @babel/runtime/helpers/interopRequireDefault that Babel injects.
+config.resolver.nodeModulesPaths = [
+  path.resolve(__dirname, 'node_modules'),
+  path.resolve(__dirname, '..', 'shared', 'node_modules'),
+];
+
 // Keep the default resolver fields including 'react-native'.
 // Native modules like react-native-safe-area-context use the 'react-native'
 // field to point to TypeScript source that contains codegen type annotations.
