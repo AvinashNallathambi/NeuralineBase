@@ -336,8 +336,8 @@ const DenialsPage: React.FC = () => {
       <Title level={3}>Denial Analysis & Management</Title>
 
       {/* Stats Cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={3}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }} className="denial-stats">
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Total Denials"
@@ -347,7 +347,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Denied $"
@@ -358,7 +358,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="New"
@@ -367,7 +367,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="In Progress"
@@ -376,7 +376,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Appealed"
@@ -385,7 +385,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Resolved"
@@ -395,7 +395,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Critical"
@@ -405,7 +405,7 @@ const DenialsPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={3}>
+        <Col xs={12} sm={8} md={6} lg={3}>
           <Card>
             <Statistic
               title="Deadline <7d"
@@ -425,7 +425,7 @@ const DenialsPage: React.FC = () => {
             label: 'Denial Worklist',
             children: (
               <div>
-                <Space style={{ marginBottom: 16 }}>
+                <Space style={{ marginBottom: 16 }} wrap>
                   <Select
                     placeholder="Filter by status"
                     allowClear
@@ -483,6 +483,7 @@ const DenialsPage: React.FC = () => {
                   rowKey="id"
                   loading={loading}
                   pagination={{ pageSize: 15 }}
+                  scroll={{ x: 'max-content' }}
                 />
               </div>
             ),
@@ -492,8 +493,8 @@ const DenialsPage: React.FC = () => {
             label: 'Analytics Dashboard',
             children: (
               <div>
-                <Row gutter={16}>
-                  <Col span={12}>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} lg={12}>
                     <Card title="Denials by Root Cause">
                       <Table
                         size="small"
@@ -514,7 +515,7 @@ const DenialsPage: React.FC = () => {
                       />
                     </Card>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} lg={12}>
                     <Card title="Top Denial Codes (CARC)">
                       <Table
                         size="small"
@@ -537,8 +538,8 @@ const DenialsPage: React.FC = () => {
                     </Card>
                   </Col>
                 </Row>
-                <Row gutter={16} style={{ marginTop: 16 }}>
-                  <Col span={12}>
+                <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                  <Col xs={24} lg={12}>
                     <Card title="Denials by Month">
                       <Table
                         size="small"
@@ -559,31 +560,31 @@ const DenialsPage: React.FC = () => {
                       />
                     </Card>
                   </Col>
-                  <Col span={12}>
+                  <Col xs={24} lg={12}>
                     <Card title="Key Metrics">
-                      <Row gutter={16}>
-                        <Col span={12}>
+                      <Row gutter={[16, 16]}>
+                        <Col xs={12} sm={12}>
                           <Statistic
                             title="Appeal Success Rate"
                             value={analytics?.appealSuccessRate || 0}
                             suffix="%"
                           />
                         </Col>
-                        <Col span={12}>
+                        <Col xs={12} sm={12}>
                           <Statistic
                             title="Recovery Rate"
                             value={analytics?.recoveryRate || 0}
                             suffix="%"
                           />
                         </Col>
-                        <Col span={12} style={{ marginTop: 16 }}>
+                        <Col xs={12} sm={12}>
                           <Statistic
                             title="Avg Days to Resolve"
                             value={analytics?.avgDaysToResolve || 0}
                             suffix="days"
                           />
                         </Col>
-                        <Col span={12} style={{ marginTop: 16 }}>
+                        <Col xs={12} sm={12}>
                           <Statistic
                             title="Total Denied"
                             value={analytics?.totalDeniedAmount || 0}
@@ -631,7 +632,7 @@ const DenialsPage: React.FC = () => {
             label: 'AI Insights',
             children: (
               <div>
-                <Space style={{ marginBottom: 16 }}>
+                <Space style={{ marginBottom: 16 }} wrap>
                   <Button type="primary" icon={<RobotOutlined />} loading={aiLoading} onClick={handleAiCluster}>
                     Cluster Denials (AI)
                   </Button>
@@ -644,7 +645,7 @@ const DenialsPage: React.FC = () => {
                   <Card title="Denial Pattern Clusters" style={{ marginBottom: 16 }}>
                     <Row gutter={[16, 16]}>
                       {clusters.map((c) => (
-                        <Col span={8} key={c.clusterId}>
+                        <Col xs={24} sm={12} lg={8} key={c.clusterId}>
                           <Card size="small" type="inner" title={c.label}>
                             <Descriptions column={1} size="small">
                               <Descriptions.Item label="Count">{c.count}</Descriptions.Item>
@@ -730,21 +731,21 @@ const DenialsPage: React.FC = () => {
         {selectedDenial && (
           <div>
             <Row gutter={16}>
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Text strong>Claim: </Text>
                 <Text>{selectedDenial.claimNumber || 'N/A'}</Text>
               </Col>
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Text strong>Patient: </Text>
                 <Text>{selectedDenial.patientName || 'N/A'}</Text>
               </Col>
             </Row>
             <Row gutter={16} style={{ marginTop: 8 }}>
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Text strong>CARC: </Text>
                 <Tag color="red">{selectedDenial.groupCode}-{selectedDenial.carcCode}</Tag>
               </Col>
-              <Col span={12}>
+              <Col xs={24} sm={12}>
                 <Text strong>Root Cause: </Text>
                 <Tag color={rootCauseColors[selectedDenial.rootCauseCategory]}>
                   {selectedDenial.rootCauseCategory.replace(/_/g, ' ')}
@@ -767,15 +768,15 @@ const DenialsPage: React.FC = () => {
               </Row>
             )}
             <Row gutter={16} style={{ marginTop: 8 }}>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Text strong>Denied: </Text>
                 <Text type="danger">${selectedDenial.deniedAmount.toFixed(2)}</Text>
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Text strong>Billed: </Text>
                 <Text>${selectedDenial.billedAmount.toFixed(2)}</Text>
               </Col>
-              <Col span={8}>
+              <Col xs={24} sm={8}>
                 <Text strong>Paid: </Text>
                 <Text>${selectedDenial.paidAmount.toFixed(2)}</Text>
               </Col>

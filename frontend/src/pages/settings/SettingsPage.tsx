@@ -61,9 +61,9 @@ import {
   ExclamationCircleOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import { mockAuditLog } from '../../data/mockData';
 import { useIntegrations } from '../../hooks/useIntegrations';
 import { integrationService, type Integration, type IntegrationCategory } from '../../services/integrationService';
+import { auditLogService, type AuditLogEntry, type AuditAction } from '../../services/auditLogService';
 import IntegrationConfigDrawer from './IntegrationConfigDrawer';
 import subscriptionService, {
   type SubscriptionPlan,
@@ -140,11 +140,11 @@ const IntegrationCard: React.FC<{ integration: Integration; onConfigure: () => v
       }}
     >
       <Row align="middle" gutter={16}>
-        <Col>
+        <Col flex="0 0 40px" style={{ flexShrink: 0, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {integration.icon && (integration.icon.startsWith('/') || integration.icon.startsWith('http') || integration.icon.startsWith('data:')) ? (
-            <img src={integration.icon} alt={integration.name} style={{ width: 40, height: 40, objectFit: 'contain' }} />
+            <img src={integration.icon} alt={integration.name} style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0, display: 'block' }} />
           ) : (
-            <div style={{ fontSize: 36 }}>{integration.icon || '🔌'}</div>
+            <div style={{ fontSize: 36, width: 40, height: 40, lineHeight: '40px', textAlign: 'center', flexShrink: 0 }}>{integration.icon || '🔌'}</div>
           )}
         </Col>
         <Col flex={1}>
@@ -1382,6 +1382,37 @@ const SettingsPage: React.FC = () => {
     message.success(`${section} settings saved successfully.`);
   };
 
+  // ─── Audit Log state (dynamic, fetched from backend) ────────────────────────
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditLimit] = useState(20);
+  const [auditActionFilter, setAuditActionFilter] = useState<AuditAction | undefined>();
+  const [auditSearch, setAuditSearch] = useState('');
+
+  const fetchAuditLogs = useCallback(async (page = auditPage, action?: AuditAction, search?: string) => {
+    setAuditLoading(true);
+    try {
+      const res = await auditLogService.findAll({ page, limit: auditLimit, action, search });
+      setAuditLogs(res.data);
+      setAuditTotal(res.total);
+      setAuditPage(res.page);
+    } catch {
+      // silently fail — tab will show empty state
+      setAuditLogs([]);
+      setAuditTotal(0);
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditLimit, auditPage]);
+
+  // Fetch on mount and when filters change
+  useEffect(() => {
+    fetchAuditLogs(1, auditActionFilter, auditSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auditActionFilter]);
+
   // ─── Profile Tab ──────────────────────────────────────────────────────────────
   const ProfileTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
@@ -1687,33 +1718,104 @@ const SettingsPage: React.FC = () => {
   const auditColumns = [
     {
       title: 'User',
-      dataIndex: 'userName',
+      dataIndex: 'performedByName',
       key: 'user',
-      render: (v: string) => <Text strong>{v}</Text>,
+      render: (v: string) => <Text strong>{v || 'anonymous'}</Text>,
     },
     {
       title: 'Action',
       dataIndex: 'action',
       key: 'action',
       render: (v: string) => {
-        const colors: Record<string, string> = { VIEW: 'blue', CREATE: 'green', UPDATE: 'orange', DELETE: 'red', EXPORT: 'purple', LOGIN: 'cyan' };
-        return <Tag color={colors[v] || 'default'}>{v}</Tag>;
+        const colors: Record<string, string> = {
+          view: 'blue', create: 'green', update: 'orange', delete: 'red',
+          submit: 'purple', resubmit: 'purple', void: 'magenta', corrected: 'gold',
+          payment: 'cyan', adjustment: 'geekblue',
+        };
+        return <Tag color={colors[v] || 'default'}>{(v || '').toUpperCase()}</Tag>;
       },
     },
-    { title: 'Resource', dataIndex: 'resource', key: 'resource' },
-    { title: 'Details', dataIndex: 'details', key: 'details', ellipsis: true },
+    { title: 'Resource', dataIndex: 'entityType', key: 'resource' },
+    {
+      title: 'Method',
+      dataIndex: 'method',
+      key: 'method',
+      render: (v: string) => (v ? <Tag>{v}</Tag> : null),
+    },
+    { title: 'URL', dataIndex: 'url', key: 'url', ellipsis: true },
     { title: 'IP Address', dataIndex: 'ipAddress', key: 'ip' },
     {
+      title: 'Status',
+      dataIndex: 'statusCode',
+      key: 'statusCode',
+      render: (v: number) =>
+        v ? <Tag color={v < 400 ? 'green' : 'red'}>{v}</Tag> : null,
+    },
+    {
       title: 'Timestamp',
-      dataIndex: 'timestamp',
-      key: 'timestamp',
-      render: (v: string) => new Date(v).toLocaleString(),
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (v: string) => (v ? new Date(v).toLocaleString() : null),
     },
   ];
 
   const AuditLogTab = (
     <Card bordered={false} style={{ borderRadius: 12 }}>
-      <Table dataSource={mockAuditLog} columns={auditColumns} rowKey="id" size="small" pagination={{ pageSize: 10 }} />
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Select
+          placeholder="Filter by action"
+          allowClear
+          style={{ width: 180 }}
+          value={auditActionFilter}
+          onChange={(v) => setAuditActionFilter(v)}
+          options={[
+            { label: 'View', value: 'view' },
+            { label: 'Create', value: 'create' },
+            { label: 'Update', value: 'update' },
+            { label: 'Delete', value: 'delete' },
+            { label: 'Submit', value: 'submit' },
+            { label: 'Payment', value: 'payment' },
+            { label: 'Adjustment', value: 'adjustment' },
+          ]}
+        />
+        <Input.Search
+          placeholder="Search user, resource, URL…"
+          allowClear
+          style={{ width: 280 }}
+          onSearch={(v) => {
+            setAuditSearch(v);
+            fetchAuditLogs(1, auditActionFilter, v);
+          }}
+        />
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => {
+            setAuditActionFilter(undefined);
+            setAuditSearch('');
+            fetchAuditLogs(1, undefined, '');
+          }}
+        >
+          Reset
+        </Button>
+        <Text type="secondary" style={{ marginLeft: 'auto' }}>
+          {auditTotal} {auditTotal === 1 ? 'entry' : 'entries'}
+        </Text>
+      </div>
+      <Table
+        dataSource={auditLogs}
+        columns={auditColumns}
+        rowKey="id"
+        size="small"
+        loading={auditLoading}
+        locale={{ emptyText: 'No audit log entries yet — they appear as users interact with the system.' }}
+        pagination={{
+          current: auditPage,
+          pageSize: auditLimit,
+          total: auditTotal,
+          showSizeChanger: false,
+          onChange: (page) => fetchAuditLogs(page, auditActionFilter, auditSearch),
+        }}
+      />
     </Card>
   );
 
