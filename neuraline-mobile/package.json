@@ -17,6 +17,8 @@
   "dependencies": {
     "@expo/html-elements": "^0.12.5",
     "@gluestack-ui/core": "^4.0.0-alpha.0",
+    "@gluestack-ui/overlay": "^0.1.22",
+    "@gluestack-ui/toast": "^1.0.9",
     "@gluestack-ui/utils": "^4.0.0-alpha.0",
     "@legendapp/motion": "^2.5.3",
     "@neuraline/shared": "file:../shared",
