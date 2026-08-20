@@ -11,4 +11,11 @@ const config = getDefaultConfig(__dirname);
 // "module" / "main" fields which point to pre-compiled JS.
 config.resolver.resolverMainFields = ['module', 'main'];
 
+// Limit workers for machines with limited RAM (8GB).
+// Default scales with CPU cores which can cause OOM and extreme slowdowns.
+config.maxWorkers = 2;
+
+// Increase cache size to reduce re-bundling
+config.transformer.cacheStores = undefined;
+
 module.exports = withNativeWind(config, { input: './global.css', inlineRem: 16 });
