@@ -53,6 +53,7 @@ import {
   MedicineBoxOutlined,
   ProfileOutlined,
   ExperimentOutlined,
+  FileProtectOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -67,6 +68,8 @@ import type { PortalStatus, EnablePortalResult, PatientDocumentRecord } from '..
 import type { EncounterVitals } from '../../services/encounterService';
 import { prescriptionService } from '../../services/prescriptionService';
 import type { Prescription } from '../../services/prescriptionService';
+import { patientMedicationsService } from '../../services/patientMedicationsService';
+import type { PatientMedication } from '../../services/patientMedicationsService';
 import { laboratoryService } from '../../services/laboratoryService';
 import type { LabOrder, ImagingOrder } from '../../services/laboratoryService';
 import { encounterService } from '../../services/encounterService';
@@ -129,6 +132,8 @@ const PatientDetailPage: React.FC = () => {
   const [resetForm] = Form.useForm();
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [patientMedications, setPatientMedications] = useState<PatientMedication[]>([]);
+  const [patientMedicationsLoading, setPatientMedicationsLoading] = useState(false);
   const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
   const [labOrdersLoading, setLabOrdersLoading] = useState(false);
   const [imagingOrders, setImagingOrders] = useState<ImagingOrder[]>([]);
@@ -197,6 +202,23 @@ const PatientDetailPage: React.FC = () => {
   useEffect(() => {
     fetchPrescriptions();
   }, [fetchPrescriptions]);
+
+  const fetchPatientMedications = useCallback(async () => {
+    if (!id) return;
+    setPatientMedicationsLoading(true);
+    try {
+      const data = await patientMedicationsService.list(id);
+      setPatientMedications(data);
+    } catch {
+      // silent – medications may not exist yet
+    } finally {
+      setPatientMedicationsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchPatientMedications();
+  }, [fetchPatientMedications]);
 
   const fetchLabOrders = useCallback(async () => {
     if (!id) return;
@@ -285,6 +307,30 @@ const PatientDetailPage: React.FC = () => {
     () => claims.filter((c) => c.patientId === id),
     [id, claims],
   );
+
+  // Flatten referrals from all encounters
+  const allReferrals = useMemo(() => {
+    const refs: Array<{
+      specialty: string;
+      provider?: string;
+      reason: string;
+      urgency?: string;
+      status: string;
+      notes?: string;
+      encounterId: string;
+      encounterDate: string;
+    }> = [];
+    for (const enc of encounters) {
+      for (const ref of enc.orders?.referrals || []) {
+        refs.push({
+          ...ref,
+          encounterId: enc.id,
+          encounterDate: enc.startTime,
+        });
+      }
+    }
+    return refs.sort((a, b) => new Date(b.encounterDate).getTime() - new Date(a.encounterDate).getTime());
+  }, [encounters]);
 
   if (!patient) {
     return (
@@ -1410,7 +1456,109 @@ const PatientDetailPage: React.FC = () => {
     );
   };
 
-  // ── Tab: Medications ──
+  // ── Tab: Medications (clinical medication list) ──
+  const medicationStatusColors: Record<string, string> = {
+    active: 'green',
+    on_hold: 'orange',
+    discontinued: 'red',
+    completed: 'default',
+  };
+
+  const medicationSourceLabels: Record<string, string> = {
+    prescribed: 'Prescribed',
+    patient_reported: 'Patient Reported',
+    otc: 'OTC',
+    supplement: 'Supplement',
+    external: 'External',
+  };
+
+  const takingStatusLabels: Record<string, string> = {
+    taking: 'Taking',
+    not_taking: 'Not Taking',
+    as_needed: 'As Needed',
+    unknown: 'Unknown',
+  };
+
+  const takingStatusColors: Record<string, string> = {
+    taking: 'green',
+    not_taking: 'red',
+    as_needed: 'cyan',
+    unknown: 'default',
+  };
+
+  const MedicationsTab = () => {
+    const activeMeds = patientMedications.filter((m) => m.status === 'active' || m.status === 'on_hold');
+    const inactiveMeds = patientMedications.filter((m) => m.status !== 'active' && m.status !== 'on_hold');
+
+    const renderMedication = (med: PatientMedication) => (
+      <List.Item>
+        <List.Item.Meta
+          title={
+            <Space wrap>
+              <Text strong>
+                {med.name}
+                {med.dosage ? ` ${med.dosage}` : ''}
+              </Text>
+              <Tag color={medicationStatusColors[med.status]}>{med.status.replace('_', ' ')}</Tag>
+              <Tag>{medicationSourceLabels[med.source] || med.source}</Tag>
+              <Tag color={takingStatusColors[med.takingStatus]}>
+                {takingStatusLabels[med.takingStatus] || med.takingStatus}
+              </Tag>
+            </Space>
+          }
+          description={
+            <Space direction="vertical" size={0}>
+              <Text type="secondary">
+                {[med.dosage, med.frequency, med.route].filter(Boolean).join(', ') || 'No dosing details'}
+              </Text>
+              {med.indication && <Text type="secondary">For: {med.indication}</Text>}
+              {med.instructions && <Text type="secondary">Instructions: {med.instructions}</Text>}
+              {med.prescriberName && <Text type="secondary">Prescriber: {med.prescriberName}</Text>}
+              {med.startDate && (
+                <Text type="secondary">Started: {dayjs(med.startDate).format('MM/DD/YYYY')}</Text>
+              )}
+              {med.status === 'discontinued' && med.discontinuedReason && (
+                <Text type="secondary">Discontinued: {med.discontinuedReason}</Text>
+              )}
+            </Space>
+          }
+        />
+      </List.Item>
+    );
+
+    return (
+      <div>
+        {patientMedicationsLoading ? (
+          <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+        ) : patientMedications.length === 0 ? (
+          <Card>
+            <Empty description="No medications on file" />
+          </Card>
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Card
+              title={<span><MedicineBoxOutlined /> Active Medications ({activeMeds.length})</span>}
+              size="small"
+            >
+              {activeMeds.length ? (
+                <List dataSource={activeMeds} renderItem={renderMedication} />
+              ) : (
+                <Empty description="No active medications" />
+              )}
+            </Card>
+
+            {inactiveMeds.length > 0 && (
+              <Card title={`Past Medications (${inactiveMeds.length})`} size="small">
+                <List dataSource={inactiveMeds} renderItem={renderMedication} />
+              </Card>
+            )}
+          </Space>
+        )}
+      </div>
+    );
+  };
+
+  // ── Tab: E-Prescriptions (prescriber/pharmacy workflow) ──
   const prescriptionStatusColors: Record<string, string> = {
     draft: 'default',
     active: 'green',
@@ -1421,7 +1569,7 @@ const PatientDetailPage: React.FC = () => {
     expired: 'red',
   };
 
-  const MedicationsTab = () => {
+  const EPrescriptionsTab = () => {
     const active = prescriptions.filter((p) => p.status === 'active' || p.status === 'sent');
     const past = prescriptions.filter((p) => p.status !== 'active' && p.status !== 'sent');
 
@@ -1436,7 +1584,7 @@ const PatientDetailPage: React.FC = () => {
         ) : (
           <Space direction="vertical" size={16} style={{ width: '100%' }}>
             <Card
-              title={<span><MedicineBoxOutlined /> Active Medications ({active.length})</span>}
+              title={<span><FileProtectOutlined /> Active Prescriptions ({active.length})</span>}
               size="small"
             >
               {active.length ? (
@@ -1476,7 +1624,7 @@ const PatientDetailPage: React.FC = () => {
                   )}
                 />
               ) : (
-                <Empty description="No active medications" />
+                <Empty description="No active prescriptions" />
               )}
             </Card>
 
@@ -1547,30 +1695,6 @@ const PatientDetailPage: React.FC = () => {
     dexa: 'DEXA Scan',
     other: 'Other',
   };
-
-  // Flatten referrals from all encounters
-  const allReferrals = useMemo(() => {
-    const refs: Array<{
-      specialty: string;
-      provider?: string;
-      reason: string;
-      urgency?: string;
-      status: string;
-      notes?: string;
-      encounterId: string;
-      encounterDate: string;
-    }> = [];
-    for (const enc of encounters) {
-      for (const ref of enc.orders?.referrals || []) {
-        refs.push({
-          ...ref,
-          encounterId: enc.id,
-          encounterDate: enc.startTime,
-        });
-      }
-    }
-    return refs.sort((a, b) => new Date(b.encounterDate).getTime() - new Date(a.encounterDate).getTime());
-  }, [encounters]);
 
   const OrdersTab = () => (
     <div>
@@ -1818,6 +1942,7 @@ const PatientDetailPage: React.FC = () => {
     { key: 'problems', label: 'Problem List', children: <ProblemListTab /> },
     { key: 'allergies', label: `Allergies (${patient.allergies.length})`, children: <AllergiesTab /> },
     { key: 'medications', label: <span><MedicineBoxOutlined /> Medications</span>, children: <MedicationsTab /> },
+    { key: 'eprescriptions', label: <span><FileProtectOutlined /> E-Prescriptions</span>, children: <EPrescriptionsTab /> },
     { key: 'orders', label: <span><ProfileOutlined /> Orders</span>, children: <OrdersTab /> },
     { key: 'appointments', label: 'Appointments', children: <AppointmentsTab /> },
     { key: 'documents', label: 'Documents', children: <DocumentsTab /> },

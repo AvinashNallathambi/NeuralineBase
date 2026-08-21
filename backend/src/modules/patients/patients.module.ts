@@ -19,11 +19,14 @@ import { PatientGroupsService } from './patient-groups.service';
 import { PatientGroupAiService } from './patient-groups-ai.service';
 import { PatientFlagsController } from './patient-flags.controller';
 import { PatientFlagsService } from './patient-flags.service';
+import { PatientMedicationsController } from './patient-medications.controller';
+import { PatientMedicationsService } from './patient-medications.service';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem } from './entities/patient-problem.entity';
 import { PatientDocument } from './entities/patient-document.entity';
 import { PatientFlag, PatientFlagAcknowledgement } from './entities/patient-flag.entity';
 import { PatientGroup, PatientGroupAuditLog } from './entities/patient-group.entity';
+import { PatientMedication } from './entities/patient-medication.entity';
 import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
 import { InsurancePayer } from '../billing/entities/insurance-payer.entity';
 import { AppointmentsModule } from '../appointments/appointments.module';
@@ -37,7 +40,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Patient, PatientProblem, PatientDocument, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
+    TypeOrmModule.forFeature([Patient, PatientProblem, PatientDocument, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientMedication, PatientInsurance, InsurancePayer]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -58,8 +61,8 @@ import { AuthModule } from '../auth/auth.module';
     AiModule,
     NotificationsModule,
   ],
-  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientPortalAdminController, PatientGroupsController, PatientFlagsController],
-  providers: [PatientsService, PatientAuthService, PatientAiService, PatientPortalAdminService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
-  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientPortalAdminService, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
+  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientPortalAdminController, PatientGroupsController, PatientFlagsController, PatientMedicationsController],
+  providers: [PatientsService, PatientAuthService, PatientAiService, PatientPortalAdminService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService, PatientFlagsService, PatientMedicationsService],
+  exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientPortalAdminService, PatientGroupsService, PatientGroupAiService, PatientFlagsService, PatientMedicationsService],
 })
 export class PatientsModule {}

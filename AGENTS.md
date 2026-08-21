@@ -63,12 +63,19 @@ npx typeorm migration:revert -d src/config/database.config.ts
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
 
 ### Encounter Order Sync
-Lab orders, imaging orders, and medications added in the encounter editor are stored in the encounter's JSONB columns (`encounter.orders` and `encounter.treatmentPlan.medications`). The `EncounterOrderSyncService` (`backend/src/modules/clinical/encounter-order-sync.service.ts`) propagates these into the real `lab_orders`, `imaging_orders`, and `prescriptions` tables on encounter `create`, `update`, and `sign`. This makes them visible in the Laboratory module, Prescriptions module, patient portal, and enables the full order lifecycle (collect → result → complete).
+Lab orders, imaging orders, and medications added in the encounter editor are stored in the encounter's JSONB columns (`encounter.orders` and `encounter.treatmentPlan.medications`). The `EncounterOrderSyncService` (`backend/src/modules/clinical/encounter-order-sync.service.ts`) propagates these into the real `lab_orders`, `imaging_orders`, `prescriptions`, and `patient_medications` tables on encounter `create`, `update`, and `sign`. This makes them visible in the Laboratory module, Prescriptions module, patient portal, and enables the full order lifecycle (collect → result → complete).
 - **Dedup key**: Lab orders by `encounterId` + test name; imaging orders by `encounterId` + study name; medications by `encounterId` + medication name (all case-insensitive).
 - **Status updates**: Only orders still in `draft`/`ordered` (labs), `ordered`/`scheduled` (imaging), or `draft` (prescriptions) are updated by the sync. Orders that have progressed are left alone — the lab/radiology/pharmacy team owns the lifecycle from that point.
-- **Medications**: Encounter medications are created as `active` prescriptions in the `prescriptions` table, so they immediately appear in the patient portal's Prescriptions page and the patient detail page's Medications tab.
-- **Removal**: If a lab/imaging order or medication is removed from the encounter, the corresponding table row is cancelled (only if still in an editable state).
+- **Medications**: Encounter medications are created as `active` prescriptions in the `prescriptions` table (patient portal Prescriptions page, patient detail E-Prescriptions tab) AND upserted into the patient's clinical medication list (`patient_medications`, source=`prescribed`) so they appear in the patient detail Medications tab for review/reconciliation.
+- **Removal**: If a lab/imaging order or medication is removed from the encounter, the corresponding table row is cancelled (only if still in an editable state); the matching `patient_medications` entry is discontinued (only if still active and source=`prescribed`).
 - **Name resolution**: Patient and provider display names are resolved via `PatientsService` and `ProvidersService`, falling back to the ID if the record isn't found.
+
+### Patient Medication List vs Prescriptions
+Medications are split into two concepts:
+- **`patient_medications`** (`backend/src/modules/patients/entities/patient-medication.entity.ts`) — the clinical "what is this patient on" list used for medication review/reconciliation. Includes prescribed medications (synced from encounters) plus patient-reported, OTC, supplement, and external entries that never go through e-prescribing. Tracks `source` (prescribed/patient_reported/otc/supplement/external), `status` (active/on_hold/discontinued/completed), and `takingStatus` (taking/not_taking/as_needed/unknown), with optional links to the originating `prescriptionId`/`encounterId`.
+- **`prescriptions`** — the e-prescribing/prescriber workflow (drafts, pharmacy transmission, refills, EPCS/controlled-substance tracking).
+
+API: `GET/POST /patients/:id/medications`, `PATCH/DELETE /patients/:id/medications/:medicationId`, `POST /patients/:id/medications/:medicationId/discontinue` (staff JWT, tenant-scoped). Frontend: `frontend/src/services/patientMedicationsService.ts`; the patient detail page has a **Medications** tab (medication list) and a separate **E-Prescriptions** tab (prescriptions).
 
 ## Specialty Support
 Neuraline is a **multi-specialty, specialty-agnostic EMR**. The `specialty` column on clinical templates and the `department`/`specialization` columns on providers are free-text `varchar`, so any specialty can be added at runtime without a schema change.

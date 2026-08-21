@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { LaboratoryService } from '../laboratory/laboratory.service';
 import { PrescriptionsService } from '../prescriptions/prescriptions.service';
 import { PatientsService } from '../patients/patients.service';
+import { PatientMedicationsService } from '../patients/patient-medications.service';
 import { ProvidersService } from '../providers/providers.service';
 import { LabOrder } from '../laboratory/entities/lab-order.entity';
 import { LabTest } from '../laboratory/entities/lab-test.entity';
@@ -14,9 +15,10 @@ import { Encounter } from './entities/encounter.entity';
 /**
  * Propagates lab orders, imaging orders, and medications stored in the
  * encounter's JSONB columns into the real `lab_orders`, `imaging_orders`,
- * and `prescriptions` tables so they appear in the Laboratory module,
- * Prescriptions module, patient portal, and participate in the full
- * order lifecycle (collect → result → complete).
+ * `prescriptions`, and `patient_medications` tables so they appear in the
+ * Laboratory module, Prescriptions module, patient medication list,
+ * patient portal, and participate in the full order lifecycle
+ * (collect → result → complete).
  *
  * Dedup key:
  *   - Lab:         encounterId + test name (case-insensitive)
@@ -27,6 +29,11 @@ import { Encounter } from './entities/encounter.entity';
  * in_progress, resulted, completed) are never modified by the sync — the
  * lab/radiology team owns the lifecycle from that point forward.
  * Prescriptions past "draft" are left to the pharmacy/prescriber workflow.
+ *
+ * Medications are additionally synced into the patient's clinical
+ * medication list (`patient_medications`) as source=prescribed entries so
+ * they show up for medication review/reconciliation alongside
+ * patient-reported, OTC, and supplement entries.
  */
 @Injectable()
 export class EncounterOrderSyncService {
@@ -36,6 +43,7 @@ export class EncounterOrderSyncService {
     private readonly laboratoryService: LaboratoryService,
     private readonly prescriptionsService: PrescriptionsService,
     private readonly patientsService: PatientsService,
+    private readonly patientMedicationsService: PatientMedicationsService,
     private readonly providersService: ProvidersService,
     @InjectRepository(LabOrder)
     private readonly labOrderRepository: Repository<LabOrder>,
@@ -82,7 +90,7 @@ export class EncounterOrderSyncService {
     });
 
     // Load all tests for those orders to build a name → order map
-    let existingByTestName = new Map<string, LabOrder>();
+    const existingByTestName = new Map<string, LabOrder>();
     if (existingOrders.length > 0) {
       const tests = await this.labTestRepository.find({
         where: { tenantId, orderId: In(existingOrders.map((o) => o.id)) },
@@ -265,7 +273,7 @@ export class EncounterOrderSyncService {
   }
 
   // ───────────────────────────────────────────────────────────
-  // Medications → Prescriptions
+  // Medications → Prescriptions + Patient Medication List
   // ───────────────────────────────────────────────────────────
 
   private async syncMedications(
@@ -299,6 +307,7 @@ export class EncounterOrderSyncService {
       if (!key) continue;
 
       const existing = existingByMedName.get(key);
+      let linkedPrescriptionId: string | undefined = existing?.id;
 
       if (existing) {
         stillPresentIds.add(existing.id);
@@ -329,7 +338,7 @@ export class EncounterOrderSyncService {
       } else {
         // Create a new prescription from the encounter medication
         try {
-          await this.prescriptionsService.create(tenantId, {
+          const created = await this.prescriptionsService.create(tenantId, {
             patientId: encounter.patientId,
             patientName,
             providerId: encounter.providerId,
@@ -351,6 +360,7 @@ export class EncounterOrderSyncService {
             status: 'active',
             prescribedDate: new Date().toISOString(),
           } as any);
+          linkedPrescriptionId = created?.id;
           this.logger.log(
             `Created prescription for "${med.name}" from encounter ${encounter.id}`,
           );
@@ -360,6 +370,56 @@ export class EncounterOrderSyncService {
           );
         }
       }
+
+      // Keep the clinical medication list (patient_medications) in sync so
+      // the medication appears for review/reconciliation.
+      try {
+        await this.patientMedicationsService.upsertFromEncounter(
+          tenantId,
+          encounter.patientId,
+          encounter.id,
+          {
+            name: med.name,
+            dosage: med.dosage,
+            frequency: med.frequency,
+            route: med.route,
+            instructions: med.instructions,
+            prescriberName: providerName,
+            prescriptionId: linkedPrescriptionId,
+          },
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to sync patient medication "${med.name}" from encounter: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // Discontinue medication-list entries whose medication was removed
+    // from the encounter's treatment plan.
+    try {
+      const encounterMedNames = new Set(
+        encounterMeds
+          .map((m) => (m.name || '').toLowerCase().trim())
+          .filter(Boolean),
+      );
+      const syncedMedications = await this.patientMedicationsService.findByEncounter(
+        tenantId,
+        encounter.id,
+      );
+      for (const medication of syncedMedications) {
+        if (!encounterMedNames.has(medication.name.toLowerCase().trim())) {
+          await this.patientMedicationsService.discontinueFromEncounter(
+            tenantId,
+            medication.id,
+            'Removed from encounter',
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to discontinue removed patient medications for encounter ${encounter.id}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // Cancel prescriptions that were removed from the encounter — only if
