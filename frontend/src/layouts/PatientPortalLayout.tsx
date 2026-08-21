@@ -56,6 +56,7 @@ const PatientPortalLayout: React.FC = () => {
     { key: '/portal/messages', icon: <MessageOutlined />, label: 'Messages' },
     { key: '/portal/prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
     { key: '/portal/lab-results', icon: <ExperimentOutlined />, label: 'Lab Results' },
+    { key: '/portal/imaging', icon: <ExperimentOutlined />, label: 'Imaging Results' },
     { key: '/portal/billing', icon: <DollarOutlined />, label: 'Billing & Payments' },
     { key: '/portal/eobs', icon: <FileTextOutlined />, label: 'Insurance EOBs' },
     { key: '/portal/insurance', icon: <SafetyOutlined />, label: 'My Insurance' },

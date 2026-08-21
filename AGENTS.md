@@ -62,6 +62,14 @@ npx typeorm migration:revert -d src/config/database.config.ts
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Telemedicine, Users
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
 
+### Encounter Order Sync
+Lab orders, imaging orders, and medications added in the encounter editor are stored in the encounter's JSONB columns (`encounter.orders` and `encounter.treatmentPlan.medications`). The `EncounterOrderSyncService` (`backend/src/modules/clinical/encounter-order-sync.service.ts`) propagates these into the real `lab_orders`, `imaging_orders`, and `prescriptions` tables on encounter `create`, `update`, and `sign`. This makes them visible in the Laboratory module, Prescriptions module, patient portal, and enables the full order lifecycle (collect → result → complete).
+- **Dedup key**: Lab orders by `encounterId` + test name; imaging orders by `encounterId` + study name; medications by `encounterId` + medication name (all case-insensitive).
+- **Status updates**: Only orders still in `draft`/`ordered` (labs), `ordered`/`scheduled` (imaging), or `draft` (prescriptions) are updated by the sync. Orders that have progressed are left alone — the lab/radiology/pharmacy team owns the lifecycle from that point.
+- **Medications**: Encounter medications are created as `active` prescriptions in the `prescriptions` table, so they immediately appear in the patient portal's Prescriptions page and the patient detail page's Medications tab.
+- **Removal**: If a lab/imaging order or medication is removed from the encounter, the corresponding table row is cancelled (only if still in an editable state).
+- **Name resolution**: Patient and provider display names are resolved via `PatientsService` and `ProvidersService`, falling back to the ID if the record isn't found.
+
 ## Specialty Support
 Neuraline is a **multi-specialty, specialty-agnostic EMR**. The `specialty` column on clinical templates and the `department`/`specialization` columns on providers are free-text `varchar`, so any specialty can be added at runtime without a schema change.
 
@@ -190,6 +198,7 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - `GET /prescriptions` — Patient's prescriptions
 - `POST /prescriptions/:id/refill` — Request a prescription refill
 - `GET /lab-results` — Patient's lab orders with tests
+- `GET /imaging` — Patient's imaging orders with findings/impression
 - `GET /invoices` — Patient's invoices
 - `POST /invoices/:id/pay` — Make a payment on an invoice
 - `GET /eobs` — Patient's EOBs from remittance module
@@ -225,6 +234,7 @@ The patient portal provides a dedicated, patient-facing interface separate from 
   - `/portal/appointments` — View appointments + request new ones with slot picker
   - `/portal/prescriptions` — View prescriptions + request refills
   - `/portal/lab-results` — View lab results with collapsible test details
+  - `/portal/imaging` — View imaging orders with findings, impression, and report links
   - `/portal/billing` — View invoices + make payments
   - `/portal/eobs` — View insurance EOBs with adjustment details
   - `/portal/insurance` — View insurance policies

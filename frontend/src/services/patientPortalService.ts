@@ -56,6 +56,13 @@ class PatientPortalService {
     return response.data;
   }
 
+  async getImagingResults(status?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    const response = await api.get(`${this.baseUrl}/imaging?${params.toString()}`);
+    return response.data;
+  }
+
   async getInvoices(status?: string): Promise<any[]> {
     const params = new URLSearchParams();
     if (status) params.append('status', status);

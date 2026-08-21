@@ -131,6 +131,7 @@ const PortalDashboardPage = lazyWithRetry(() => import("../pages/portal/PortalDa
 const PortalAppointmentsPage = lazyWithRetry(() => import("../pages/portal/PortalAppointmentsPage"));
 const PortalPrescriptionsPage = lazyWithRetry(() => import("../pages/portal/PortalPrescriptionsPage"));
 const PortalLabResultsPage = lazyWithRetry(() => import("../pages/portal/PortalLabResultsPage"));
+const PortalImagingPage = lazyWithRetry(() => import("../pages/portal/PortalImagingPage"));
 const PortalBillingPage = lazyWithRetry(() => import("../pages/portal/PortalBillingPage"));
 const PortalEobsPage = lazyWithRetry(() => import("../pages/portal/PortalEobsPage"));
 const PortalInsurancePage = lazyWithRetry(() => import("../pages/portal/PortalInsurancePage"));
@@ -617,6 +618,14 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PortalLabResultsPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "imaging",
+        element: (
+          <LazyPage>
+            <PortalImagingPage />
           </LazyPage>
         ),
       },

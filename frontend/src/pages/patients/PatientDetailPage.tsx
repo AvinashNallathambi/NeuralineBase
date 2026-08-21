@@ -50,6 +50,9 @@ import {
   PoweroffOutlined,
   CopyOutlined,
   ExclamationCircleOutlined,
+  MedicineBoxOutlined,
+  ProfileOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import { useParams, useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -62,6 +65,12 @@ import { PatientInsuranceManager } from '../../components/patients/PatientInsura
 import { patientService } from '../../services/patientService';
 import type { PortalStatus, EnablePortalResult, PatientDocumentRecord } from '../../services/patientService';
 import type { EncounterVitals } from '../../services/encounterService';
+import { prescriptionService } from '../../services/prescriptionService';
+import type { Prescription } from '../../services/prescriptionService';
+import { laboratoryService } from '../../services/laboratoryService';
+import type { LabOrder, ImagingOrder } from '../../services/laboratoryService';
+import { encounterService } from '../../services/encounterService';
+import type { Encounter as PatientEncounter } from '../../services/encounterService';
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
@@ -118,6 +127,14 @@ const PatientDetailPage: React.FC = () => {
   const [enableResult, setEnableResult] = useState<EnablePortalResult | null>(null);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [resetForm] = Form.useForm();
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [prescriptionsLoading, setPrescriptionsLoading] = useState(false);
+  const [labOrders, setLabOrders] = useState<LabOrder[]>([]);
+  const [labOrdersLoading, setLabOrdersLoading] = useState(false);
+  const [imagingOrders, setImagingOrders] = useState<ImagingOrder[]>([]);
+  const [imagingOrdersLoading, setImagingOrdersLoading] = useState(false);
+  const [encounters, setEncounters] = useState<PatientEncounter[]>([]);
+  const [encountersLoading, setEncountersLoading] = useState(false);
 
   // Fetch patients and appointments on mount
   React.useEffect(() => {
@@ -159,6 +176,86 @@ const PatientDetailPage: React.FC = () => {
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
+
+  const fetchPrescriptions = useCallback(async () => {
+    if (!id) return;
+    setPrescriptionsLoading(true);
+    try {
+      const result = await prescriptionService.findAll({
+        page: 1,
+        limit: 200,
+        patientId: id,
+      });
+      setPrescriptions(result.data);
+    } catch {
+      // silent – prescriptions may not exist yet
+    } finally {
+      setPrescriptionsLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchPrescriptions();
+  }, [fetchPrescriptions]);
+
+  const fetchLabOrders = useCallback(async () => {
+    if (!id) return;
+    setLabOrdersLoading(true);
+    try {
+      const result = await laboratoryService.getOrders({
+        patientId: id,
+        page: 1,
+        limit: 200,
+      });
+      setLabOrders(result.data);
+    } catch {
+      // silent
+    } finally {
+      setLabOrdersLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchLabOrders();
+  }, [fetchLabOrders]);
+
+  const fetchImagingOrders = useCallback(async () => {
+    if (!id) return;
+    setImagingOrdersLoading(true);
+    try {
+      const result = await laboratoryService.getImagingOrders({
+        patientId: id,
+        page: 1,
+        limit: 200,
+      });
+      setImagingOrders(result.data);
+    } catch {
+      // silent
+    } finally {
+      setImagingOrdersLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchImagingOrders();
+  }, [fetchImagingOrders]);
+
+  const fetchEncounters = useCallback(async () => {
+    if (!id) return;
+    setEncountersLoading(true);
+    try {
+      const data = await encounterService.findByPatient(id);
+      setEncounters(data);
+    } catch {
+      // silent
+    } finally {
+      setEncountersLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchEncounters();
+  }, [fetchEncounters]);
 
   const fetchPortalStatus = useCallback(async () => {
     if (!id) return;
@@ -1313,12 +1410,415 @@ const PatientDetailPage: React.FC = () => {
     );
   };
 
+  // ── Tab: Medications ──
+  const prescriptionStatusColors: Record<string, string> = {
+    draft: 'default',
+    active: 'green',
+    sent: 'blue',
+    completed: 'default',
+    cancelled: 'red',
+    discontinued: 'orange',
+    expired: 'red',
+  };
+
+  const MedicationsTab = () => {
+    const active = prescriptions.filter((p) => p.status === 'active' || p.status === 'sent');
+    const past = prescriptions.filter((p) => p.status !== 'active' && p.status !== 'sent');
+
+    return (
+      <div>
+        {prescriptionsLoading ? (
+          <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+        ) : prescriptions.length === 0 ? (
+          <Card>
+            <Empty description="No prescriptions on file" />
+          </Card>
+        ) : (
+          <Space direction="vertical" size={16} style={{ width: '100%' }}>
+            <Card
+              title={<span><MedicineBoxOutlined /> Active Medications ({active.length})</span>}
+              size="small"
+            >
+              {active.length ? (
+                <List
+                  dataSource={active}
+                  renderItem={(rx) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            <Text strong>
+                              {rx.medications?.map((m) => `${m.medication} ${m.dosage || ''}`).join(', ') || 'Prescription'}
+                            </Text>
+                            <Tag color={prescriptionStatusColors[rx.status]}>{rx.status}</Tag>
+                          </Space>
+                        }
+                        description={
+                          <Space direction="vertical" size={0}>
+                            {rx.medications?.map((m, i) => (
+                              <Text key={i} type="secondary">
+                                {m.medication} — {m.dosage}, {m.frequency}, {m.route}, {m.duration}
+                                {m.refills !== undefined ? ` · Refills: ${m.refills}` : ''}
+                                {m.instructions ? ` · ${m.instructions}` : ''}
+                              </Text>
+                            ))}
+                            {rx.pharmacy && <Text type="secondary">Pharmacy: {rx.pharmacy}</Text>}
+                            {rx.providerName && <Text type="secondary">Prescribed by: {rx.providerName}</Text>}
+                            {rx.prescribedDate && (
+                              <Text type="secondary">
+                                Prescribed: {dayjs(rx.prescribedDate).format('MM/DD/YYYY')}
+                              </Text>
+                            )}
+                          </Space>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              ) : (
+                <Empty description="No active medications" />
+              )}
+            </Card>
+
+            {past.length > 0 && (
+              <Card title={`Past Prescriptions (${past.length})`} size="small">
+                <List
+                  dataSource={past}
+                  renderItem={(rx) => (
+                    <List.Item>
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            <Text strong>{rx.medications?.map((m) => m.medication).join(', ') || 'Prescription'}</Text>
+                            <Tag color={prescriptionStatusColors[rx.status]}>{rx.status}</Tag>
+                          </Space>
+                        }
+                        description={
+                          <Text type="secondary">
+                            Prescribed: {rx.prescribedDate ? dayjs(rx.prescribedDate).format('MM/DD/YYYY') : 'N/A'}
+                            {rx.providerName ? ` · ${rx.providerName}` : ''}
+                          </Text>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            )}
+          </Space>
+        )}
+      </div>
+    );
+  };
+
+  // ── Tab: Orders (Lab + Imaging + Referrals) ──
+  const labStatusColors: Record<string, string> = {
+    draft: 'default',
+    ordered: 'blue',
+    collected: 'cyan',
+    in_progress: 'processing',
+    resulted: 'green',
+    completed: 'green',
+    cancelled: 'red',
+  };
+
+  const imagingStatusColors: Record<string, string> = {
+    ordered: 'blue',
+    scheduled: 'cyan',
+    in_progress: 'processing',
+    completed: 'green',
+    cancelled: 'red',
+  };
+
+  const referralStatusColors: Record<string, string> = {
+    pending: 'orange',
+    sent: 'blue',
+    scheduled: 'cyan',
+    completed: 'green',
+    cancelled: 'red',
+  };
+
+  const modalityLabels: Record<string, string> = {
+    xray: 'X-Ray',
+    mri: 'MRI',
+    ct: 'CT Scan',
+    ultrasound: 'Ultrasound',
+    mammogram: 'Mammogram',
+    dexa: 'DEXA Scan',
+    other: 'Other',
+  };
+
+  // Flatten referrals from all encounters
+  const allReferrals = useMemo(() => {
+    const refs: Array<{
+      specialty: string;
+      provider?: string;
+      reason: string;
+      urgency?: string;
+      status: string;
+      notes?: string;
+      encounterId: string;
+      encounterDate: string;
+    }> = [];
+    for (const enc of encounters) {
+      for (const ref of enc.orders?.referrals || []) {
+        refs.push({
+          ...ref,
+          encounterId: enc.id,
+          encounterDate: enc.startTime,
+        });
+      }
+    }
+    return refs.sort((a, b) => new Date(b.encounterDate).getTime() - new Date(a.encounterDate).getTime());
+  }, [encounters]);
+
+  const OrdersTab = () => (
+    <div>
+      {(labOrdersLoading || imagingOrdersLoading || encountersLoading) ? (
+        <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
+      ) : labOrders.length === 0 && imagingOrders.length === 0 && allReferrals.length === 0 ? (
+        <Card>
+          <Empty description="No orders on file" />
+        </Card>
+      ) : (
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          {/* Lab Orders */}
+          <Card
+            title={<span><ExperimentOutlined /> Lab Orders ({labOrders.length})</span>}
+            size="small"
+          >
+            {labOrders.length > 0 ? (
+              <Table<LabOrder>
+                dataSource={labOrders}
+                rowKey="id"
+                pagination={false}
+                size="small"
+                expandable={{
+                  expandedRowRender: (order) => {
+                    if (!order.tests || order.tests.length === 0) {
+                      return <Empty description="No test details" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+                    }
+                    const testColumns = [
+                      { title: 'Test', dataIndex: 'name', key: 'name' },
+                      {
+                        title: 'Result',
+                        key: 'result',
+                        render: (_: any, t: any) =>
+                          t.result ? (
+                            <Space>
+                              <Text strong style={t.abnormalFlag === 'critical_high' || t.abnormalFlag === 'critical_low' ? { color: '#cf1322' } : t.abnormalFlag === 'high' || t.abnormalFlag === 'low' ? { color: '#fa8c16' } : {}}>
+                                {t.result} {t.unit || ''}
+                              </Text>
+                              {t.abnormalFlag && t.abnormalFlag !== 'normal' && (
+                                <Tag color={t.abnormalFlag.includes('critical') ? 'red' : 'orange'}>
+                                  {t.abnormalFlag.replace(/_/g, ' ')}
+                                </Tag>
+                              )}
+                            </Space>
+                          ) : (
+                            <Text type="secondary">Pending</Text>
+                          ),
+                      },
+                      {
+                        title: 'Reference Range',
+                        dataIndex: 'referenceRange',
+                        key: 'range',
+                        render: (r: string) => r ? <Text type="secondary">{r}</Text> : null,
+                      },
+                      {
+                        title: 'Status',
+                        dataIndex: 'status',
+                        key: 'status',
+                        render: (s: string) => <Tag>{s}</Tag>,
+                      },
+                    ];
+                    return <Table columns={testColumns} dataSource={order.tests} rowKey="id" pagination={false} size="small" />;
+                  },
+                }}
+              >
+                <Table.Column
+                  title="Tests"
+                  key="tests"
+                  render={(_, order: LabOrder) => (
+                    <Text strong>{order.tests?.map((t) => t.name).join(', ') || 'N/A'}</Text>
+                  )}
+                />
+                <Table.Column
+                  title="Status"
+                  dataIndex="status"
+                  key="status"
+                  render={(s: string) => <Tag color={labStatusColors[s]}>{s}</Tag>}
+                />
+                <Table.Column
+                  title="Priority"
+                  dataIndex="priority"
+                  key="priority"
+                  render={(p: string) => p && p !== 'routine' ? <Tag color={p === 'stat' ? 'red' : 'orange'}>{p}</Tag> : <Text type="secondary">routine</Text>}
+                />
+                <Table.Column
+                  title="Ordered"
+                  dataIndex="orderedDate"
+                  key="orderedDate"
+                  render={(d: string) => d ? dayjs(d).format('MM/DD/YYYY') : 'N/A'}
+                />
+                <Table.Column
+                  title="Provider"
+                  dataIndex="providerName"
+                  key="providerName"
+                  render={(n: string) => n || 'N/A'}
+                />
+              </Table>
+            ) : (
+              <Empty description="No lab orders" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </Card>
+
+          {/* Imaging Orders */}
+          <Card
+            title={<span><ExperimentOutlined /> Imaging Orders ({imagingOrders.length})</span>}
+            size="small"
+          >
+            {imagingOrders.length > 0 ? (
+              <Table<ImagingOrder>
+                dataSource={imagingOrders}
+                rowKey="id"
+                pagination={false}
+                size="small"
+                expandable={{
+                  expandedRowRender: (order) => {
+                    if (order.status === 'completed' && (order.findings || order.impression)) {
+                      return (
+                        <div style={{ padding: '8px 0' }}>
+                          {order.findings && (
+                            <div style={{ marginBottom: 8 }}>
+                              <Text strong>Findings: </Text>
+                              <Text>{order.findings}</Text>
+                            </div>
+                          )}
+                          {order.impression && (
+                            <div style={{ marginBottom: 8 }}>
+                              <Text strong>Impression: </Text>
+                              <Text>{order.impression}</Text>
+                            </div>
+                          )}
+                          {order.radiologyReportUrl && (
+                            <Button type="link" href={order.radiologyReportUrl} target="_blank" rel="noopener noreferrer" style={{ padding: 0 }}>
+                              View Radiology Report
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    }
+                    return <Empty description={order.status === 'completed' ? 'Findings not yet available' : `Status: ${order.status} — results will appear when ready`} image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+                  },
+                }}
+              >
+                <Table.Column
+                  title="Study"
+                  dataIndex="studyName"
+                  key="studyName"
+                  render={(s: string) => <Text strong>{s}</Text>}
+                />
+                <Table.Column
+                  title="Modality"
+                  dataIndex="modality"
+                  key="modality"
+                  render={(m: string) => <Tag>{modalityLabels[m] || m}</Tag>}
+                />
+                <Table.Column
+                  title="Body Part"
+                  dataIndex="bodyPart"
+                  key="bodyPart"
+                />
+                <Table.Column
+                  title="Status"
+                  dataIndex="status"
+                  key="status"
+                  render={(s: string) => <Tag color={imagingStatusColors[s]}>{s.replace(/_/g, ' ')}</Tag>}
+                />
+                <Table.Column
+                  title="Ordered"
+                  dataIndex="orderedDate"
+                  key="orderedDate"
+                  render={(d: string) => d ? dayjs(d).format('MM/DD/YYYY') : 'N/A'}
+                />
+                <Table.Column
+                  title="Provider"
+                  dataIndex="providerName"
+                  key="providerName"
+                  render={(n: string) => n || 'N/A'}
+                />
+              </Table>
+            ) : (
+              <Empty description="No imaging orders" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </Card>
+
+          {/* Referrals */}
+          <Card
+            title={<span><ProfileOutlined /> Referrals ({allReferrals.length})</span>}
+            size="small"
+          >
+            {allReferrals.length > 0 ? (
+              <Table
+                dataSource={allReferrals}
+                rowKey={(r) => `${r.encounterId}-${r.specialty}-${r.reason}`}
+                pagination={false}
+                size="small"
+              >
+                <Table.Column
+                  title="Specialty"
+                  dataIndex="specialty"
+                  key="specialty"
+                  render={(s: string) => <Text strong>{s}</Text>}
+                />
+                <Table.Column
+                  title="Reason"
+                  dataIndex="reason"
+                  key="reason"
+                />
+                <Table.Column
+                  title="Provider"
+                  dataIndex="provider"
+                  key="provider"
+                  render={(p: string) => p || 'N/A'}
+                />
+                <Table.Column
+                  title="Urgency"
+                  dataIndex="urgency"
+                  key="urgency"
+                  render={(u: string) => u && u !== 'routine' ? <Tag color={u === 'emergent' ? 'red' : 'orange'}>{u}</Tag> : <Text type="secondary">routine</Text>}
+                />
+                <Table.Column
+                  title="Status"
+                  dataIndex="status"
+                  key="status"
+                  render={(s: string) => <Tag color={referralStatusColors[s]}>{s}</Tag>}
+                />
+                <Table.Column
+                  title="Date"
+                  dataIndex="encounterDate"
+                  key="encounterDate"
+                  render={(d: string) => d ? dayjs(d).format('MM/DD/YYYY') : 'N/A'}
+                />
+              </Table>
+            ) : (
+              <Empty description="No referrals" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </Card>
+        </Space>
+      )}
+    </div>
+  );
+
   // ── Tabs definition ──
   const tabItems = [
     { key: 'overview', label: 'Overview', children: <OverviewTab /> },
     { key: 'history', label: 'Medical History', children: <MedicalHistoryTab /> },
     { key: 'problems', label: 'Problem List', children: <ProblemListTab /> },
     { key: 'allergies', label: `Allergies (${patient.allergies.length})`, children: <AllergiesTab /> },
+    { key: 'medications', label: <span><MedicineBoxOutlined /> Medications</span>, children: <MedicationsTab /> },
+    { key: 'orders', label: <span><ProfileOutlined /> Orders</span>, children: <OrdersTab /> },
     { key: 'appointments', label: 'Appointments', children: <AppointmentsTab /> },
     { key: 'documents', label: 'Documents', children: <DocumentsTab /> },
     { key: 'vitals', label: 'Vitals', children: <VitalsTab /> },

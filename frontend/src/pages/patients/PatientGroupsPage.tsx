@@ -736,7 +736,7 @@ const PatientGroupsPage: React.FC = () => {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Title level={4} style={{ margin: 0 }}>Patient Groups</Title>
+        <Title level={3} style={{ margin: 0 }}>Patient Groups</Title>
         <Space>
           <Button icon={<ExportOutlined />} onClick={() => fetchGroups()}>Refresh</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreate}>New Group</Button>

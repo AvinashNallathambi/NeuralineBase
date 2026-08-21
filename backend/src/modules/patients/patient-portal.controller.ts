@@ -157,6 +157,21 @@ export class PatientPortalController {
     return result.data;
   }
 
+  @Get('imaging')
+  @ApiOperation({ summary: 'Get patient imaging orders and results' })
+  async getImagingResults(
+    @Request() req: AuthenticatedPatientRequest,
+    @Query('status') status?: string,
+  ) {
+    const result = await this.laboratoryService.findAllImaging(req.user.tenantId, {
+      patientId: req.user.id,
+      status,
+      page: 1,
+      limit: 100,
+    } as any);
+    return result.data;
+  }
+
   // ─── Billing / Invoices ──────────────────────────────────────────
 
   @Get('invoices')
