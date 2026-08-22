@@ -40,7 +40,6 @@
     "react-native": "^0.76.9",
     "react-native-biometrics": "^3.0.1",
     "react-native-calendars": "^1.1314.0",
-    "react-native-css-interop": "^0.1.20",
     "react-native-device-info": "^15.0.2",
     "react-native-gesture-handler": "^2.20.2",
     "react-native-image-picker": "^7.1.0",

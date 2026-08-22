@@ -14,6 +14,7 @@ import { CreateEncounterDto } from './dto/create-encounter.dto';
 import { UpdateEncounterDto } from './dto/update-encounter.dto';
 import { ClinicalTemplate } from './entities/clinical-template.entity';
 import { DocumentationService } from './documentation.service';
+import { EncounterOrderSyncService } from './encounter-order-sync.service';
 
 export interface PaginationOptions {
   page: number;
@@ -46,6 +47,7 @@ export class EncounterService {
     private readonly clinicalTemplateRepository: Repository<ClinicalTemplate>,
     @Inject(forwardRef(() => DocumentationService))
     private readonly documentationService: DocumentationService,
+    private readonly orderSyncService: EncounterOrderSyncService,
   ) {}
 
   async create(tenantId: string, createEncounterDto: CreateEncounterDto): Promise<Encounter> {
@@ -73,7 +75,7 @@ export class EncounterService {
     encounter.diagnoses = (createEncounterDto.diagnoses || []).map((d) => ({
       problemListId: d.problemListId,
       code: d.code,
-      codeSystem: (d.codeSystem as 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
+      codeSystem: (d.codeSystem as 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
       description: d.description,
       isPrimary: d.isPrimary ?? false,
       type: d.type as 'chronic' | 'acute' | 'rule_out' | undefined,
@@ -116,6 +118,22 @@ export class EncounterService {
         template.usageCount += 1;
         template.lastUsedAt = new Date();
         await this.clinicalTemplateRepository.save(template);
+      }
+    }
+
+    // Propagate lab/imaging orders and medications from the encounter JSON
+    // into the lab_orders / imaging_orders / prescriptions tables so they
+    // appear in the Laboratory module, Prescriptions module, and patient portal.
+    if (
+      (saved.orders && (saved.orders.labs?.length || saved.orders.imaging?.length)) ||
+      saved.treatmentPlan?.medications?.length
+    ) {
+      try {
+        await this.orderSyncService.syncEncounterOrders(tenantId, saved);
+      } catch (err) {
+        this.logger.warn(
+          `Failed to sync orders for encounter ${saved.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -238,7 +256,7 @@ export class EncounterService {
       encounter.diagnoses = updateEncounterDto.diagnoses.map((d) => ({
         problemListId: d.problemListId,
         code: d.code,
-        codeSystem: (d.codeSystem as 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
+        codeSystem: (d.codeSystem as 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11' | undefined) || 'ICD-10-CM',
         description: d.description,
         isPrimary: d.isPrimary ?? false,
         type: d.type as 'chronic' | 'acute' | 'rule_out' | undefined,
@@ -292,6 +310,25 @@ export class EncounterService {
         );
       } catch (err) {
         this.logger.warn(`Failed to sync SOAP to documentation session ${saved.documentationSessionId}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
+    // Propagate lab/imaging orders and medications from the encounter JSON
+    // into the lab_orders / imaging_orders / prescriptions tables so they
+    // appear in the Laboratory module, Prescriptions module, and patient portal.
+    if (
+      updateEncounterDto.orders !== undefined ||
+      updateEncounterDto.treatmentPlan !== undefined
+    ) {
+      try {
+        await this.orderSyncService.syncEncounterOrders(
+          tenantId || saved.tenantId,
+          saved,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to sync orders for encounter ${saved.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -388,7 +425,26 @@ export class EncounterService {
       },
     ];
 
-    return this.encounterRepository.save(encounter);
+    const saved = await this.encounterRepository.save(encounter);
+
+    // Ensure orders and medications are propagated when the encounter is signed.
+    if (
+      (saved.orders && (saved.orders.labs?.length || saved.orders.imaging?.length)) ||
+      saved.treatmentPlan?.medications?.length
+    ) {
+      try {
+        await this.orderSyncService.syncEncounterOrders(
+          tenantId || saved.tenantId,
+          saved,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Failed to sync orders for signed encounter ${saved.id}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return saved;
   }
 
   async lock(id: string, userId: string, tenantId?: string): Promise<Encounter> {

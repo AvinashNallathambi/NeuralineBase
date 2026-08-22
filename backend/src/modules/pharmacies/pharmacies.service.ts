@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationsService } from '../integrations/integrations.service';
+import { NPPESPharmacyService } from './nppes-pharmacy.service';
 
 export interface PharmacyResult {
   id: string;
@@ -9,8 +10,13 @@ export interface PharmacyResult {
   state?: string;
   zip?: string;
   phone?: string;
-  type: 'retail' | 'mail_order' | 'compounding' | 'hospital';
-  source: 'network' | 'local';
+  fax?: string;
+  type: 'retail' | 'mail_order' | 'compounding' | 'hospital' | 'specialty';
+  source: 'network' | 'local' | 'nppes';
+  /** NPI number (present when source='nppes') */
+  npi?: string;
+  /** Taxonomy code (present when source='nppes') */
+  taxonomyCode?: string;
 }
 
 const LOCAL_PHARMACIES: PharmacyResult[] = [
@@ -28,7 +34,10 @@ const LOCAL_PHARMACIES: PharmacyResult[] = [
 export class PharmaciesService {
   private readonly logger = new Logger(PharmaciesService.name);
 
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly nppesService: NPPESPharmacyService,
+  ) {}
 
   async search(
     tenantId: string,
@@ -37,6 +46,7 @@ export class PharmaciesService {
   ): Promise<PharmacyResult[]> {
     const q = (query || '').trim().toLowerCase();
     const networkEnabled = await this.integrationsService.isEnabled(tenantId, 'pharmacy_network');
+    const nppesEnabled = await this.nppesService.isEnabled(tenantId);
 
     let results = LOCAL_PHARMACIES.filter((p) =>
       !q ||
@@ -45,6 +55,18 @@ export class PharmaciesService {
       (p.zip && p.zip.includes(q)),
     );
 
+    // Search NPPES (free, real US pharmacy directory)
+    if (nppesEnabled && q.length >= 2) {
+      try {
+        const nppesResults = await this.searchNppes(tenantId, q, limit);
+        const seen = new Set(results.map((r) => r.id));
+        results = [...nppesResults.filter((n) => !seen.has(n.id)), ...results];
+      } catch (err: any) {
+        this.logger.warn(`NPPES pharmacy search failed, using local directory: ${err.message}`);
+      }
+    }
+
+    // Search paid network (Surescripts/Weno — placeholder for future)
     if (networkEnabled) {
       try {
         const network = await this.searchNetwork(q, limit);
@@ -58,9 +80,29 @@ export class PharmaciesService {
     return results.slice(0, limit);
   }
 
+  /** Search NPPES and convert results to PharmacyResult format. */
+  private async searchNppes(tenantId: string, query: string, limit: number): Promise<PharmacyResult[]> {
+    const nppesResults = await this.nppesService.searchPharmacies(tenantId, query, limit);
+    return nppesResults.map((p) => ({
+      id: `npi-${p.npi}`,
+      name: p.name,
+      address: p.address,
+      city: p.city,
+      state: p.state,
+      zip: p.zip,
+      phone: p.phone,
+      fax: p.fax,
+      type: p.type,
+      source: 'nppes' as const,
+      npi: p.npi,
+      taxonomyCode: p.taxonomyCode,
+    }));
+  }
+
   private async searchNetwork(query: string, limit: number): Promise<PharmacyResult[]> {
-    // Placeholder for a real Surescripts / NCPDP pharmacy network call.
+    // Placeholder for a real Surescripts / NCPDP / Weno pharmacy network call.
     // In production this would authenticate and call the network directory API.
+    // When ready, this will call Weno's pharmacy directory API.
     this.logger.debug(`External pharmacy network search placeholder: q=${query}, limit=${limit}`);
     return [];
   }

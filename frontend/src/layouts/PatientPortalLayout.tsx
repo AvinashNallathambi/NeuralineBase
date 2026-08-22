@@ -12,8 +12,12 @@ import {
   SafetyOutlined,
   MessageOutlined,
   RobotOutlined,
+  HeartOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ProfileOutlined,
+  LineChartOutlined,
+  FileProtectOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import patientAuthService from '../services/patientAuthService';
@@ -54,11 +58,17 @@ const PatientPortalLayout: React.FC = () => {
     { key: '/portal', icon: <HomeOutlined />, label: 'Dashboard' },
     { key: '/portal/appointments', icon: <CalendarOutlined />, label: 'Appointments' },
     { key: '/portal/messages', icon: <MessageOutlined />, label: 'Messages' },
+    { key: '/portal/health-history', icon: <ProfileOutlined />, label: 'Health History' },
     { key: '/portal/prescriptions', icon: <MedicineBoxOutlined />, label: 'Prescriptions' },
     { key: '/portal/lab-results', icon: <ExperimentOutlined />, label: 'Lab Results' },
+    { key: '/portal/imaging', icon: <ExperimentOutlined />, label: 'Imaging Results' },
+    { key: '/portal/immunizations', icon: <MedicineBoxOutlined />, label: 'Immunizations' },
+    { key: '/portal/growth-chart', icon: <LineChartOutlined />, label: 'Growth Charts' },
+    { key: '/portal/care-plan', icon: <HeartOutlined />, label: 'My Care Plan' },
     { key: '/portal/billing', icon: <DollarOutlined />, label: 'Billing & Payments' },
     { key: '/portal/eobs', icon: <FileTextOutlined />, label: 'Insurance EOBs' },
     { key: '/portal/insurance', icon: <SafetyOutlined />, label: 'My Insurance' },
+    { key: '/portal/gfe-estimates', icon: <FileProtectOutlined />, label: 'Good Faith Estimates' },
     { key: '/portal/ai-assistant', icon: <RobotOutlined />, label: 'AI Health Assistant' },
   ];
 

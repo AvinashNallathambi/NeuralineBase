@@ -120,6 +120,19 @@ export class Patient {
   })
   status!: string;
 
+  // ─── Pediatric / Growth Fields ──────────────────────────────────
+  @Column({ name: 'birth_weight_grams', type: 'int', nullable: true })
+  birthWeightGrams!: number | null;
+
+  @Column({ name: 'gestational_age_weeks', type: 'int', nullable: true })
+  gestationalAgeWeeks!: number | null;
+
+  @Column({ name: 'father_height_cm', type: 'float', nullable: true })
+  fatherHeightCm!: number | null;
+
+  @Column({ name: 'mother_height_cm', type: 'float', nullable: true })
+  motherHeightCm!: number | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 
@@ -140,15 +153,22 @@ export class Patient {
   @OneToMany('PatientProblem', 'patient')
   problems!: unknown[];
 
-  // TODO: Uncomment when Allergy entity is created
-  // @OneToMany(() => Allergy, (allergy) => allergy.patient)
-  // allergies!: Allergy[];
+  @OneToMany('PatientAllergy', 'patient')
+  allergies!: unknown[];
+
+  @OneToMany('PatientFamilyHistory', 'patient')
+  familyHistory!: unknown[];
+
+  @OneToMany('PatientSurgicalHistory', 'patient')
+  surgicalHistory!: unknown[];
+
+  @OneToMany('PatientSocialHistory', 'patient')
+  socialHistory!: unknown[];
 
   // TODO: Uncomment when Appointment entity is created
   // @OneToMany(() => Appointment, (appointment) => appointment.patient)
   // appointments!: Appointment[];
 
   // Placeholder relation arrays for TypeORM eager loading
-  allergies?: unknown[];
   appointments?: unknown[];
 }

@@ -24,6 +24,7 @@ import { Badge, BadgeText } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Fab, FabIcon } from '@/components/ui/fab';
 import { Icon } from '@/components/ui/icon';
+import { CustomSpinner } from '../../components/CustomSpinner';
 
 export const PatientListScreen: React.FC = () => {
   const [search, setSearch] = useState('');
@@ -89,7 +90,7 @@ export const PatientListScreen: React.FC = () => {
   if (isLoading) {
     return (
       <Box className="flex-1 justify-center items-center bg-background">
-        <Spinner size="large" color="$primary" />
+        <CustomSpinner size={48} />
       </Box>
     );
   }

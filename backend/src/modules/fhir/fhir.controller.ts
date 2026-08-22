@@ -127,4 +127,38 @@ export class FhirController {
   ): Promise<FhirResource> {
     return this.fhirService.getClaimResource(req.tenantId, id);
   }
+
+  @Get('Immunization/:id')
+  @ApiOperation({ summary: 'Get FHIR Immunization resource by ID' })
+  @ApiParam({ name: 'id', type: String, description: 'Immunization UUID' })
+  @ApiResponse({ status: 200, description: 'FHIR Immunization resource (R4)' })
+  @ApiResponse({ status: 404, description: 'Immunization not found' })
+  async getImmunization(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<FhirResource> {
+    return this.fhirService.getImmunizationResource(req.tenantId, id);
+  }
+
+  @Get('Immunization')
+  @ApiOperation({ summary: 'Search FHIR Immunization resources by patient' })
+  @ApiQuery({ name: 'patient', required: true, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'FHIR Bundle of Immunization resources' })
+  async searchImmunizations(
+    @Request() req: AuthenticatedRequest,
+    @Query('patient', ParseUUIDPipe) patientId: string,
+  ): Promise<FhirBundle> {
+    return this.fhirService.searchImmunizations(req.tenantId, patientId);
+  }
+
+  @Get('Observation/growth')
+  @ApiOperation({ summary: 'Get FHIR Observation resources for growth measurements' })
+  @ApiQuery({ name: 'patient', required: true, description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'FHIR Bundle of Observation resources (vital signs)' })
+  async getGrowthObservations(
+    @Request() req: AuthenticatedRequest,
+    @Query('patient', ParseUUIDPipe) patientId: string,
+  ): Promise<FhirBundle> {
+    return this.fhirService.getGrowthObservations(req.tenantId, patientId);
+  }
 }

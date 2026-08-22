@@ -24,6 +24,7 @@ import {
 } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSuperbillStore } from "../../store/dataStore";
+import { superbillService } from "../../services/superbillService";
 import { Superbill } from "../../types";
 import dayjs from "dayjs";
 import AiScrubPanel from "../../components/superbills/AiScrubPanel";
@@ -82,8 +83,28 @@ const SuperbillDetailPage: React.FC = () => {
     window.print();
   };
 
-  const handleDownload = () => {
-    message.info("Download functionality would generate PDF/CSV");
+  const handleDownload = async () => {
+    if (!superbill) return;
+    setLoading(true);
+    try {
+      const blob = await superbillService.downloadCms1500(superbill.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `claim_${superbill.patientName?.replace(/[^a-zA-Z0-9]/g, "") || superbill.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      message.success("CMS-1500 claim form downloaded");
+    } catch (error: any) {
+      message.error(
+        "Failed to download CMS-1500: " +
+          (error?.response?.data?.message || error?.message || "Unknown error")
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -205,8 +226,8 @@ const SuperbillDetailPage: React.FC = () => {
               <Button icon={<PrinterOutlined />} onClick={handlePrint}>
                 Print
               </Button>
-              <Button icon={<DownloadOutlined />} onClick={handleDownload}>
-                Download
+              <Button icon={<DownloadOutlined />} onClick={handleDownload} loading={loading}>
+                Download CMS-1500
               </Button>
               {superbill.status === "draft" && (
                 <>
@@ -312,6 +333,72 @@ const SuperbillDetailPage: React.FC = () => {
                 {superbill.insurance.authorizationNumber}
               </Descriptions.Item>
             )}
+          </Descriptions>
+
+          <Divider orientation="left">CMS-1500 Claim Form Details</Divider>
+          <Descriptions bordered column={2} size="small">
+            <Descriptions.Item label="Insurance Program (Field 1)">
+              {(superbill as any).insuranceProgram || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Patient Sex (Field 3)">
+              {(superbill as any).patientSex || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Accept Assignment (Field 27)">
+              {(superbill as any).acceptAssignment === false ? "No" : "Yes"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Patient Account No (Field 26)">
+              {(superbill as any).patientAccountNo || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Referring Provider (Field 17)">
+              {(superbill as any).referringProviderName || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Referring Provider NPI (Field 17b)">
+              {(superbill as any).referringProviderNPI || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Prior Auth Number (Field 23)">
+              {(superbill as any).priorAuthNumber || superbill.referralNumber || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Date of Illness (Field 14)">
+              {(superbill as any).dateOfIllness
+                ? dayjs((superbill as any).dateOfIllness).format("MM/DD/YYYY")
+                : "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Outside Lab (Field 20)">
+              {(superbill as any).outsideLab === true ? "Yes" : (superbill as any).outsideLab === false ? "No" : "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Outside Lab Charges (Field 20)">
+              {(superbill as any).outsideLabCharges
+                ? `$${Number((superbill as any).outsideLabCharges).toFixed(2)}`
+                : "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Resubmission Code (Field 22)">
+              {(superbill as any).resubmissionCode || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Original Ref No (Field 22)">
+              {(superbill as any).originalRefNo || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Employment Related (Field 10a)">
+              {superbill.isEmploymentRelated ? "Yes" : "No"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Auto Accident (Field 10b)">
+              {superbill.isAutoAccident ? "Yes" : "No"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Other Accident (Field 10c)">
+              {superbill.isOtherAccident ? "Yes" : "No"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Amount Paid (Field 29)">
+              {(superbill as any).amountPaid
+                ? `$${Number((superbill as any).amountPaid).toFixed(2)}`
+                : "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Physician Signature (Field 31)">
+              {(superbill as any).physicianSignature || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label="Signature Date (Field 31)">
+              {(superbill as any).physicianSignatureDate
+                ? dayjs((superbill as any).physicianSignatureDate).format("MM/DD/YYYY")
+                : "-"}
+            </Descriptions.Item>
           </Descriptions>
 
           <Divider orientation="left">Diagnoses (ICD-10)</Divider>

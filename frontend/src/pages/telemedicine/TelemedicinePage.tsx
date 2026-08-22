@@ -218,7 +218,7 @@ const TelemedicinePage: React.FC = () => {
       {/* Header */}
       <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
         <Col>
-          <Title level={2} style={{ margin: 0 }}>
+          <Title level={3} style={{ margin: 0 }}>
             <VideoCameraOutlined style={{ marginRight: 12, color: '#0D7C8A' }} />
             Telemedicine
           </Title>

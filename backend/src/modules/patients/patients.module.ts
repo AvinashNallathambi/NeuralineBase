@@ -21,6 +21,10 @@ import { PatientFlagsController } from './patient-flags.controller';
 import { PatientFlagsService } from './patient-flags.service';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem } from './entities/patient-problem.entity';
+import { PatientAllergy } from './entities/patient-allergy.entity';
+import { PatientFamilyHistory } from './entities/patient-family-history.entity';
+import { PatientSurgicalHistory } from './entities/patient-surgical-history.entity';
+import { PatientSocialHistory } from './entities/patient-social-history.entity';
 import { PatientDocument } from './entities/patient-document.entity';
 import { PatientFlag, PatientFlagAcknowledgement } from './entities/patient-flag.entity';
 import { PatientGroup, PatientGroupAuditLog } from './entities/patient-group.entity';
@@ -28,16 +32,20 @@ import { PatientInsurance } from '../billing/entities/patient-insurance.entity';
 import { InsurancePayer } from '../billing/entities/insurance-payer.entity';
 import { AppointmentsModule } from '../appointments/appointments.module';
 import { PrescriptionsModule } from '../prescriptions/prescriptions.module';
+import { CarePlansModule } from '../care-plans/care-plans.module';
+import { ImmunizationsModule } from '../immunizations/immunizations.module';
+import { GrowthModule } from '../growth/growth.module';
 import { LaboratoryModule } from '../laboratory/laboratory.module';
 import { BillingModule } from '../billing/billing.module';
 import { RemittanceModule } from '../remittance/remittance.module';
 import { AiModule } from '../ai/ai.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuthModule } from '../auth/auth.module';
+import { NsaModule } from '../nsa/nsa.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Patient, PatientProblem, PatientDocument, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
+    TypeOrmModule.forFeature([Patient, PatientProblem, PatientAllergy, PatientFamilyHistory, PatientSurgicalHistory, PatientSocialHistory, PatientDocument, PatientFlag, PatientFlagAcknowledgement, PatientGroup, PatientGroupAuditLog, PatientInsurance, InsurancePayer]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -52,13 +60,17 @@ import { AuthModule } from '../auth/auth.module';
     AuthModule,
     AppointmentsModule,
     PrescriptionsModule,
+    CarePlansModule,
+    ImmunizationsModule,
+    GrowthModule,
     LaboratoryModule,
     BillingModule,
     RemittanceModule,
     AiModule,
     NotificationsModule,
+    NsaModule,
   ],
-  controllers: [PatientsController, PatientAuthController, PatientPortalController, PatientAiController, PatientPortalAdminController, PatientGroupsController, PatientFlagsController],
+  controllers: [PatientAuthController, PatientPortalController, PatientAiController, PatientPortalAdminController, PatientsController, PatientGroupsController, PatientFlagsController],
   providers: [PatientsService, PatientAuthService, PatientAiService, PatientPortalAdminService, PatientJwtStrategy, PatientJwtAuthGuard, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
   exports: [PatientsService, PatientAuthService, PatientJwtAuthGuard, PatientPortalAdminService, PatientGroupsService, PatientGroupAiService, PatientFlagsService],
 })

@@ -301,7 +301,7 @@ const ClinicalPage: React.FC = () => {
     <div>
       <Row justify="space-between" align="middle" style={{ marginBottom: 16 }}>
         <Col>
-          <Title level={4} style={{ margin: 0 }}>
+          <Title level={3} style={{ margin: 0 }}>
             Clinical Encounters
           </Title>
           <Text type="secondary">

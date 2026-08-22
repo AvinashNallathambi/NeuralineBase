@@ -61,3 +61,11 @@ yarn-error.log
 
 # Temporary files
 *.log
+
+# Debug/build artifacts
+apk-output/
+bundle-check.txt
+providers-response.json
+temp-body.json
+test-bundle.js
+test-output.css

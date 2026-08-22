@@ -134,6 +134,8 @@ export class Encounter {
     waistCircumference?: string;
     intraocularPressureLeft?: string;
     intraocularPressureRight?: string;
+    boneAgeYears?: string;
+    boneAgeMethod?: string;
     recordedDate?: string;
     recordedBy?: string;
   };
@@ -142,7 +144,7 @@ export class Encounter {
   diagnoses!: Array<{
     problemListId?: string;
     code: string;
-    codeSystem?: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
+    codeSystem?: 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11';
     description: string;
     isPrimary: boolean;
     type?: 'chronic' | 'acute' | 'rule_out';

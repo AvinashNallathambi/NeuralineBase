@@ -502,13 +502,144 @@ export interface GfeItem {
   patientEstimate: number;
 }
 
+export type GfeType = 'insured_oon' | 'self_pay' | 'uninsured';
+export type GfeStatus = 'draft' | 'delivered' | 'acknowledged' | 'disputed' | 'expired' | 'superseded';
+export type DeliveryMethod = 'portal' | 'email' | 'mail' | 'in_person' | 'verbal_witness';
+export type VarianceStatus = 'none' | 'under_threshold' | 'over_threshold' | 'disputed' | 'resolved';
+
+export interface AiAccuracyFlags {
+  highRisk: boolean;
+  riskFactors: string[];
+  recommendedActions: string[];
+}
+
+export interface ReconciliationData {
+  reconciledAt: string;
+  finalBilledAmount: number;
+  finalPaidAmount: number;
+  perItemVariance: Array<{
+    cptCode: string;
+    estimated: number;
+    actual: number;
+    variance: number;
+  }>;
+  accuracyScore: number;
+}
+
 export interface GoodFaithEstimate {
+  id?: string;
+  tenantId?: string;
+  patientId?: string;
+  patientName?: string;
+  superbillId?: string | null;
+  encounterId?: string | null;
+  providerId?: string | null;
+  providerName?: string | null;
+  gfeType?: GfeType;
+  status?: GfeStatus;
+  version?: number;
+  serviceDate?: string;
+  scheduledDate?: string | null;
   totalCharge: number;
   insuranceEstimate: number;
   patientEstimate: number;
   items: GfeItem[];
   disclaimers: string[];
   complianceNotes: string[];
+  deliveryMethod?: DeliveryMethod | null;
+  deliveredAt?: string | null;
+  deliveredBy?: string | null;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  deliveryDeadline?: string | null;
+  isCompliant?: boolean;
+  varianceAmount?: number;
+  varianceStatus?: VarianceStatus;
+  aiAccuracyScore?: number | null;
+  aiAccuracyFlags?: AiAccuracyFlags | null;
+  patientFriendlyExplanation?: string | null;
+  predictedDiagnosisCodes?: Array<{ code: string; description: string; confidence: number }> | null;
+  reconciliationData?: ReconciliationData | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface NsaVarianceRecord {
+  id: string;
+  gfeId: string;
+  patientId: string;
+  claimId?: string | null;
+  remittanceClaimId?: string | null;
+  gfeAmount: number;
+  finalBilledAmount: number;
+  varianceAmount: number;
+  exceedsThreshold: boolean;
+  status: 'detected' | 'notified' | 'disputed' | 'resolved' | 'dismissed';
+  notifiedAt?: string | null;
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+  perItemVariance: Array<{ cptCode: string; estimated: number; actual: number; variance: number }>;
+  createdAt: string;
+}
+
+export interface NsaIdrCase {
+  id: string;
+  patientId: string;
+  patientName?: string | null;
+  claimId?: string | null;
+  gfeId?: string | null;
+  varianceRecordId?: string | null;
+  jurisdiction: 'federal' | 'state_ca' | 'state_ny' | 'state_tx' | 'state_nj' | 'state_other';
+  status: 'open_negotiation' | 'idr_initiated' | 'idr_submitted' | 'won' | 'lost' | 'withdrawn' | 'expired' | 'settled';
+  payerName?: string | null;
+  qpaAmount?: number | null;
+  billedAmount?: number | null;
+  initialOffer?: number | null;
+  finalOffer?: number | null;
+  determinedAmount?: number | null;
+  openNegotiationDate?: string | null;
+  idrInitiationDeadline?: string | null;
+  idrSubmissionDeadline?: string | null;
+  eligibilityScore?: number | null;
+  eligibilityFactors?: Array<{ factor: string; weight: number; detail: string }> | null;
+  expectedRecovery?: number | null;
+  winProbability?: number | null;
+  winProbabilityFactors?: Array<{ factor: string; impact: string; detail: string }> | null;
+  recommendedOffer?: number | null;
+  offerRationale?: string | null;
+  patientAcuityLetter?: string | null;
+  supportDocuments?: Array<{ name: string; type: string; content: string }>;
+  encounterNotes?: string | null;
+  cptCodes?: string[];
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+  createdAt: string;
+}
+
+export interface NsaIdrDeadline {
+  id: string;
+  idrCaseId: string;
+  deadlineType: 'open_negotiation' | 'idr_initiation' | 'idr_submission' | 'cooling_off' | 'payer_response';
+  dueDate: string;
+  status: 'upcoming' | 'due_soon' | 'overdue' | 'met' | 'missed';
+  isMet: boolean;
+  metAt?: string | null;
+  notificationSent: boolean;
+  notes?: string | null;
+}
+
+export interface NsaComplianceDashboard {
+  totalGfes: number;
+  delivered: number;
+  acknowledged: number;
+  disputed: number;
+  onTimeDeliveryRate: number;
+  pendingDelivery: number;
+  overdueDelivery: number;
+  varianceDetected: number;
+  varianceOverThreshold: number;
+  idrCasesOpen: number;
 }
 
 export interface SmartCodeSuggestion {

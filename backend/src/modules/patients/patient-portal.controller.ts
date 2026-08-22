@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Query,
   Param,
@@ -17,14 +18,19 @@ import {
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { PatientJwtAuthGuard } from './patient-jwt-auth.guard';
+import { PatientsService } from './patients.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { PrescriptionsService } from '../prescriptions/prescriptions.service';
+import { CarePlansService } from '../care-plans/care-plans.service';
+import { ImmunizationsService } from '../immunizations/immunizations.service';
+import { GrowthChartService } from '../growth/growth-chart.service';
 import { LaboratoryService } from '../laboratory/laboratory.service';
 import { BillingService } from '../billing/billing.service';
 import { RemittanceService } from '../remittance/remittance.service';
 import { InsuranceCardScanService } from '../billing/insurance-card-scan.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType, NotificationPriority } from '../notifications/entities/notification.entity';
+import { NsaService } from '../nsa/nsa.service';
 
 interface AuthenticatedPatientRequest {
   user: {
@@ -43,11 +49,16 @@ export class PatientPortalController {
   constructor(
     private readonly appointmentsService: AppointmentsService,
     private readonly prescriptionsService: PrescriptionsService,
+    private readonly carePlansService: CarePlansService,
+    private readonly immunizationsService: ImmunizationsService,
+    private readonly growthChartService: GrowthChartService,
     private readonly laboratoryService: LaboratoryService,
     private readonly billingService: BillingService,
     private readonly remittanceService: RemittanceService,
     private readonly cardScanService: InsuranceCardScanService,
     private readonly notificationsService: NotificationsService,
+    private readonly patientsService: PatientsService,
+    private readonly nsaService: NsaService,
   ) {}
 
   // ─── Appointments ────────────────────────────────────────────────
@@ -149,6 +160,21 @@ export class PatientPortalController {
     @Query('status') status?: string,
   ) {
     const result = await this.laboratoryService.findAllOrders(req.user.tenantId, {
+      patientId: req.user.id,
+      status,
+      page: 1,
+      limit: 100,
+    } as any);
+    return result.data;
+  }
+
+  @Get('imaging')
+  @ApiOperation({ summary: 'Get patient imaging orders and results' })
+  async getImagingResults(
+    @Request() req: AuthenticatedPatientRequest,
+    @Query('status') status?: string,
+  ) {
+    const result = await this.laboratoryService.findAllImaging(req.user.tenantId, {
       patientId: req.user.id,
       status,
       page: 1,
@@ -308,5 +334,367 @@ export class PatientPortalController {
       recentInvoices: invoices.slice(0, 5),
       recentEobs: eobs.slice(0, 5),
     };
+  }
+
+  // ─── Care Plans ───────────────────────────────────────────────────
+
+  @Get('care-plans')
+  @ApiOperation({ summary: 'Get patient care plans (approved only)' })
+  async getCarePlans(@Request() req: AuthenticatedPatientRequest) {
+    const plans = await this.carePlansService.findByPatient(req.user.tenantId, req.user.id);
+    // Only show approved plans to patients
+    return plans.filter((p: any) => p.isApproved && p.status === 'active');
+  }
+
+  @Get('care-plans/:id')
+  @ApiOperation({ summary: 'Get care plan details with goals and tasks' })
+  async getCarePlan(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    const full = await this.carePlansService.getFullPlan(req.user.tenantId, id);
+    // Verify this plan belongs to the patient
+    if (full.plan.patientId !== req.user.id) {
+      throw new BadRequestException('Care plan not found');
+    }
+    // Only show approved plans
+    if (!full.plan.isApproved) {
+      throw new BadRequestException('Care plan not found');
+    }
+    return full;
+  }
+
+  @Get('care-plans/:id/tasks')
+  @ApiOperation({ summary: 'Get patient tasks for a care plan' })
+  async getCarePlanTasks(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    const plan = await this.carePlansService.findOne(req.user.tenantId, id);
+    if (plan.patientId !== req.user.id || !plan.isApproved) {
+      throw new BadRequestException('Care plan not found');
+    }
+    const tasks = await this.carePlansService.findTasks(req.user.tenantId, id);
+    // Only return tasks assigned to the patient
+    return tasks.filter((t: any) => t.assignedTo === 'patient');
+  }
+
+  @Post('care-plans/tasks/:taskId/report')
+  @ApiOperation({ summary: 'Patient reports a value for a monitoring task' })
+  @HttpCode(HttpStatus.OK)
+  async reportTaskValue(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('taskId') taskId: string,
+    @Body() body: { reportedValue: string; patientNotes?: string },
+  ) {
+    return this.carePlansService.reportTaskValue(
+      req.user.tenantId,
+      taskId,
+      body.reportedValue,
+      body.patientNotes,
+    );
+  }
+
+  @Post('care-plans/tasks/:taskId/complete')
+  @ApiOperation({ summary: 'Patient marks a task as completed' })
+  @HttpCode(HttpStatus.OK)
+  async completeTask(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('taskId') taskId: string,
+    @Body() body: { reportedValue?: string; patientNotes?: string },
+  ) {
+    return this.carePlansService.completeTask(
+      req.user.tenantId,
+      taskId,
+      req.user.id,
+      body.reportedValue,
+      body.patientNotes,
+    );
+  }
+
+  // ─── Immunizations ───────────────────────────────────────────────
+
+  @Get('immunizations')
+  @ApiOperation({ summary: 'Get patient immunization history' })
+  async getImmunizations(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.immunizationsService.findByPatient(req.user.tenantId, req.user.id);
+  }
+
+  // ─── Growth Charts ───────────────────────────────────────────────
+
+  @Get('growth-chart')
+  @ApiOperation({ summary: 'Get patient growth chart data' })
+  async getGrowthChart(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.growthChartService.getGrowthChart(req.user.tenantId, req.user.id);
+  }
+
+  // ─── Medical History (Problem List) ──────────────────────────────
+
+  @Get('medical-history')
+  @ApiOperation({ summary: 'Get patient medical history (problem list)' })
+  async getMedicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.patientsService.findProblems(req.user.tenantId, req.user.id, {});
+  }
+
+  @Post('medical-history')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Patient self-reports a medical condition' })
+  async addMedicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: {
+      code?: string;
+      codeSystem?: string;
+      description: string;
+      onsetDate?: string;
+      notes?: string;
+    },
+  ) {
+    // Patient-reported conditions are marked as unconfirmed
+    return this.patientsService.createProblem(
+      req.user.tenantId,
+      req.user.id,
+      {
+        code: body.code || 'R69',
+        codeSystem: body.codeSystem || 'ICD-10-CM',
+        description: body.description,
+        clinicalStatus: 'active' as any,
+        verificationStatus: 'unconfirmed' as any,
+        onsetDate: body.onsetDate,
+        notes: body.notes,
+      } as any,
+      req.user.id,
+    );
+  }
+
+  @Delete('medical-history/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Patient removes a self-reported condition' })
+  async removeMedicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.patientsService.removeProblem(req.user.tenantId, req.user.id, id);
+  }
+
+  // ─── Allergies ───────────────────────────────────────────────────
+
+  @Get('allergies')
+  @ApiOperation({ summary: 'Get patient allergies' })
+  async getAllergies(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.patientsService.findAllergies(req.user.tenantId, req.user.id);
+  }
+
+  @Post('allergies')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Patient self-reports an allergy' })
+  async addAllergy(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: {
+      allergen: string;
+      reaction?: string;
+      severity?: string;
+      onsetDate?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createAllergy(
+      req.user.tenantId,
+      req.user.id,
+      {
+        ...body,
+        verificationStatus: 'unconfirmed' as any,
+        source: 'patient',
+      } as any,
+      req.user.id,
+    );
+  }
+
+  @Delete('allergies/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Patient removes a self-reported allergy' })
+  async removeAllergy(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.patientsService.removeAllergy(req.user.tenantId, req.user.id, id);
+  }
+
+  // ─── Family History ──────────────────────────────────────────────
+
+  @Get('family-history')
+  @ApiOperation({ summary: 'Get patient family history' })
+  async getFamilyHistory(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.patientsService.findFamilyHistory(req.user.tenantId, req.user.id);
+  }
+
+  @Post('family-history')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Patient self-reports a family history entry' })
+  async addFamilyHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: {
+      relationship: string;
+      memberName?: string;
+      condition: string;
+      code?: string;
+      codeSystem?: string;
+      ageOfOnset?: number;
+      isDeceased?: boolean;
+      ageAtDeath?: number;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createFamilyHistory(
+      req.user.tenantId,
+      req.user.id,
+      {
+        ...body,
+        source: 'patient',
+      } as any,
+      req.user.id,
+    );
+  }
+
+  @Delete('family-history/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Patient removes a self-reported family history entry' })
+  async removeFamilyHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.patientsService.removeFamilyHistory(req.user.tenantId, req.user.id, id);
+  }
+
+  // ─── Surgical History ────────────────────────────────────────────
+
+  @Get('surgical-history')
+  @ApiOperation({ summary: 'Get patient surgical history' })
+  async getSurgicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+  ) {
+    return this.patientsService.findSurgicalHistory(req.user.tenantId, req.user.id);
+  }
+
+  @Post('surgical-history')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Patient self-reports a surgical history entry' })
+  async addSurgicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: {
+      procedure: string;
+      procedureDate?: string;
+      surgeon?: string;
+      facility?: string;
+      bodySite?: string;
+      outcome?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createSurgicalHistory(
+      req.user.tenantId,
+      req.user.id,
+      {
+        ...body,
+        source: 'patient',
+      } as any,
+      req.user.id,
+    );
+  }
+
+  @Delete('surgical-history/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Patient removes a self-reported surgical history entry' })
+  async removeSurgicalHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.patientsService.removeSurgicalHistory(req.user.tenantId, req.user.id, id);
+  }
+
+  // ─── Social History ──────────────────────────────────────────────
+
+  @Get('social-history')
+  @ApiOperation({ summary: 'Get patient social history' })
+  async getSocialHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Query('category') category?: string,
+  ) {
+    return this.patientsService.findSocialHistory(req.user.tenantId, req.user.id, category);
+  }
+
+  @Post('social-history')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Patient self-reports a social history entry' })
+  async addSocialHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Body() body: {
+      category: string;
+      status?: string;
+      detail?: string;
+      frequency?: string;
+      amount?: string;
+      durationYears?: number;
+      quitDate?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createSocialHistory(
+      req.user.tenantId,
+      req.user.id,
+      {
+        ...body,
+        source: 'patient',
+      } as any,
+      req.user.id,
+    );
+  }
+
+  @Delete('social-history/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Patient removes a self-reported social history entry' })
+  async removeSocialHistory(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.patientsService.removeSocialHistory(req.user.tenantId, req.user.id, id);
+  }
+
+  // ─── NSA / Good Faith Estimates ──────────────────────────────────
+
+  @Get('gfe-estimates')
+  @ApiOperation({ summary: 'Patient views their Good Faith Estimates' })
+  async getGfeEstimates(@Request() req: AuthenticatedPatientRequest) {
+    return this.nsaService.findByPatient(req.user.tenantId, req.user.id);
+  }
+
+  @Get('gfe-estimates/:id')
+  @ApiOperation({ summary: 'Patient views a specific Good Faith Estimate' })
+  async getGfeEstimate(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.nsaService.findOneGfe(req.user.tenantId, id);
+  }
+
+  @Post('gfe-estimates/:id/acknowledge')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Patient acknowledges receipt of a Good Faith Estimate' })
+  async acknowledgeGfe(
+    @Request() req: AuthenticatedPatientRequest,
+    @Param('id') id: string,
+  ) {
+    return this.nsaService.acknowledgeGfe(req.user.tenantId, id, {
+      acknowledgedBy: `Patient ${req.user.email} (portal)`,
+    });
   }
 }

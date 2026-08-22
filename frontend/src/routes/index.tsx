@@ -110,6 +110,9 @@ const TelemedicineCallPage = lazyWithRetry(
   () => import("../pages/telemedicine/TelemedicineCallPage"),
 );
 const ReportsPage = lazyWithRetry(() => import("../pages/reports/ReportsPage"));
+const QualityMeasuresDashboardPage = lazyWithRetry(
+  () => import("../pages/quality/QualityMeasuresDashboardPage"),
+);
 const SettingsPage = lazyWithRetry(
   () => import("../pages/settings/SettingsPage"),
 );
@@ -131,6 +134,10 @@ const PortalDashboardPage = lazyWithRetry(() => import("../pages/portal/PortalDa
 const PortalAppointmentsPage = lazyWithRetry(() => import("../pages/portal/PortalAppointmentsPage"));
 const PortalPrescriptionsPage = lazyWithRetry(() => import("../pages/portal/PortalPrescriptionsPage"));
 const PortalLabResultsPage = lazyWithRetry(() => import("../pages/portal/PortalLabResultsPage"));
+const PortalImagingPage = lazyWithRetry(() => import("../pages/portal/PortalImagingPage"));
+const PortalImmunizationPage = lazyWithRetry(() => import("../pages/portal/PortalImmunizationPage"));
+const PortalGrowthChartPage = lazyWithRetry(() => import("../pages/portal/PortalGrowthChartPage"));
+const PortalCarePlanPage = lazyWithRetry(() => import("../pages/portal/PortalCarePlanPage"));
 const PortalBillingPage = lazyWithRetry(() => import("../pages/portal/PortalBillingPage"));
 const PortalEobsPage = lazyWithRetry(() => import("../pages/portal/PortalEobsPage"));
 const PortalInsurancePage = lazyWithRetry(() => import("../pages/portal/PortalInsurancePage"));
@@ -138,6 +145,9 @@ const PortalProfilePage = lazyWithRetry(() => import("../pages/portal/PortalProf
 const PortalMessagesPage = lazyWithRetry(() => import("../pages/portal/PortalMessagesPage"));
 const PortalAiAssistantPage = lazyWithRetry(() => import("../pages/portal/PortalAiAssistantPage"));
 const PortalVideoVisitPage = lazyWithRetry(() => import("../pages/portal/PortalVideoVisitPage"));
+const PortalHealthHistoryPage = lazyWithRetry(() => import("../pages/portal/PortalHealthHistoryPage"));
+const PortalGfePage = lazyWithRetry(() => import("../pages/portal/PortalGfePage"));
+const NsaDashboardPage = lazyWithRetry(() => import("../pages/nsa/NsaDashboardPage"));
 
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
@@ -516,6 +526,22 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "/quality-measures",
+        element: (
+          <LazyPage>
+            <QualityMeasuresDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/nsa",
+        element: (
+          <LazyPage>
+            <NsaDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: "/workflow",
         element: (
           <LazyPage>
@@ -621,6 +647,38 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "imaging",
+        element: (
+          <LazyPage>
+            <PortalImagingPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "immunizations",
+        element: (
+          <LazyPage>
+            <PortalImmunizationPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "growth-chart",
+        element: (
+          <LazyPage>
+            <PortalGrowthChartPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "care-plan",
+        element: (
+          <LazyPage>
+            <PortalCarePlanPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: "billing",
         element: (
           <LazyPage>
@@ -665,6 +723,22 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <PortalAiAssistantPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "health-history",
+        element: (
+          <LazyPage>
+            <PortalHealthHistoryPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "gfe-estimates",
+        element: (
+          <LazyPage>
+            <PortalGfePage />
           </LazyPage>
         ),
       },

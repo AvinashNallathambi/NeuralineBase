@@ -89,7 +89,7 @@ export default function EpcsPage() {
   return (
     <div >
       <div style={{ marginBottom: 16 }}>
-        <Title level={2}>
+        <Title level={3}>
           <SafetyCertificateOutlined style={{ marginRight: 8 }} />
           EPCS — Electronic Prescribing of Controlled Substances
         </Title>

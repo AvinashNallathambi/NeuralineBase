@@ -12,6 +12,10 @@ import { createReadStream } from 'fs';
 import { ConfigService } from '@nestjs/config';
 import { Patient } from './entities/patient.entity';
 import { PatientProblem, ProblemClinicalStatus, ProblemVerificationStatus, DiagnosisCodingSystem } from './entities/patient-problem.entity';
+import { PatientAllergy, AllergySeverity, AllergyStatus, AllergyVerificationStatus } from './entities/patient-allergy.entity';
+import { PatientFamilyHistory, FamilyMemberRelationship, FamilyHistoryStatus } from './entities/patient-family-history.entity';
+import { PatientSurgicalHistory } from './entities/patient-surgical-history.entity';
+import { PatientSocialHistory, SocialHistoryCategory } from './entities/patient-social-history.entity';
 import { PatientDocument, PatientDocumentType } from './entities/patient-document.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { CreatePatientProblemDto } from './dto/create-patient-problem.dto';
@@ -48,6 +52,14 @@ export class PatientsService {
     private readonly patientRepository: Repository<Patient>,
     @InjectRepository(PatientProblem)
     private readonly problemRepository: Repository<PatientProblem>,
+    @InjectRepository(PatientAllergy)
+    private readonly allergyRepository: Repository<PatientAllergy>,
+    @InjectRepository(PatientFamilyHistory)
+    private readonly familyHistoryRepository: Repository<PatientFamilyHistory>,
+    @InjectRepository(PatientSurgicalHistory)
+    private readonly surgicalHistoryRepository: Repository<PatientSurgicalHistory>,
+    @InjectRepository(PatientSocialHistory)
+    private readonly socialHistoryRepository: Repository<PatientSocialHistory>,
     @InjectRepository(PatientDocument)
     private readonly documentRepository: Repository<PatientDocument>,
     private readonly configService: ConfigService,
@@ -475,5 +487,385 @@ export class PatientsService {
     const problem = await this.findProblemById(tenantId, patientId, id);
     await this.problemRepository.softRemove(problem);
     this.logger.log(`Problem soft deleted for patient ${patientId}: ${id}`);
+  }
+
+  // ─── Allergies ───────────────────────────────────────────────────
+
+  async findAllergies(tenantId: string, patientId: string, clinicalStatus?: string): Promise<PatientAllergy[]> {
+    await this.findOne(tenantId, patientId);
+    const qb = this.allergyRepository
+      .createQueryBuilder('allergy')
+      .where('allergy.tenantId = :tenantId', { tenantId })
+      .andWhere('allergy.patientId = :patientId', { patientId })
+      .andWhere('allergy.deletedAt IS NULL');
+    if (clinicalStatus) {
+      qb.andWhere('allergy.clinicalStatus = :clinicalStatus', { clinicalStatus });
+    }
+    qb.orderBy('allergy.severity', 'DESC').addOrderBy('allergy.createdAt', 'DESC');
+    return qb.getMany();
+  }
+
+  async findAllergyById(tenantId: string, patientId: string, id: string): Promise<PatientAllergy> {
+    const allergy = await this.allergyRepository.findOne({ where: { id, tenantId, patientId } });
+    if (!allergy) throw new NotFoundException(`Allergy with ID "${id}" not found`);
+    return allergy;
+  }
+
+  async createAllergy(
+    tenantId: string,
+    patientId: string,
+    data: {
+      allergen: string;
+      reaction?: string;
+      severity?: AllergySeverity;
+      clinicalStatus?: AllergyStatus;
+      verificationStatus?: AllergyVerificationStatus;
+      onsetDate?: string;
+      notes?: string;
+      source?: string;
+    },
+    recordedBy?: string,
+  ): Promise<PatientAllergy> {
+    await this.findOne(tenantId, patientId);
+    const allergy = new PatientAllergy();
+    allergy.tenantId = tenantId;
+    allergy.patientId = patientId;
+    allergy.allergen = data.allergen.trim();
+    allergy.reaction = data.reaction || null;
+    allergy.severity = data.severity || AllergySeverity.MODERATE;
+    allergy.clinicalStatus = data.clinicalStatus || AllergyStatus.ACTIVE;
+    allergy.verificationStatus = data.verificationStatus || AllergyVerificationStatus.CONFIRMED;
+    allergy.onsetDate = data.onsetDate ? new Date(data.onsetDate) : null;
+    allergy.recordedBy = recordedBy || null;
+    allergy.source = data.source || 'staff';
+    allergy.notes = data.notes || null;
+    const saved = await this.allergyRepository.save(allergy);
+    this.logger.log(`Allergy created for patient ${patientId}: ${saved.id}`);
+    return saved;
+  }
+
+  async updateAllergy(
+    tenantId: string,
+    patientId: string,
+    id: string,
+    data: Partial<{
+      allergen: string;
+      reaction: string;
+      severity: AllergySeverity;
+      clinicalStatus: AllergyStatus;
+      verificationStatus: AllergyVerificationStatus;
+      onsetDate: string;
+      notes: string;
+    }>,
+  ): Promise<PatientAllergy> {
+    const allergy = await this.findAllergyById(tenantId, patientId, id);
+    if (data.allergen !== undefined) allergy.allergen = data.allergen.trim();
+    if (data.reaction !== undefined) allergy.reaction = data.reaction || null;
+    if (data.severity) allergy.severity = data.severity;
+    if (data.clinicalStatus) allergy.clinicalStatus = data.clinicalStatus;
+    if (data.verificationStatus) allergy.verificationStatus = data.verificationStatus;
+    if (data.onsetDate !== undefined) allergy.onsetDate = data.onsetDate ? new Date(data.onsetDate) : null;
+    if (data.notes !== undefined) allergy.notes = data.notes || null;
+    const saved = await this.allergyRepository.save(allergy);
+    this.logger.log(`Allergy updated for patient ${patientId}: ${id}`);
+    return saved;
+  }
+
+  async removeAllergy(tenantId: string, patientId: string, id: string): Promise<void> {
+    const allergy = await this.findAllergyById(tenantId, patientId, id);
+    await this.allergyRepository.softRemove(allergy);
+    this.logger.log(`Allergy soft deleted for patient ${patientId}: ${id}`);
+  }
+
+  // ─── Family History ──────────────────────────────────────────────
+
+  async findFamilyHistory(tenantId: string, patientId: string): Promise<PatientFamilyHistory[]> {
+    await this.findOne(tenantId, patientId);
+    return this.familyHistoryRepository
+      .createQueryBuilder('fh')
+      .where('fh.tenantId = :tenantId', { tenantId })
+      .andWhere('fh.patientId = :patientId', { patientId })
+      .andWhere('fh.deletedAt IS NULL')
+      .orderBy('fh.relationship', 'ASC')
+      .addOrderBy('fh.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async findFamilyHistoryById(tenantId: string, patientId: string, id: string): Promise<PatientFamilyHistory> {
+    const fh = await this.familyHistoryRepository.findOne({ where: { id, tenantId, patientId } });
+    if (!fh) throw new NotFoundException(`Family history entry with ID "${id}" not found`);
+    return fh;
+  }
+
+  async createFamilyHistory(
+    tenantId: string,
+    patientId: string,
+    data: {
+      relationship: FamilyMemberRelationship;
+      memberName?: string;
+      condition: string;
+      code?: string;
+      codeSystem?: string;
+      ageOfOnset?: number;
+      isDeceased?: boolean;
+      ageAtDeath?: number;
+      notes?: string;
+      source?: string;
+    },
+    recordedBy?: string,
+  ): Promise<PatientFamilyHistory> {
+    await this.findOne(tenantId, patientId);
+    const fh = new PatientFamilyHistory();
+    fh.tenantId = tenantId;
+    fh.patientId = patientId;
+    fh.relationship = data.relationship;
+    fh.memberName = data.memberName || null;
+    fh.condition = data.condition.trim();
+    fh.code = data.code || null;
+    fh.codeSystem = data.codeSystem || null;
+    fh.ageOfOnset = data.ageOfOnset ?? null;
+    fh.isDeceased = data.isDeceased ?? false;
+    fh.ageAtDeath = data.ageAtDeath ?? null;
+    fh.clinicalStatus = FamilyHistoryStatus.ACTIVE;
+    fh.verificationStatus = 'unconfirmed';
+    fh.recordedBy = recordedBy || null;
+    fh.source = data.source || 'staff';
+    fh.notes = data.notes || null;
+    const saved = await this.familyHistoryRepository.save(fh);
+    this.logger.log(`Family history created for patient ${patientId}: ${saved.id}`);
+    return saved;
+  }
+
+  async updateFamilyHistory(
+    tenantId: string,
+    patientId: string,
+    id: string,
+    data: Partial<{
+      relationship: FamilyMemberRelationship;
+      memberName: string;
+      condition: string;
+      code: string;
+      codeSystem: string;
+      ageOfOnset: number;
+      isDeceased: boolean;
+      ageAtDeath: number;
+      clinicalStatus: FamilyHistoryStatus;
+      verificationStatus: string;
+      notes: string;
+    }>,
+  ): Promise<PatientFamilyHistory> {
+    const fh = await this.findFamilyHistoryById(tenantId, patientId, id);
+    if (data.relationship) fh.relationship = data.relationship;
+    if (data.memberName !== undefined) fh.memberName = data.memberName || null;
+    if (data.condition) fh.condition = data.condition.trim();
+    if (data.code !== undefined) fh.code = data.code || null;
+    if (data.codeSystem !== undefined) fh.codeSystem = data.codeSystem || null;
+    if (data.ageOfOnset !== undefined) fh.ageOfOnset = data.ageOfOnset;
+    if (data.isDeceased !== undefined) fh.isDeceased = data.isDeceased;
+    if (data.ageAtDeath !== undefined) fh.ageAtDeath = data.ageAtDeath;
+    if (data.clinicalStatus) fh.clinicalStatus = data.clinicalStatus;
+    if (data.verificationStatus) fh.verificationStatus = data.verificationStatus;
+    if (data.notes !== undefined) fh.notes = data.notes || null;
+    const saved = await this.familyHistoryRepository.save(fh);
+    this.logger.log(`Family history updated for patient ${patientId}: ${id}`);
+    return saved;
+  }
+
+  async removeFamilyHistory(tenantId: string, patientId: string, id: string): Promise<void> {
+    const fh = await this.findFamilyHistoryById(tenantId, patientId, id);
+    await this.familyHistoryRepository.softRemove(fh);
+    this.logger.log(`Family history soft deleted for patient ${patientId}: ${id}`);
+  }
+
+  // ─── Surgical History ────────────────────────────────────────────
+
+  async findSurgicalHistory(tenantId: string, patientId: string): Promise<PatientSurgicalHistory[]> {
+    await this.findOne(tenantId, patientId);
+    return this.surgicalHistoryRepository
+      .createQueryBuilder('sh')
+      .where('sh.tenantId = :tenantId', { tenantId })
+      .andWhere('sh.patientId = :patientId', { patientId })
+      .andWhere('sh.deletedAt IS NULL')
+      .orderBy('sh.procedureDate', 'DESC')
+      .addOrderBy('sh.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async findSurgicalHistoryById(tenantId: string, patientId: string, id: string): Promise<PatientSurgicalHistory> {
+    const sh = await this.surgicalHistoryRepository.findOne({ where: { id, tenantId, patientId } });
+    if (!sh) throw new NotFoundException(`Surgical history entry with ID "${id}" not found`);
+    return sh;
+  }
+
+  async createSurgicalHistory(
+    tenantId: string,
+    patientId: string,
+    data: {
+      procedure: string;
+      procedureCode?: string;
+      codeSystem?: string;
+      procedureDate?: string;
+      surgeon?: string;
+      facility?: string;
+      bodySite?: string;
+      outcome?: string;
+      notes?: string;
+      source?: string;
+    },
+    recordedBy?: string,
+  ): Promise<PatientSurgicalHistory> {
+    await this.findOne(tenantId, patientId);
+    const sh = new PatientSurgicalHistory();
+    sh.tenantId = tenantId;
+    sh.patientId = patientId;
+    sh.procedure = data.procedure.trim();
+    sh.procedureCode = data.procedureCode || null;
+    sh.codeSystem = data.codeSystem || null;
+    sh.procedureDate = data.procedureDate ? new Date(data.procedureDate) : null;
+    sh.surgeon = data.surgeon || null;
+    sh.facility = data.facility || null;
+    sh.bodySite = data.bodySite || null;
+    sh.outcome = data.outcome || null;
+    sh.verificationStatus = 'confirmed';
+    sh.recordedBy = recordedBy || null;
+    sh.source = data.source || 'staff';
+    sh.notes = data.notes || null;
+    const saved = await this.surgicalHistoryRepository.save(sh);
+    this.logger.log(`Surgical history created for patient ${patientId}: ${saved.id}`);
+    return saved;
+  }
+
+  async updateSurgicalHistory(
+    tenantId: string,
+    patientId: string,
+    id: string,
+    data: Partial<{
+      procedure: string;
+      procedureCode: string;
+      codeSystem: string;
+      procedureDate: string;
+      surgeon: string;
+      facility: string;
+      bodySite: string;
+      outcome: string;
+      verificationStatus: string;
+      notes: string;
+    }>,
+  ): Promise<PatientSurgicalHistory> {
+    const sh = await this.findSurgicalHistoryById(tenantId, patientId, id);
+    if (data.procedure) sh.procedure = data.procedure.trim();
+    if (data.procedureCode !== undefined) sh.procedureCode = data.procedureCode || null;
+    if (data.codeSystem !== undefined) sh.codeSystem = data.codeSystem || null;
+    if (data.procedureDate !== undefined) sh.procedureDate = data.procedureDate ? new Date(data.procedureDate) : null;
+    if (data.surgeon !== undefined) sh.surgeon = data.surgeon || null;
+    if (data.facility !== undefined) sh.facility = data.facility || null;
+    if (data.bodySite !== undefined) sh.bodySite = data.bodySite || null;
+    if (data.outcome !== undefined) sh.outcome = data.outcome || null;
+    if (data.verificationStatus) sh.verificationStatus = data.verificationStatus;
+    if (data.notes !== undefined) sh.notes = data.notes || null;
+    const saved = await this.surgicalHistoryRepository.save(sh);
+    this.logger.log(`Surgical history updated for patient ${patientId}: ${id}`);
+    return saved;
+  }
+
+  async removeSurgicalHistory(tenantId: string, patientId: string, id: string): Promise<void> {
+    const sh = await this.findSurgicalHistoryById(tenantId, patientId, id);
+    await this.surgicalHistoryRepository.softRemove(sh);
+    this.logger.log(`Surgical history soft deleted for patient ${patientId}: ${id}`);
+  }
+
+  // ─── Social History ──────────────────────────────────────────────
+
+  async findSocialHistory(tenantId: string, patientId: string, category?: string): Promise<PatientSocialHistory[]> {
+    await this.findOne(tenantId, patientId);
+    const qb = this.socialHistoryRepository
+      .createQueryBuilder('sh')
+      .where('sh.tenantId = :tenantId', { tenantId })
+      .andWhere('sh.patientId = :patientId', { patientId })
+      .andWhere('sh.deletedAt IS NULL');
+    if (category) {
+      qb.andWhere('sh.category = :category', { category });
+    }
+    qb.orderBy('sh.category', 'ASC').addOrderBy('sh.createdAt', 'DESC');
+    return qb.getMany();
+  }
+
+  async findSocialHistoryById(tenantId: string, patientId: string, id: string): Promise<PatientSocialHistory> {
+    const sh = await this.socialHistoryRepository.findOne({ where: { id, tenantId, patientId } });
+    if (!sh) throw new NotFoundException(`Social history entry with ID "${id}" not found`);
+    return sh;
+  }
+
+  async createSocialHistory(
+    tenantId: string,
+    patientId: string,
+    data: {
+      category: SocialHistoryCategory;
+      status?: string;
+      detail?: string;
+      frequency?: string;
+      amount?: string;
+      durationYears?: number;
+      quitDate?: string;
+      notes?: string;
+      source?: string;
+    },
+    recordedBy?: string,
+  ): Promise<PatientSocialHistory> {
+    await this.findOne(tenantId, patientId);
+    const sh = new PatientSocialHistory();
+    sh.tenantId = tenantId;
+    sh.patientId = patientId;
+    sh.category = data.category;
+    sh.status = data.status || 'current';
+    sh.detail = data.detail || null;
+    sh.frequency = data.frequency || null;
+    sh.amount = data.amount || null;
+    sh.durationYears = data.durationYears ?? null;
+    sh.quitDate = data.quitDate ? new Date(data.quitDate) : null;
+    sh.verificationStatus = 'confirmed';
+    sh.recordedBy = recordedBy || null;
+    sh.source = data.source || 'staff';
+    sh.notes = data.notes || null;
+    const saved = await this.socialHistoryRepository.save(sh);
+    this.logger.log(`Social history created for patient ${patientId}: ${saved.id}`);
+    return saved;
+  }
+
+  async updateSocialHistory(
+    tenantId: string,
+    patientId: string,
+    id: string,
+    data: Partial<{
+      category: SocialHistoryCategory;
+      status: string;
+      detail: string;
+      frequency: string;
+      amount: string;
+      durationYears: number;
+      quitDate: string;
+      verificationStatus: string;
+      notes: string;
+    }>,
+  ): Promise<PatientSocialHistory> {
+    const sh = await this.findSocialHistoryById(tenantId, patientId, id);
+    if (data.category) sh.category = data.category;
+    if (data.status) sh.status = data.status;
+    if (data.detail !== undefined) sh.detail = data.detail || null;
+    if (data.frequency !== undefined) sh.frequency = data.frequency || null;
+    if (data.amount !== undefined) sh.amount = data.amount || null;
+    if (data.durationYears !== undefined) sh.durationYears = data.durationYears;
+    if (data.quitDate !== undefined) sh.quitDate = data.quitDate ? new Date(data.quitDate) : null;
+    if (data.verificationStatus) sh.verificationStatus = data.verificationStatus;
+    if (data.notes !== undefined) sh.notes = data.notes || null;
+    const saved = await this.socialHistoryRepository.save(sh);
+    this.logger.log(`Social history updated for patient ${patientId}: ${id}`);
+    return saved;
+  }
+
+  async removeSocialHistory(tenantId: string, patientId: string, id: string): Promise<void> {
+    const sh = await this.findSocialHistoryById(tenantId, patientId, id);
+    await this.socialHistoryRepository.softRemove(sh);
+    this.logger.log(`Social history soft deleted for patient ${patientId}: ${id}`);
   }
 }

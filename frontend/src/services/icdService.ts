@@ -22,7 +22,7 @@ export interface PatientProblem {
   tenantId: string;
   patientId: string;
   code: string;
-  codeSystem: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
+  codeSystem: 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11';
   description: string;
   clinicalStatus: 'active' | 'inactive' | 'resolved';
   verificationStatus: 'confirmed' | 'unconfirmed' | 'refuted' | 'entered-in-error';
@@ -41,7 +41,7 @@ export interface FavoriteDiagnosis {
   tenantId: string;
   providerId?: string | null;
   code: string;
-  codeSystem: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
+  codeSystem: 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11';
   description: string;
   isBillable: boolean;
   createdAt: string;
@@ -50,7 +50,7 @@ export interface FavoriteDiagnosis {
 
 export interface RecentDiagnosis {
   code: string;
-  codeSystem: 'ICD-10-CM' | 'SNOMED CT' | 'ICD-11';
+  codeSystem: 'ICD-10-CM' | 'ICD-9-CM' | 'SNOMED CT' | 'ICD-11';
   description: string;
   encounterDate?: string;
 }

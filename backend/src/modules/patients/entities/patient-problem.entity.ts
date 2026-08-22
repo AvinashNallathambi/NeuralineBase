@@ -13,6 +13,7 @@ import { Patient } from './patient.entity';
 
 export enum DiagnosisCodingSystem {
   ICD_10_CM = 'ICD-10-CM',
+  ICD_9_CM = 'ICD-9-CM',
   SNOMED_CT = 'SNOMED CT',
   ICD_11 = 'ICD-11',
 }

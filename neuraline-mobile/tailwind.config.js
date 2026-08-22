@@ -8,7 +8,8 @@ module.exports = {
     './utils/**/*.{html,js,jsx,ts,tsx,mdx}',
   ],
   presets: [require('nativewind/preset')],
-  important: 'html',
+  // Note: do NOT use `important: 'html'` in React Native — there is no html
+  // element, so all selectors would be prefixed with `html` and never match.
   safelist: [
     {
       pattern:

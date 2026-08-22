@@ -68,6 +68,8 @@ import {
   EncounterAllergy,
 } from '../../services/encounterService';
 import { patientService } from '../../services/patientService';
+import { patientMedicationService } from '../../services/patientMedicationService';
+import type { PatientMedication, TakingStatus } from '../../services/patientMedicationService';
 import { billingService, PatientInsurance } from '../../services/billingService';
 import { aiService } from '../../services/aiService';
 import VitalsFormSection from '../../components/clinical/VitalsFormSection';
@@ -144,6 +146,8 @@ const EncounterDetailPage: React.FC = () => {
   const [diagIsBillable, setDiagIsBillable] = useState(false);
 
   const [medications, setMedications] = useState<EncounterMedication[]>([]);
+  const [reconMeds, setReconMeds] = useState<PatientMedication[]>([]);
+  const [reconLoading, setReconLoading] = useState(false);
 
   const [procedures, setProcedures] = useState<Array<{ name: string; cptCode: string; description: string; status: string }>>([]);
   const [procName, setProcName] = useState('');
@@ -253,6 +257,16 @@ const EncounterDetailPage: React.FC = () => {
 
     setDiagnoses(data.diagnoses || []);
     setMedications(data.treatmentPlan?.medications || []);
+
+    // Fetch patient's current medication list for reconciliation
+    if (data.patientId) {
+      setReconLoading(true);
+      patientMedicationService
+        .findByPatient(data.patientId)
+        .then((meds) => setReconMeds(meds.filter((m) => m.status === 'active')))
+        .catch(() => {})
+        .finally(() => setReconLoading(false));
+    }
     setProcedures(
       (data.treatmentPlan?.procedures || []).map((p) => ({
         name: p.name,
@@ -354,7 +368,12 @@ const EncounterDetailPage: React.FC = () => {
       restrictions: values.restrictions,
       recallReminder: values.recallReminder,
     },
-    allergies,
+    allergies: allergies.map((a) => ({
+      ...a,
+      reaction: a.reaction?.trim() || 'Not specified',
+      allergen: a.allergen?.trim() || 'Unknown',
+      severity: a.severity || 'mild',
+    })),
     orders: {
       labs: labs.map((l) => ({
         name: l.name,
@@ -585,6 +604,46 @@ const EncounterDetailPage: React.FC = () => {
     (updated[index] as any)[field] = value;
     setMedications(updated);
     markDirty();
+  };
+
+  const handleReconStatusChange = async (medId: string, status: TakingStatus) => {
+    try {
+      await patientMedicationService.updateTakingStatus(medId, status);
+      setReconMeds((prev) => prev.map((m) => m.id === medId ? { ...m, takingStatus: status } : m));
+      message.success('Medication reconciliation updated');
+    } catch {
+      message.error('Failed to update reconciliation status');
+    }
+  };
+
+  const handleReconMarkAllReviewed = async () => {
+    try {
+      for (const m of reconMeds) {
+        if (!m.isReviewed) {
+          await patientMedicationService.markReviewed(m.id);
+        }
+      }
+      setReconMeds((prev) => prev.map((m) => ({ ...m, isReviewed: true })));
+      message.success('All medications marked as reviewed');
+    } catch {
+      message.error('Failed to mark medications as reviewed');
+    }
+  };
+
+  const handleAddReconToEncounter = (med: PatientMedication) => {
+    // Add this existing patient medication to the encounter's prescribed meds
+    setMedications([...medications, {
+      name: med.medicationName,
+      dosage: med.dosage || '',
+      frequency: med.frequency || '',
+      route: med.route || 'oral',
+      duration: med.duration || '',
+      refills: 0,
+      instructions: med.instructions || '',
+      isNew: false,
+    }]);
+    markDirty();
+    message.success(`${med.medicationName} added to prescribed medications`);
   };
 
   const handleAddProcedure = () => {
@@ -1284,6 +1343,92 @@ const EncounterDetailPage: React.FC = () => {
                     canEdit ? (
                       <Button type="text" danger icon={<DeleteOutlined />} size="small" onClick={() => handleRemoveProcedure(index)} />
                     ) : null,
+                },
+              ]}
+            />
+          )}
+        </Card>
+
+        {/* ─── Section 4b: Medication Reconciliation ─── */}
+        <Card
+          title={
+            <span style={sectionTitleStyle}>
+              <HeartOutlined /> Medication Reconciliation — {reconMeds.length} active med{reconMeds.length !== 1 ? 's' : ''}
+            </span>
+          }
+          size="small"
+          style={{ marginBottom: 16 }}
+          extra={
+            reconMeds.length > 0 && canEdit && (
+              <Button size="small" onClick={handleReconMarkAllReviewed}>
+                Mark All Reviewed
+              </Button>
+            )
+          }
+        >
+          {reconLoading ? (
+            <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+          ) : reconMeds.length === 0 ? (
+            <Empty description="No active medications on file. The patient has no documented medications to reconcile." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <Table<PatientMedication>
+              dataSource={reconMeds}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              columns={[
+                {
+                  title: 'Medication',
+                  key: 'med',
+                  render: (_, m) => (
+                    <Space direction="vertical" size={0}>
+                      <Text strong>{m.medicationName}</Text>
+                      {m.dosage && <Text type="secondary" style={{ fontSize: 12 }}>{m.dosage} · {m.frequency || ''} · {m.route || ''}</Text>}
+                    </Space>
+                  ),
+                },
+                {
+                  title: 'Source',
+                  dataIndex: 'source',
+                  key: 'source',
+                  width: 120,
+                  render: (s: string) => <Tag>{s.replace(/_/g, ' ')}</Tag>,
+                },
+                {
+                  title: 'Taking Status',
+                  key: 'takingStatus',
+                  width: 160,
+                  render: (_, m) => (
+                    <Select
+                      size="small"
+                      value={m.takingStatus}
+                      disabled={!canEdit}
+                      style={{ width: 150 }}
+                      onChange={(val) => handleReconStatusChange(m.id, val as TakingStatus)}
+                      options={[
+                        { value: 'taking', label: 'Taking' },
+                        { value: 'taking_differently', label: 'Taking Differently' },
+                        { value: 'not_taking', label: 'Not Taking' },
+                        { value: 'unknown', label: 'Unknown' },
+                      ]}
+                    />
+                  ),
+                },
+                {
+                  title: 'Reviewed',
+                  key: 'reviewed',
+                  width: 80,
+                  render: (_, m) => m.isReviewed ? <Tag color="green">Yes</Tag> : <Tag>No</Tag>,
+                },
+                {
+                  title: 'Action',
+                  key: 'action',
+                  width: 100,
+                  render: (_, m) => canEdit && (
+                    <Button size="small" type="link" onClick={() => handleAddReconToEncounter(m)}>
+                      Add to Rx
+                    </Button>
+                  ),
                 },
               ]}
             />

@@ -4,8 +4,10 @@
  * Shows stat cards and recent activity using react-query.
  */
 import React from 'react';
-import { RefreshControl, ScrollView } from 'react-native';
+import { RefreshControl, ScrollView, Pressable } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { dashboardApi } from '../../services';
 import { useAuthStore } from '../../store';
@@ -21,9 +23,16 @@ import { Spinner } from '@/components/ui/spinner';
 import { Badge } from '@/components/ui/badge';
 import { BadgeText } from '@/components/ui/badge';
 import { Divider } from '@/components/ui/divider';
+import { CustomSpinner } from '../../components/CustomSpinner';
+
+type DashboardNavProp = NativeStackNavigationProp<
+  { Dashboard: undefined; Patients: undefined; Appointments: undefined },
+  'Dashboard'
+>;
 
 export const DashboardScreen: React.FC = () => {
   const { user } = useAuthStore();
+  const navigation = useNavigation<DashboardNavProp>();
 
   const { data: stats, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['dashboard', 'stats'],
@@ -33,7 +42,7 @@ export const DashboardScreen: React.FC = () => {
   if (isLoading) {
     return (
       <Box className="flex-1 justify-center items-center bg-background">
-        <Spinner size="large" color="$primary" />
+        <CustomSpinner size={48} />
       </Box>
     );
   }
@@ -103,6 +112,22 @@ export const DashboardScreen: React.FC = () => {
             </Card>
           ))}
         </Box>
+
+        {/* Quick Navigation */}
+        <HStack className="gap-3">
+          <Pressable onPress={() => navigation.navigate('Appointments')} className="flex-1">
+            <Card className="rounded-xl p-4 items-center" size="default">
+              <Text className="text-3xl mb-1">📅</Text>
+              <Text className="text-sm font-semibold text-primary">Appointments</Text>
+            </Card>
+          </Pressable>
+          <Pressable onPress={() => navigation.navigate('Patients')} className="flex-1">
+            <Card className="rounded-xl p-4 items-center" size="default">
+              <Text className="text-3xl mb-1">👥</Text>
+              <Text className="text-sm font-semibold text-primary">Patients</Text>
+            </Card>
+          </Pressable>
+        </HStack>
 
         {/* Recent Activity */}
         <Card className="rounded-xl p-5" size="default">

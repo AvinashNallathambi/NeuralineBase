@@ -294,4 +294,238 @@ export class PatientsController {
   ) {
     return this.patientsService.removeProblem(req.user.tenantId, id, problemId);
   }
+
+  // ─── Allergies ───────────────────────────────────────────────────
+
+  @Get(':id/allergies')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get patient allergies' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  async findAllergies(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('clinicalStatus') clinicalStatus?: string,
+  ) {
+    return this.patientsService.findAllergies(req.user.tenantId, id, clinicalStatus);
+  }
+
+  @Post(':id/allergies')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add an allergy to the patient record' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  async createAllergy(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: {
+      allergen: string;
+      reaction?: string;
+      severity?: string;
+      clinicalStatus?: string;
+      onsetDate?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createAllergy(req.user.tenantId, id, body as any, req.user.id);
+  }
+
+  @Patch(':id/allergies/:allergyId')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Update a patient allergy' })
+  async updateAllergy(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('allergyId', ParseUUIDPipe) allergyId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return this.patientsService.updateAllergy(req.user.tenantId, id, allergyId, body as any);
+  }
+
+  @Delete(':id/allergies/:allergyId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a patient allergy' })
+  async removeAllergy(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('allergyId', ParseUUIDPipe) allergyId: string,
+  ) {
+    return this.patientsService.removeAllergy(req.user.tenantId, id, allergyId);
+  }
+
+  // ─── Family History ──────────────────────────────────────────────
+
+  @Get(':id/family-history')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get patient family history' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  async findFamilyHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.patientsService.findFamilyHistory(req.user.tenantId, id);
+  }
+
+  @Post(':id/family-history')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a family history entry' })
+  async createFamilyHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: {
+      relationship: string;
+      memberName?: string;
+      condition: string;
+      code?: string;
+      codeSystem?: string;
+      ageOfOnset?: number;
+      isDeceased?: boolean;
+      ageAtDeath?: number;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createFamilyHistory(req.user.tenantId, id, body as any, req.user.id);
+  }
+
+  @Patch(':id/family-history/:fhId')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Update a family history entry' })
+  async updateFamilyHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fhId', ParseUUIDPipe) fhId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return this.patientsService.updateFamilyHistory(req.user.tenantId, id, fhId, body as any);
+  }
+
+  @Delete(':id/family-history/:fhId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a family history entry' })
+  async removeFamilyHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('fhId', ParseUUIDPipe) fhId: string,
+  ) {
+    return this.patientsService.removeFamilyHistory(req.user.tenantId, id, fhId);
+  }
+
+  // ─── Surgical History ────────────────────────────────────────────
+
+  @Get(':id/surgical-history')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get patient surgical history' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  async findSurgicalHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.patientsService.findSurgicalHistory(req.user.tenantId, id);
+  }
+
+  @Post(':id/surgical-history')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a surgical history entry' })
+  async createSurgicalHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: {
+      procedure: string;
+      procedureCode?: string;
+      procedureDate?: string;
+      surgeon?: string;
+      facility?: string;
+      bodySite?: string;
+      outcome?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createSurgicalHistory(req.user.tenantId, id, body as any, req.user.id);
+  }
+
+  @Patch(':id/surgical-history/:shId')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Update a surgical history entry' })
+  async updateSurgicalHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('shId', ParseUUIDPipe) shId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return this.patientsService.updateSurgicalHistory(req.user.tenantId, id, shId, body as any);
+  }
+
+  @Delete(':id/surgical-history/:shId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a surgical history entry' })
+  async removeSurgicalHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('shId', ParseUUIDPipe) shId: string,
+  ) {
+    return this.patientsService.removeSurgicalHistory(req.user.tenantId, id, shId);
+  }
+
+  // ─── Social History ──────────────────────────────────────────────
+
+  @Get(':id/social-history')
+  @Roles('admin', 'doctor', 'nurse', 'receptionist')
+  @ApiOperation({ summary: 'Get patient social history' })
+  @ApiParam({ name: 'id', type: String, description: 'Patient UUID' })
+  async findSocialHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('category') category?: string,
+  ) {
+    return this.patientsService.findSocialHistory(req.user.tenantId, id, category);
+  }
+
+  @Post(':id/social-history')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a social history entry' })
+  async createSocialHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: {
+      category: string;
+      status?: string;
+      detail?: string;
+      frequency?: string;
+      amount?: string;
+      durationYears?: number;
+      quitDate?: string;
+      notes?: string;
+    },
+  ) {
+    return this.patientsService.createSocialHistory(req.user.tenantId, id, body as any, req.user.id);
+  }
+
+  @Patch(':id/social-history/:shId')
+  @Roles('admin', 'doctor', 'nurse')
+  @ApiOperation({ summary: 'Update a social history entry' })
+  async updateSocialHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('shId', ParseUUIDPipe) shId: string,
+    @Body() body: Record<string, any>,
+  ) {
+    return this.patientsService.updateSocialHistory(req.user.tenantId, id, shId, body as any);
+  }
+
+  @Delete(':id/social-history/:shId')
+  @Roles('admin', 'doctor', 'nurse')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Soft delete a social history entry' })
+  async removeSocialHistory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('shId', ParseUUIDPipe) shId: string,
+  ) {
+    return this.patientsService.removeSocialHistory(req.user.tenantId, id, shId);
+  }
 }

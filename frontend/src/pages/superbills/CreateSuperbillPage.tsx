@@ -280,6 +280,7 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
         patientDOB: patient.dateOfBirth,
         patientAddress: mappedAddress,
         patientPhone: patient.phone,
+        patientSex: patient.gender?.startsWith('M') ? 'M' : patient.gender?.startsWith('F') ? 'F' : values.patientSex,
         providerId: provider.id,
         encounterId: encounterId || undefined,
         providerName: `${provider.firstName} ${provider.lastName}`,
@@ -302,6 +303,23 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
           payerId: values.payerId,
           authorizationNumber: values.authorizationNumber,
         },
+        insuranceProgram: values.insuranceProgram,
+        acceptAssignment: values.acceptAssignment,
+        referringProviderName: values.referringProviderName,
+        referringProviderNPI: values.referringProviderNPI,
+        priorAuthNumber: values.priorAuthNumber,
+        dateOfIllness: values.dateOfIllness?.toISOString(),
+        outsideLab: values.outsideLab,
+        outsideLabCharges: values.outsideLabCharges,
+        resubmissionCode: values.resubmissionCode,
+        originalRefNo: values.originalRefNo,
+        patientAccountNo: values.patientAccountNo,
+        isEmploymentRelated: values.isEmploymentRelated,
+        isAutoAccident: values.isAutoAccident,
+        isOtherAccident: values.isOtherAccident,
+        amountPaid: values.amountPaid,
+        physicianSignature: values.physicianSignature,
+        physicianSignatureDate: values.physicianSignatureDate?.toISOString(),
         diagnoses: validDiagnoses.map(({ id, ...rest }) => rest),
         procedures: validProcedures.map(({ id, ...rest }) => rest),
         charges: charges
@@ -736,6 +754,137 @@ const CreateSuperbillPage: React.FC<CreateSuperbillPageProps> = ({
                 name="authorizationNumber"
               >
                 <Input placeholder="Optional authorization number" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider orientation="left">CMS-1500 Claim Form Fields</Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Insurance Program (Field 1)" name="insuranceProgram">
+                <Select placeholder="Select program">
+                  <Option value="medicare">Medicare</Option>
+                  <Option value="medicaid">Medicaid</Option>
+                  <Option value="tricare">TRICARE</Option>
+                  <Option value="champva">CHAMPVA</Option>
+                  <Option value="group_health_plan">Group Health Plan</Option>
+                  <Option value="feca">FECA</Option>
+                  <Option value="blk_lung">Black Lung</Option>
+                  <Option value="other">Other</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Patient Sex (Field 3)" name="patientSex">
+                <Select placeholder="Select sex">
+                  <Option value="M">Male</Option>
+                  <Option value="F">Female</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Accept Assignment? (Field 27)" name="acceptAssignment" initialValue={true}>
+                <Select>
+                  <Option value={true}>Yes</Option>
+                  <Option value={false}>No</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Referring Provider Name (Field 17)" name="referringProviderName">
+                <Input placeholder="e.g., Dr. Jane Smith" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Referring Provider NPI (Field 17b)" name="referringProviderNPI">
+                <Input placeholder="e.g., 1234567890" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Prior Auth Number (Field 23)" name="priorAuthNumber">
+                <Input placeholder="e.g., PA-12345" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Date of Current Illness (Field 14)" name="dateOfIllness">
+                <DatePicker style={{ width: "100%" }} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Outside Lab? (Field 20)" name="outsideLab">
+                <Select placeholder="Select">
+                  <Option value={true}>Yes</Option>
+                  <Option value={false}>No</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Outside Lab Charges (Field 20)" name="outsideLabCharges">
+                <InputNumber style={{ width: "100%" }} prefix="$" placeholder="0.00" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Resubmission Code (Field 22)" name="resubmissionCode">
+                <Input placeholder="e.g., 7" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Original Ref No (Field 22)" name="originalRefNo">
+                <Input placeholder="Original claim reference" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Patient Account No (Field 26)" name="patientAccountNo">
+                <Input placeholder="Patient account number" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Employment Related? (Field 10a)" name="isEmploymentRelated" initialValue={false}>
+                <Select>
+                  <Option value={true}>Yes</Option>
+                  <Option value={false}>No</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Auto Accident? (Field 10b)" name="isAutoAccident" initialValue={false}>
+                <Select>
+                  <Option value={true}>Yes</Option>
+                  <Option value={false}>No</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Other Accident? (Field 10c)" name="isOtherAccident" initialValue={false}>
+                <Select>
+                  <Option value={true}>Yes</Option>
+                  <Option value={false}>No</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="Amount Paid by Patient (Field 29)" name="amountPaid">
+                <InputNumber style={{ width: "100%" }} prefix="$" placeholder="0.00" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Physician Signature (Field 31)" name="physicianSignature">
+                <Input placeholder="e.g., Dr. James Wilson, MD" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="Signature Date (Field 31)" name="physicianSignatureDate">
+                <DatePicker style={{ width: "100%" }} />
               </Form.Item>
             </Col>
           </Row>

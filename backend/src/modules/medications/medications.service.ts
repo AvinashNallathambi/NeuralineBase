@@ -1,11 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { IntegrationsService } from '../integrations/integrations.service';
+import { OpenFDAService } from './openfda.service';
 
 export interface MedicationResult {
   name: string;
   rxNormCode: string;
   strengths: string[];
-  source: 'rxnorm' | 'local';
+  source: 'rxnorm' | 'local' | 'openfda';
+  /** Additional fields from OpenFDA (present when source='openfda') */
+  genericName?: string;
+  brandName?: string;
+  manufacturer?: string;
+  ndc?: string[];
+  productType?: string;
+  deaSchedule?: string;
 }
 
 const LOCAL_MEDICATIONS: MedicationResult[] = [
@@ -33,7 +41,10 @@ const LOCAL_MEDICATIONS: MedicationResult[] = [
 export class MedicationsService {
   private readonly logger = new Logger(MedicationsService.name);
 
-  constructor(private readonly integrationsService: IntegrationsService) {}
+  constructor(
+    private readonly integrationsService: IntegrationsService,
+    private readonly openfdaService: OpenFDAService,
+  ) {}
 
   async search(
     tenantId: string,
@@ -42,6 +53,7 @@ export class MedicationsService {
   ): Promise<MedicationResult[]> {
     const q = (query || '').trim().toLowerCase();
     const rxNormEnabled = await this.integrationsService.isEnabled(tenantId, 'rxnorm');
+    const openfdaEnabled = await this.openfdaService.isEnabled(tenantId);
 
     let localResults = LOCAL_MEDICATIONS;
     if (q) {
@@ -52,19 +64,68 @@ export class MedicationsService {
       );
     }
 
-    if (!rxNormEnabled || q.length < 2) {
+    // If neither external source is enabled, return local only
+    if (!rxNormEnabled && !openfdaEnabled) {
+      return localResults.slice(0, limit);
+    }
+    if (q.length < 2) {
       return localResults.slice(0, limit);
     }
 
-    try {
-      const external = await this.searchRxNorm(q, limit);
-      // Merge external results first, then local fallback if external returned few.
-      const seen = new Set(external.map((e) => e.name.toLowerCase()));
-      return [...external, ...localResults.filter((m) => !seen.has(m.name.toLowerCase()))].slice(0, limit);
-    } catch (err: any) {
-      this.logger.warn(`RxNorm search failed, falling back to local list: ${err.message}`);
-      return localResults.slice(0, limit);
+    // Search both RxNorm and OpenFDA in parallel, merge results
+    const promises: Promise<MedicationResult[]>[] = [];
+
+    if (rxNormEnabled) {
+      promises.push(
+        this.searchRxNorm(q, limit).catch((err) => {
+          this.logger.warn(`RxNorm search failed: ${err.message}`);
+          return [];
+        }),
+      );
+    } else {
+      promises.push(Promise.resolve([]));
     }
+
+    if (openfdaEnabled) {
+      promises.push(
+        this.searchOpenFda(tenantId, q, limit).catch((err) => {
+          this.logger.warn(`OpenFDA search failed: ${err.message}`);
+          return [];
+        }),
+      );
+    } else {
+      promises.push(Promise.resolve([]));
+    }
+
+    const [rxNormResults, openfdaResults] = await Promise.all(promises);
+
+    // Merge: OpenFDA first (covers gene therapies/specialty drugs), then RxNorm, then local
+    const seen = new Set<string>();
+    const merged: MedicationResult[] = [];
+
+    for (const r of openfdaResults) {
+      const key = r.name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(r);
+      }
+    }
+    for (const r of rxNormResults) {
+      const key = r.name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(r);
+      }
+    }
+    for (const r of localResults) {
+      const key = r.name.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(r);
+      }
+    }
+
+    return merged.slice(0, limit);
   }
 
   private async searchRxNorm(query: string, limit: number): Promise<MedicationResult[]> {
@@ -85,6 +146,23 @@ export class MedicationsService {
       results.push({ name, rxNormCode: rxcui, strengths, source: 'rxnorm' });
     }
     return results;
+  }
+
+  /** Search OpenFDA and convert results to MedicationResult format. */
+  private async searchOpenFda(tenantId: string, query: string, limit: number): Promise<MedicationResult[]> {
+    const openfdaResults = await this.openfdaService.searchDrugs(tenantId, query, limit);
+    return openfdaResults.map((r) => ({
+      name: r.brandName || r.genericName || r.name,
+      rxNormCode: r.rxNormCode || '',
+      strengths: r.strength ? [r.strength] : [],
+      source: 'openfda' as const,
+      genericName: r.genericName,
+      brandName: r.brandName,
+      manufacturer: r.manufacturer,
+      ndc: r.ndc,
+      productType: r.productType,
+      deaSchedule: r.deaSchedule,
+    }));
   }
 
   private async fetchStrengths(rxcui: string): Promise<string[]> {

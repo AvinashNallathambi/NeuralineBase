@@ -155,6 +155,92 @@ class PatientService {
     await api.delete(`${this.baseUrl}/${patientId}/problems/${problemId}`);
   }
 
+  // ── Allergies (staff) ──
+
+  async findAllergies(patientId: string): Promise<any[]> {
+    const response = await api.get(`${this.baseUrl}/${patientId}/allergies`);
+    return response.data;
+  }
+
+  async createAllergy(patientId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/allergies`, data);
+    return response.data;
+  }
+
+  async updateAllergy(patientId: string, allergyId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.patch(`${this.baseUrl}/${patientId}/allergies/${allergyId}`, data);
+    return response.data;
+  }
+
+  async deleteAllergy(patientId: string, allergyId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/allergies/${allergyId}`);
+  }
+
+  // ── Family History (staff) ──
+
+  async findFamilyHistory(patientId: string): Promise<any[]> {
+    const response = await api.get(`${this.baseUrl}/${patientId}/family-history`);
+    return response.data;
+  }
+
+  async createFamilyHistory(patientId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/family-history`, data);
+    return response.data;
+  }
+
+  async updateFamilyHistory(patientId: string, fhId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.patch(`${this.baseUrl}/${patientId}/family-history/${fhId}`, data);
+    return response.data;
+  }
+
+  async deleteFamilyHistory(patientId: string, fhId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/family-history/${fhId}`);
+  }
+
+  // ── Surgical History (staff) ──
+
+  async findSurgicalHistory(patientId: string): Promise<any[]> {
+    const response = await api.get(`${this.baseUrl}/${patientId}/surgical-history`);
+    return response.data;
+  }
+
+  async createSurgicalHistory(patientId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/surgical-history`, data);
+    return response.data;
+  }
+
+  async updateSurgicalHistory(patientId: string, shId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.patch(`${this.baseUrl}/${patientId}/surgical-history/${shId}`, data);
+    return response.data;
+  }
+
+  async deleteSurgicalHistory(patientId: string, shId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/surgical-history/${shId}`);
+  }
+
+  // ── Social History (staff) ──
+
+  async findSocialHistory(patientId: string, category?: string): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    const response = await api.get(`${this.baseUrl}/${patientId}/social-history?${params.toString()}`);
+    return response.data;
+  }
+
+  async createSocialHistory(patientId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.post(`${this.baseUrl}/${patientId}/social-history`, data);
+    return response.data;
+  }
+
+  async updateSocialHistory(patientId: string, shId: string, data: Record<string, any>): Promise<any> {
+    const response = await api.patch(`${this.baseUrl}/${patientId}/social-history/${shId}`, data);
+    return response.data;
+  }
+
+  async deleteSocialHistory(patientId: string, shId: string): Promise<void> {
+    await api.delete(`${this.baseUrl}/${patientId}/social-history/${shId}`);
+  }
+
   async getVitals(patientId: string): Promise<Array<EncounterVitals & { encounterId: string; encounterDate: string }>> {
     const encounters = await encounterService.findByPatient(patientId);
     return (encounters as any[])

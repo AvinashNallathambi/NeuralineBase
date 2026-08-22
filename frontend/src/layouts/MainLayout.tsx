@@ -34,6 +34,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ToolOutlined,
+  GavelOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore, useAuthStore } from '../store';
@@ -91,6 +92,8 @@ const menuItems = [
     ],
   },
   { key: 'reports', icon: <BarChartOutlined />, label: 'Reports' },
+  { key: 'quality-measures', icon: <SafetyCertificateOutlined />, label: 'Quality Measures' },
+  { key: 'nsa', icon: <GavelOutlined />, label: 'NSA Compliance' },
   { key: 'workflow', icon: <ApartmentOutlined />, label: 'Workflows' },
   { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
   {

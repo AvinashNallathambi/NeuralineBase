@@ -173,9 +173,13 @@ export const formatDate = (iso: string): string => {
   });
 };
 
-/** Format date as "2025-08-19" (for API queries) */
+/** Format date as "2025-08-19" (for API queries and calendar keys).
+ *  Uses local date components (not UTC) to avoid off-by-one timezone shifts. */
 export const toDateString = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 };
 
 /** Get duration in minutes between two ISO times */
@@ -195,7 +199,9 @@ export const formatDuration = (start: string, end: string): string => {
 
 /** Check if appointment is today */
 export const isToday = (iso: string): boolean => {
-  const d = new Date(iso);
+  // Parse as local date (YYYY-MM-DD format) to avoid UTC offset issues
+  const parts = iso.split('T')[0].split('-');
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
   const today = new Date();
   return (
     d.getDate() === today.getDate() &&

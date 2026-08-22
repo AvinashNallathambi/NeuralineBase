@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PatientsService } from '../patients/patients.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { PatientImmunization } from '../immunizations/entities/patient-immunization.entity';
+import { Encounter } from '../clinical/entities/encounter.entity';
 
 export interface FhirResource {
   resourceType: string;
@@ -40,6 +44,10 @@ export class FhirService {
   constructor(
     private readonly patientsService: PatientsService,
     private readonly configService: ConfigService,
+    @InjectRepository(PatientImmunization)
+    private readonly immunizationRepository: Repository<PatientImmunization>,
+    @InjectRepository(Encounter)
+    private readonly encounterRepository: Repository<Encounter>,
   ) {
     this.fhirBaseUrl = this.configService.get<string>(
       'FHIR_BASE_URL',
@@ -349,6 +357,224 @@ export class FhirService {
         ],
       },
       use: 'claim',
+    };
+  }
+
+  /**
+   * Get FHIR Immunization resource
+   * Maps from PatientImmunization entity to FHIR R4 Immunization
+   */
+  async getImmunizationResource(
+    tenantId: string,
+    immunizationId: string,
+  ): Promise<FhirResource> {
+    this.logger.log(`FHIR Immunization requested: ${immunizationId} (tenant: ${tenantId})`);
+
+    const imm = await this.immunizationRepository.findOne({
+      where: { id: immunizationId, tenantId },
+    });
+    if (!imm) throw new NotFoundException('Immunization not found');
+
+    const statusMap: Record<string, string> = {
+      completed: 'completed',
+      'entered-in-error': 'entered-in-error',
+      'not-done': 'not-done',
+    };
+
+    const resource: FhirResource = {
+      resourceType: 'Immunization',
+      id: imm.id,
+      meta: {
+        versionId: '1',
+        lastUpdated: imm.updatedAt.toISOString(),
+        profile: ['http://hl7.org/fhir/StructureDefinition/Immunization'],
+      },
+      status: statusMap[imm.status] || 'completed',
+      vaccineCode: {
+        coding: [
+          ...(imm.cvxCode ? [{
+            system: 'http://hl7.org/fhir/sid/cvx',
+            code: imm.cvxCode,
+            display: imm.vaccineName,
+          }] : []),
+          ...(imm.cptCode ? [{
+            system: 'http://www.ama-assn.org/go/cpt',
+            code: imm.cptCode,
+          }] : []),
+        ],
+        text: imm.vaccineName,
+      },
+      patient: { reference: `Patient/${imm.patientId}` },
+      occurrenceDateTime: imm.administeredDate,
+      recorded: imm.createdAt.toISOString(),
+      primarySource: imm.source === 'administered',
+      ...(imm.lotNumber && {
+        lotNumber: imm.lotNumber,
+      }),
+      ...(imm.expirationDate && {
+        expirationDate: imm.expirationDate,
+      }),
+      ...(imm.manufacturer && {
+        manufacturer: { display: imm.manufacturer },
+      }),
+      ...(imm.doseAmount && {
+        doseQuantity: {
+          value: parseFloat(imm.doseAmount),
+          ...(imm.doseUnit && { unit: imm.doseUnit }),
+        },
+      }),
+      ...(imm.route && {
+        route: {
+          coding: [{
+            system: 'http://terminology.hl7.org/CodeSystem/v3-RouteOfAdministration',
+            code: imm.route,
+          }],
+        },
+      }),
+      ...(imm.site && {
+        site: {
+          text: imm.site,
+        },
+      }),
+      ...(imm.providerName && {
+        performer: [{
+          actor: { display: imm.providerName },
+          ...(imm.providerId && { reference: `Practitioner/${imm.providerId}` }),
+        }],
+      }),
+      ...(imm.facilityName && {
+        location: { display: imm.facilityName },
+      }),
+      ...(imm.reactionNotes && {
+        reaction: [{
+          detail: { text: imm.reactionNotes },
+        }],
+      }),
+      ...(imm.notes && {
+        note: [{ text: imm.notes }],
+      }),
+    };
+
+    return resource;
+  }
+
+  /**
+   * Search FHIR Immunization resources for a patient
+   */
+  async searchImmunizations(
+    tenantId: string,
+    patientId: string,
+  ): Promise<FhirBundle> {
+    this.logger.log(`FHIR Immunization search for patient: ${patientId} (tenant: ${tenantId})`);
+
+    const imms = await this.immunizationRepository.find({
+      where: { patientId, tenantId },
+      order: { administeredDate: 'DESC' },
+    });
+
+    return {
+      resourceType: 'Bundle',
+      id: `immunization-search-${patientId}`,
+      type: 'searchset',
+      total: imms.length,
+      link: [],
+      entry: imms.map((imm) => ({
+        fullUrl: `${this.fhirBaseUrl}/Immunization/${imm.id}`,
+        resource: {
+          resourceType: 'Immunization',
+          id: imm.id,
+          meta: { lastUpdated: imm.updatedAt.toISOString() },
+          status: imm.status === 'completed' ? 'completed' : 'not-done',
+          vaccineCode: { text: imm.vaccineName },
+          patient: { reference: `Patient/${imm.patientId}` },
+          occurrenceDateTime: imm.administeredDate,
+        },
+      })),
+    };
+  }
+
+  /**
+   * Get FHIR Observation resources for growth measurements from encounter vitals.
+   * Maps weight, height, head circumference, and BMI to FHIR R4 Observation resources
+   * with appropriate LOINC codes.
+   */
+  async getGrowthObservations(
+    tenantId: string,
+    patientId: string,
+  ): Promise<FhirBundle> {
+    this.logger.log(`FHIR growth Observations for patient: ${patientId} (tenant: ${tenantId})`);
+
+    const encounters = await this.encounterRepository.find({
+      where: { patientId, tenantId },
+      order: { startTime: 'ASC' },
+    });
+
+    const observations: FhirResource[] = [];
+
+    const loincCodes: Record<string, { code: string; display: string; unit: string }> = {
+      weight: { code: '29463-7', display: 'Body Weight', unit: 'kg' },
+      height: { code: '8302-2', display: 'Body Height', unit: 'cm' },
+      headCircumference: { code: '9843-4', display: 'Head Occipital-frontal Circumference', unit: 'cm' },
+      bmi: { code: '39156-5', display: 'Body Mass Index', unit: 'kg/m2' },
+    };
+
+    for (const enc of encounters) {
+      if (!enc.vitals) continue;
+      const v = enc.vitals;
+      const effectiveDate = v.recordedDate || enc.startTime?.toISOString() || enc.createdAt?.toISOString();
+
+      for (const [field, loinc] of Object.entries(loincCodes)) {
+        const rawValue = (v as any)[field];
+        if (!rawValue) continue;
+        const value = parseFloat(rawValue);
+        if (isNaN(value) || value <= 0) continue;
+
+        observations.push({
+          resourceType: 'Observation',
+          id: `${enc.id}-${field}`,
+          meta: {
+            lastUpdated: enc.updatedAt?.toISOString() || new Date().toISOString(),
+            profile: ['http://hl7.org/fhir/StructureDefinition/vitalsigns'],
+          },
+          status: 'final',
+          category: [{
+            coding: [{
+              system: 'http://terminology.hl7.org/CodeSystem/observation-category',
+              code: 'vital-signs',
+              display: 'Vital Signs',
+            }],
+          }],
+          code: {
+            coding: [{
+              system: 'http://loinc.org',
+              code: loinc.code,
+              display: loinc.display,
+            }],
+            text: loinc.display,
+          },
+          subject: { reference: `Patient/${patientId}` },
+          encounter: { reference: `Encounter/${enc.id}` },
+          effectiveDateTime: effectiveDate,
+          valueQuantity: {
+            value: value,
+            unit: loinc.unit,
+            system: 'http://unitsofmeasure.org',
+            code: loinc.unit,
+          },
+        });
+      }
+    }
+
+    return {
+      resourceType: 'Bundle',
+      id: `growth-observations-${patientId}`,
+      type: 'searchset',
+      total: observations.length,
+      link: [],
+      entry: observations.map((obs) => ({
+        fullUrl: `${this.fhirBaseUrl}/Observation/${obs.id}`,
+        resource: obs,
+      })),
     };
   }
 }

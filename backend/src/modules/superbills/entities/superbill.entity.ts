@@ -167,6 +167,69 @@ export class Superbill {
   @Column({ type: 'boolean', default: false })
   isOtherAccident: boolean;
 
+  // ── CMS-1500 additional fields ──────────────────────────────────────────
+  @Column({ type: 'varchar', length: 1, nullable: true })
+  patientSex: string; // M | F
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  insuranceProgram: string; // medicare | medicaid | tricare | champva | group_health_plan | feca | blk_lung | other
+
+  @Column({ type: 'varchar', length: 1, nullable: true })
+  insuredSex: string; // M | F
+
+  @Column({ type: 'date', nullable: true })
+  insuredDOB: Date;
+
+  @Column({ type: 'jsonb', nullable: true })
+  insuredAddress: {
+    street: string;
+    city: string;
+    state: string;
+    zipCode: string;
+  } | null;
+
+  @Column({ type: 'date', nullable: true })
+  dateOfIllness: Date; // Field 14 — date of current illness/injury/pregnancy
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  referringProviderName: string; // Field 17
+
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  referringProviderNPI: string; // Field 17b
+
+  @Column({ type: 'boolean', nullable: true })
+  outsideLab: boolean; // Field 20
+
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  outsideLabCharges: number; // Field 20
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  resubmissionCode: string; // Field 22
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  originalRefNo: string; // Field 22
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  priorAuthNumber: string; // Field 23
+
+  @Column({ type: 'boolean', default: true })
+  acceptAssignment: boolean; // Field 27 — YES by default
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  patientAccountNo: string; // Field 26
+
+  @Column({ type: 'varchar', length: 15, nullable: true })
+  renderingProviderId: string; // Field 24J
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  physicianSignature: string; // Field 31 — typed name
+
+  @Column({ type: 'date', nullable: true })
+  physicianSignatureDate: Date; // Field 31
+
+  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  amountPaid: number; // Field 29 — amount paid by patient
+
   @Column('decimal', { precision: 10, scale: 2, nullable: true })
   balance: number;
 

@@ -15,6 +15,7 @@ import { PatientsModule } from './modules/patients/patients.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { ClinicalModule } from './modules/clinical/clinical.module';
 import { PrescriptionsModule } from './modules/prescriptions/prescriptions.module';
+import { CarePlansModule } from './modules/care-plans/care-plans.module';
 import { LaboratoryModule } from './modules/laboratory/laboratory.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { RemittanceModule } from './modules/remittance/remittance.module';
@@ -31,6 +32,9 @@ import { SuperbillsModule } from './modules/superbills/superbills.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { IcdModule } from './modules/icd/icd.module';
 import { CptModule } from './modules/cpt/cpt.module';
+import { CodesModule } from './modules/codes/codes.module';
+import { ImmunizationsModule } from './modules/immunizations/immunizations.module';
+import { GrowthModule } from './modules/growth/growth.module';
 import { EligibilityModule } from './modules/eligibility/eligibility.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MedicationsModule } from './modules/medications/medications.module';
@@ -42,6 +46,9 @@ import { TrialsModule } from './modules/trials/trials.module';
 import { EpcsModule } from './modules/epcs/epcs.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
+import { RiskManagementModule } from './modules/risk-management/risk-management.module';
+import { QualityMeasuresModule } from './modules/quality-measures/quality-measures.module';
+import { NsaModule } from './modules/nsa/nsa.module';
 import { CommonModule } from './common/common.module';
 import { RedisModule, REDIS_CLIENT } from './common/redis/redis.module';
 import { EncryptionService } from './common/services/encryption.service';
@@ -250,6 +257,7 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     AppointmentsModule,
     ClinicalModule,
     PrescriptionsModule,
+    CarePlansModule,
     LaboratoryModule,
     BillingModule,
     RemittanceModule,
@@ -266,6 +274,9 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     WorkflowModule,
     IcdModule,
     CptModule,
+    CodesModule,
+    ImmunizationsModule,
+    GrowthModule,
     EligibilityModule,
     IntegrationsModule,
     MedicationsModule,
@@ -277,6 +288,9 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     EpcsModule,
     HealthModule,
     AuditLogsModule,
+    RiskManagementModule,
+    QualityMeasuresModule,
+    NsaModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules

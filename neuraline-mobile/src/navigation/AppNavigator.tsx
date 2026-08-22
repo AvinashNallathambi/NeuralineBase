@@ -87,7 +87,7 @@ export const AppNavigator: React.FC = () => {
         {isAuthenticated ? (
           <RootStack.Screen name="StaffApp" component={StaffNavigator} />
         ) : (
-          <RootStack.Screen name="Login" component={AuthNavigator} />
+          <RootStack.Screen name="Auth" component={AuthNavigator} />
         )}
       </RootStack.Navigator>
     </NavigationContainer>

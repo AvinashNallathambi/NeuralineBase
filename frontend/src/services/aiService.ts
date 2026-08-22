@@ -103,6 +103,78 @@ export interface ParsePrescriptionResponse {
   notes?: string;
 }
 
+// ── Care Plan AI ──
+
+export interface GenerateCarePlanRequest {
+  patientName: string;
+  patientAge?: number;
+  patientSex?: string;
+  conditions: Array<{ condition: string; code?: string; codeSystem?: string; icd10Code?: string }>;
+  currentMedications: Array<{ name: string; dosage?: string }>;
+  recentLabs?: Array<{ test: string; value: string; unit?: string; date?: string }>;
+  vitals?: Array<{ metric: string; value: string; date?: string }>;
+  allergies?: string[];
+  providerName?: string;
+}
+
+export interface AICarePlanResponse {
+  title: string;
+  description: string;
+  category: string;
+  addresses: Array<{ condition: string; code?: string; codeSystem?: string; icd10Code?: string; description: string; severity?: string }>;
+  goals: Array<{
+    description: string;
+    targetValue?: string;
+    targetUnit?: string;
+    metricName?: string;
+    targetDirection?: string;
+    priority?: string;
+    targetDate?: string;
+  }>;
+  tasks: Array<{
+    title: string;
+    description?: string;
+    taskType: string;
+    assignedTo: string;
+    frequency: string;
+    priority?: string;
+    metricName?: string;
+    targetValue?: string;
+    targetUnit?: string;
+  }>;
+  patientEducation: Array<{ title: string; content: string }>;
+  careTeam: Array<{ role: string; description?: string }>;
+}
+
+export interface SuggestMonitoringTasksRequest {
+  conditions: Array<{ condition: string; code?: string; codeSystem?: string; icd10Code?: string }>;
+  currentMedications: Array<{ name: string; dosage?: string }>;
+  recentLabs?: Array<{ test: string; value: string; unit?: string }>;
+}
+
+export interface RiskStratificationRequest {
+  patientName: string;
+  patientAge?: number;
+  patientSex?: string;
+  conditions: Array<{ condition: string; code?: string; codeSystem?: string; icd10Code?: string }>;
+  currentMedications: Array<{ name: string }>;
+  recentLabs?: Array<{ test: string; value: string; unit?: string }>;
+  vitals?: Array<{ metric: string; value: string }>;
+  hospitalizationsLastYear?: number;
+  edVisitsLastYear?: number;
+}
+
+export interface CareGapDetectionRequest {
+  patientAge?: number;
+  patientSex?: string;
+  conditions: Array<{ condition: string; code?: string; codeSystem?: string; icd10Code?: string }>;
+  currentMedications: Array<{ name: string }>;
+  recentLabs?: Array<{ test: string; value: string; date?: string }>;
+  lastImaging?: Array<{ type: string; date?: string }>;
+  immunizations?: Array<{ name: string; date?: string }>;
+  lastAppointmentDate?: string;
+}
+
 export const aiService = {
   generateSoap: (data: GenerateSoapRequest) =>
     api.post<SoapNoteResponse>('/ai/generate-soap', data),
@@ -120,6 +192,19 @@ export const aiService = {
     api.post<ParsePrescriptionResponse>('/ai/parse-prescription', data),
 
   health: () => api.get<{ status: string; model: string; available: boolean }>('/ai/health'),
+
+  // Care Plan AI
+  generateCarePlan: (data: GenerateCarePlanRequest) =>
+    api.post<AICarePlanResponse>('/ai/generate-care-plan', data),
+
+  suggestMonitoringTasks: (data: SuggestMonitoringTasksRequest) =>
+    api.post<any>('/ai/suggest-monitoring-tasks', data),
+
+  riskStratification: (data: RiskStratificationRequest) =>
+    api.post<any>('/ai/risk-stratification', data),
+
+  careGapDetection: (data: CareGapDetectionRequest) =>
+    api.post<any>('/ai/care-gap-detection', data),
 };
 
 export default aiService;

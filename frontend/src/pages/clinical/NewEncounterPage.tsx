@@ -151,7 +151,7 @@ const NewEncounterPage: React.FC = () => {
           setAllergies(
             p.allergies.map((a: any) => ({
               allergen: a.allergen || a.name || '',
-              reaction: a.reaction || '',
+              reaction: a.reaction || 'Not specified',
               severity: a.severity || 'mild',
               type: a.type || 'drug',
             })),
@@ -187,7 +187,7 @@ const NewEncounterPage: React.FC = () => {
       setAllergies(
         p.allergies.map((a: any) => ({
           allergen: a.allergen || a.name || '',
-          reaction: a.reaction || '',
+          reaction: a.reaction || 'Not specified',
           severity: a.severity || 'mild',
           type: a.type || 'drug',
         })),
@@ -282,7 +282,7 @@ const NewEncounterPage: React.FC = () => {
     }
     setAllergies([
       ...allergies,
-      { allergen: allergenName.trim(), reaction: allergenReaction, severity: allergenSeverity, type: allergenType },
+      { allergen: allergenName.trim(), reaction: allergenReaction.trim() || 'Not specified', severity: allergenSeverity, type: allergenType },
     ]);
     setAllergenName('');
     setAllergenReaction('');
@@ -473,7 +473,12 @@ const NewEncounterPage: React.FC = () => {
         recallReminder: values.recallReminder || undefined,
         referrals: referrals.map((r) => ({ ...r })),
       },
-      allergies,
+      allergies: allergies.map((a) => ({
+        ...a,
+        reaction: a.reaction?.trim() || 'Not specified',
+        allergen: a.allergen?.trim() || 'Unknown',
+        severity: a.severity || 'mild',
+      })),
       orders: {
         labs: labs.map((l) => ({
           name: l.name,

@@ -46,6 +46,13 @@ class SuperbillService {
     const response = await api.post(`${this.baseUrl}/${id}/calculate`, {});
     return response.data;
   }
+
+  async downloadCms1500(id: string): Promise<Blob> {
+    const response = await api.get(`${this.baseUrl}/${id}/cms1500`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  }
 }
 
 export const superbillService = new SuperbillService();

@@ -159,7 +159,7 @@ class DiagnosisDto {
   @IsNotEmpty()
   code!: string;
 
-  @ApiPropertyOptional({ enum: ['ICD-10-CM', 'SNOMED CT', 'ICD-11'], default: 'ICD-10-CM' })
+  @ApiPropertyOptional({ enum: ['ICD-10-CM', 'ICD-9-CM', 'SNOMED CT', 'ICD-11'], default: 'ICD-10-CM' })
   @IsString()
   @IsOptional()
   codeSystem?: string;

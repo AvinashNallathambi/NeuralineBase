@@ -13,13 +13,29 @@
  * - Notes
  * - Create or update (if editing existing appointment)
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ScrollView,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  View,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Pressable as RNPressable,
+  Keyboard,
+  Modal,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withSpring,
+  Easing,
+  FadeInDown,
+  FadeOutUp,
+} from 'react-native-reanimated';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -35,13 +51,15 @@ import { Input, InputField } from '@/components/ui/input';
 import { Button, ButtonText } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
+import { CustomSpinner } from '../../components/CustomSpinner';
 import { Badge, BadgeText } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectItemText } from '@/components/ui/select';
 import { Pressable } from '@/components/ui/pressable';
 import { Divider } from '@/components/ui/divider';
 
-import { DatePickerModal } from 'react-native-paper-dates';
+import { Calendar } from 'react-native-calendars';
+import type { DateData } from 'react-native-calendars';
 
 import {
   APPOINTMENT_TYPES,
@@ -69,9 +87,13 @@ export const CreateAppointmentScreen: React.FC = () => {
 
   // Form state
   const [patientSearch, setPatientSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState('');
   const [selectedProviderName, setSelectedProviderName] = useState('');
+  const [providerSearch, setProviderSearch] = useState('');
+  const [isProviderDropdownOpen, setIsProviderDropdownOpen] = useState(false);
   const [appointmentType, setAppointmentType] = useState<AppointmentType>('consultation');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
@@ -82,6 +104,18 @@ export const CreateAppointmentScreen: React.FC = () => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Debounce patient search (500ms) to avoid rapid REST API calls on every keystroke
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(patientSearch);
+    }, 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [patientSearch]);
 
   // If editing, load existing appointment
   const { data: existingAppointment } = useQuery({
@@ -108,18 +142,18 @@ export const CreateAppointmentScreen: React.FC = () => {
     }
   }, [existingAppointment]);
 
-  // Patient search
+  // Patient search (uses debounced value to avoid rapid REST calls)
   const { data: patientResults } = useQuery({
-    queryKey: ['patients', 'search', patientSearch],
+    queryKey: ['patients', 'search', debouncedSearch],
     queryFn: () =>
       patientsApi.list({
-        search: patientSearch || undefined,
+        search: debouncedSearch || undefined,
         page: 1,
         limit: 10,
         sortBy: 'lastName',
         sortOrder: 'ASC',
       }),
-    enabled: patientSearch.length > 1,
+    enabled: debouncedSearch.length > 1,
   });
 
   // Fetch available slots when provider + date are selected
@@ -140,13 +174,33 @@ export const CreateAppointmentScreen: React.FC = () => {
     enabled: !!selectedProviderId && !!selectedDate && !isEditing,
   });
 
-  // Fetch providers (staff users) - using the backend users endpoint
+  // Fetch providers from /users endpoint and filter by role.
+  // We use /users (not /providers) because availability records are keyed
+  // by the User entity UUID, and /providers returns hardcoded IDs (usr-001)
+  // that don't match. Filtering by role='doctor' or 'super_admin' gives us
+  // the correct UUIDs that work with the slots API.
   const { data: providers } = useQuery({
-    queryKey: ['providers'],
+    queryKey: ['providers', 'users'],
     queryFn: async () => {
-      const res = await http.get('/users', { params: { role: 'doctor' } });
-      return res.data?.data || res.data || [];
+      const res = await http.get('/users');
+      const all = res.data?.data || res.data || [];
+      return all.filter(
+        (u: any) => u.role === 'doctor' || u.role === 'super_admin',
+      );
     },
+  });
+
+  // Pre-load recent patients so the list isn't empty before searching
+  const { data: recentPatients } = useQuery({
+    queryKey: ['patients', 'recent'],
+    queryFn: () =>
+      patientsApi.list({
+        page: 1,
+        limit: 10,
+        sortBy: 'createdAt',
+        sortOrder: 'DESC',
+      }),
+    enabled: !isEditing,
   });
 
   // Create/update mutation
@@ -240,7 +294,7 @@ export const CreateAppointmentScreen: React.FC = () => {
 
           {/* Patient selection (skip if editing) */}
           {!isEditing && (
-            <Card className="rounded-xl p-4" size="default">
+            <Card className="rounded-xl p-4" size="default" style={{ elevation: 50, zIndex: 50 }}>
               <VStack space="sm">
                 <Text size="sm" className="text-foreground font-medium">Patient *</Text>
                 {selectedPatient ? (
@@ -253,96 +307,185 @@ export const CreateAppointmentScreen: React.FC = () => {
                         MRN: {selectedPatient.mrn}
                       </Text>
                     </VStack>
-                    <Pressable onPress={() => { setSelectedPatient(null); setPatientSearch(''); }}>
+                    <Pressable onPress={() => { setSelectedPatient(null); setPatientSearch(''); setDebouncedSearch(''); setIsPatientDropdownOpen(false); }}>
                       <Text className="text-destructive">Change</Text>
                     </Pressable>
                   </HStack>
                 ) : (
-                  <VStack space="sm">
+                  <View>
                     <Input className="rounded-lg" variant="outline">
                       <InputField
                         placeholder="Search patient by name or MRN..."
                         value={patientSearch}
-                        onChangeText={setPatientSearch}
+                        onChangeText={(text) => {
+                          setPatientSearch(text);
+                          if (!isPatientDropdownOpen) setIsPatientDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsPatientDropdownOpen(true)}
                         autoCapitalize="none"
                       />
                     </Input>
-                    {patientSearch.length > 1 && patientResults?.data && (
-                      <VStack space="xs">
-                        {patientResults.data.slice(0, 5).map((p: Patient) => (
-                          <Pressable
-                            key={p.id}
-                            onPress={() => { setSelectedPatient(p); setPatientSearch(''); }}
-                            className="px-3 py-2 rounded-lg bg-muted/30"
-                          >
-                            <Text className="text-foreground">
-                              {p.firstName} {p.lastName}
+
+                    {/* Animated autocomplete dropdown — floats over content below */}
+                    {isPatientDropdownOpen && (
+                      <Animated.View
+                        entering={FadeInDown.duration(200).springify().damping(15).stiffness(200)}
+                        exiting={FadeOutUp.duration(150)}
+                        style={styles.dropdown}
+                      >
+                        {debouncedSearch.length > 1 && patientResults?.data ? (
+                          <FlatList
+                            data={patientResults.data.slice(0, 10)}
+                            keyExtractor={(item) => item.id}
+                            scrollEnabled={true}
+                            nestedScrollEnabled={true}
+                            ListEmptyComponent={
+                              <Text size="sm" className="text-muted-foreground px-3 py-2">
+                                No patients found
+                              </Text>
+                            }
+                            renderItem={({ item: p }) => (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setSelectedPatient(p);
+                                  setPatientSearch('');
+                                  setDebouncedSearch('');
+                                  setIsPatientDropdownOpen(false);
+                                  Keyboard.dismiss();
+                                }}
+                                style={styles.dropdownItem}
+                                activeOpacity={0.6}
+                              >
+                                <Text className="text-foreground" size="sm">
+                                  {p.firstName} {p.lastName}
+                                </Text>
+                                <Text size="xs" className="text-muted-foreground">
+                                  MRN: {p.mrn} · DOB: {new Date(p.dateOfBirth).toLocaleDateString()}
+                                </Text>
+                              </TouchableOpacity>
+                            )}
+                          />
+                        ) : patientSearch.length <= 1 && recentPatients?.data ? (
+                          <ScrollView style={styles.dropdownScroll} nestedScrollEnabled={true}>
+                            <Text size="xs" className="text-muted-foreground font-medium px-3 pt-2 pb-1">
+                              Recent Patients
                             </Text>
-                            <Text size="xs" className="text-muted-foreground">
-                              MRN: {p.mrn} · DOB: {new Date(p.dateOfBirth).toLocaleDateString()}
-                            </Text>
-                          </Pressable>
-                        ))}
-                        {patientResults.data.length === 0 && (
-                          <Text size="sm" className="text-muted-foreground">No patients found</Text>
-                        )}
-                      </VStack>
+                            {recentPatients.data.slice(0, 10).map((p: Patient) => (
+                              <TouchableOpacity
+                                key={p.id}
+                                onPress={() => {
+                                  setSelectedPatient(p);
+                                  setIsPatientDropdownOpen(false);
+                                  Keyboard.dismiss();
+                                }}
+                                style={styles.dropdownItem}
+                                activeOpacity={0.6}
+                              >
+                                <Text className="text-foreground" size="sm">
+                                  {p.firstName} {p.lastName}
+                                </Text>
+                                <Text size="xs" className="text-muted-foreground">
+                                  MRN: {p.mrn} · DOB: {new Date(p.dateOfBirth).toLocaleDateString()}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
+                        ) : null}
+                      </Animated.View>
                     )}
-                  </VStack>
+                  </View>
                 )}
               </VStack>
             </Card>
           )}
 
-          {/* Provider selection */}
-          <Card className="rounded-xl p-4" size="default">
+          {/* Provider selection — searchable dropdown by name */}
+          <Card className="rounded-xl p-4" size="default" style={{ elevation: 40, zIndex: 40 }}>
             <VStack space="sm">
               <Text size="sm" className="text-foreground font-medium">Provider *</Text>
-              {providers && Array.isArray(providers) && providers.length > 0 ? (
-                <VStack space="xs">
-                  {providers.map((prov: any) => (
-                    <Pressable
-                      key={prov.id}
-                      onPress={() => {
-                        setSelectedProviderId(prov.id);
-                        setSelectedProviderName(`${prov.firstName} ${prov.lastName}`);
-                        setSelectedSlot(null);
-                      }}
-                      className={`px-3 py-2.5 rounded-lg border ${
-                        selectedProviderId === prov.id
-                          ? 'border-primary bg-primary/10'
-                          : 'border-border bg-transparent'
-                      }`}
-                    >
-                      <Text
-                        className={
-                          selectedProviderId === prov.id
-                            ? 'text-primary font-medium'
-                            : 'text-foreground'
-                        }
-                      >
-                        {prov.firstName} {prov.lastName}
+              {selectedProviderId ? (
+                <HStack className="items-center justify-between">
+                  <VStack space="xs">
+                    <Text className="text-foreground">
+                      {selectedProviderName}
+                    </Text>
+                    {providers?.find((p: any) => p.id === selectedProviderId)?.department && (
+                      <Text size="xs" className="text-muted-foreground">
+                        {providers.find((p: any) => p.id === selectedProviderId).department}
                       </Text>
-                      {prov.specialization && (
-                        <Text size="xs" className="text-muted-foreground">
-                          {prov.specialization}
+                    )}
+                  </VStack>
+                  <Pressable onPress={() => { setSelectedProviderId(''); setSelectedProviderName(''); setProviderSearch(''); setSelectedSlot(null); setIsProviderDropdownOpen(false); }}>
+                    <Text className="text-destructive">Change</Text>
+                  </Pressable>
+                </HStack>
+              ) : (
+                <View>
+                  <Input className="rounded-lg" variant="outline">
+                    <InputField
+                      placeholder="Search provider by name..."
+                      value={providerSearch}
+                      onChangeText={setProviderSearch}
+                      onFocus={() => setIsProviderDropdownOpen(true)}
+                      autoCapitalize="none"
+                    />
+                  </Input>
+
+                  {/* Animated provider dropdown */}
+                  {isProviderDropdownOpen && (
+                    <Animated.View
+                      entering={FadeInDown.duration(200).springify().damping(15).stiffness(200)}
+                      exiting={FadeOutUp.duration(150)}
+                      style={styles.dropdown}
+                    >
+                      {providers && providers.length > 0 ? (
+                        <FlatList
+                          data={providers.filter((prov: any) => {
+                            if (!providerSearch) return true;
+                            const fullName = `${prov.firstName} ${prov.lastName}`.toLowerCase();
+                            return fullName.includes(providerSearch.toLowerCase());
+                          })}
+                          keyExtractor={(item) => item.id}
+                          scrollEnabled={true}
+                          nestedScrollEnabled={true}
+                          ListEmptyComponent={
+                            <Text size="sm" className="text-muted-foreground px-3 py-2">
+                              No providers found
+                            </Text>
+                          }
+                          renderItem={({ item: prov }) => (
+                            <TouchableOpacity
+                              onPress={() => {
+                                setSelectedProviderId(prov.id);
+                                setSelectedProviderName(`${prov.firstName} ${prov.lastName}`);
+                                setProviderSearch('');
+                                setIsProviderDropdownOpen(false);
+                                setSelectedSlot(null);
+                                Keyboard.dismiss();
+                              }}
+                              style={styles.dropdownItem}
+                              activeOpacity={0.6}
+                            >
+                              <Text className="text-foreground" size="sm">
+                                {prov.firstName} {prov.lastName}
+                              </Text>
+                              {prov.department && (
+                                <Text size="xs" className="text-muted-foreground">
+                                  {prov.department}
+                                  {prov.role === 'super_admin' ? ' · Provider' : ''}
+                                </Text>
+                              )}
+                            </TouchableOpacity>
+                          )}
+                        />
+                      ) : (
+                        <Text size="sm" className="text-muted-foreground px-3 py-2">
+                          Loading providers...
                         </Text>
                       )}
-                    </Pressable>
-                  ))}
-                </VStack>
-              ) : (
-                <Input className="rounded-lg" variant="outline">
-                  <InputField
-                    placeholder="Enter provider ID"
-                    value={selectedProviderId}
-                    onChangeText={(text) => {
-                      setSelectedProviderId(text);
-                      setSelectedSlot(null);
-                    }}
-                    autoCapitalize="none"
-                  />
-                </Input>
+                    </Animated.View>
+                  )}
+                </View>
               )}
             </VStack>
           </Card>
@@ -405,7 +548,7 @@ export const CreateAppointmentScreen: React.FC = () => {
               <VStack space="sm">
                 <HStack className="justify-between items-center">
                   <Text size="sm" className="text-foreground font-medium">Available Time Slots</Text>
-                  {slotsLoading && <Spinner size="small" color="$primary" />}
+                  {slotsLoading && <CustomSpinner size={20} />}
                 </HStack>
 
                 {!slotsLoading && availableSlots && availableSlots.length > 0 ? (
@@ -535,7 +678,7 @@ export const CreateAppointmentScreen: React.FC = () => {
             className="rounded-lg"
             size="lg"
           >
-            {saving ? <Spinner size="small" color="$white" /> : (
+            {saving ? <CustomSpinner size={20} color="#ffffff" /> : (
               <ButtonText>{isEditing ? 'Update Appointment' : 'Create Appointment'}</ButtonText>
             )}
           </Button>
@@ -543,17 +686,88 @@ export const CreateAppointmentScreen: React.FC = () => {
       </ScrollView>
 
       {/* Date Picker Modal */}
-      <DatePickerModal
-        locale="en"
-        mode="single"
+      <Modal
         visible={showDatePicker}
-        onDismiss={() => setShowDatePicker(false)}
-        date={selectedDate}
-        onConfirm={onDateConfirm}
-        validRange={{
-          startDate: new Date(),
-        }}
-      />
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <Box className="flex-1 justify-center items-center bg-black/50 p-6">
+          <Box className="bg-background rounded-2xl p-4 w-full">
+            <HStack className="justify-between items-center mb-3">
+              <Heading size="md" className="text-foreground">Select Date</Heading>
+              <Pressable onPress={() => setShowDatePicker(false)}>
+                <Text className="text-primary font-medium">Close</Text>
+              </Pressable>
+            </HStack>
+            <Calendar
+              current={toDateString(selectedDate)}
+              onDayPress={(day: DateData) => {
+                const date = new Date(day.year, day.month - 1, day.day);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (date >= today) {
+                  onDateConfirm({ date });
+                  setShowDatePicker(false);
+                }
+              }}
+              minDate={toDateString(new Date())}
+              markedDates={{
+                [toDateString(selectedDate)]: { selected: true, selectedColor: '#0D7C8A' },
+              }}
+              theme={{
+                todayTextColor: '#0D7C8A',
+                selectedDayBackgroundColor: '#0D7C8A',
+                selectedDayTextColor: '#ffffff',
+                arrowColor: '#0D7C8A',
+                monthTextColor: '#1a2b3c',
+                calendarBackground: '#ffffff',
+              }}
+            />
+          </Box>
+        </Box>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
+
+const styles = StyleSheet.create({
+  backdrop: {
+    position: 'absolute',
+    top: -10000,
+    left: -10000,
+    right: -10000,
+    bottom: -10000,
+    zIndex: 998,
+    elevation: 998,
+    backgroundColor: 'transparent',
+  },
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    elevation: 999,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    marginTop: 2,
+    maxHeight: 350,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    borderWidth: 1,
+    borderColor: '#f0f0f0',
+  },
+  dropdownScroll: {
+    maxHeight: 350,
+  },
+  dropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#f5f5f5',
+  },
+});

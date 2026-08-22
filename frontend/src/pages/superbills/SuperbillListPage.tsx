@@ -19,9 +19,11 @@ import {
   EditOutlined,
   DeleteOutlined,
   FileTextOutlined,
+  DownloadOutlined,
 } from "@ant-design/icons";
 import { useNavigate } from "react-router-dom";
 import { useSuperbillStore } from "../../store/dataStore";
+import { superbillService } from "../../services/superbillService";
 import { Superbill } from "../../types";
 import dayjs from "dayjs";
 
@@ -76,6 +78,26 @@ const SuperbillListPage: React.FC = () => {
         }
       },
     });
+  };
+
+  const handleDownloadCms1500 = async (record: Superbill) => {
+    try {
+      const blob = await superbillService.downloadCms1500(record.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `claim_${record.patientName?.replace(/[^a-zA-Z0-9]/g, "") || record.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      message.success("CMS-1500 downloaded");
+    } catch (error: any) {
+      message.error(
+        "Failed to download: " +
+          (error?.response?.data?.message || error?.message || "Unknown error"),
+      );
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -156,6 +178,12 @@ const SuperbillListPage: React.FC = () => {
             type="text"
             icon={<EyeOutlined />}
             onClick={() => navigate(`/superbills/${record.id}`)}
+          />
+          <Button
+            type="text"
+            icon={<DownloadOutlined />}
+            onClick={() => handleDownloadCms1500(record)}
+            title="Download CMS-1500"
           />
           <Button
             type="text"

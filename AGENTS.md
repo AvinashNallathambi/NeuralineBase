@@ -58,9 +58,262 @@ npx typeorm migration:revert -d src/config/database.config.ts
 - Never commit `.env` with `DB_SYNCHRONIZE=true`
 
 ## Backend Modules
-- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications, Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions
+- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, CarePlans, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications (drug DB + PatientMedications), Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions, Immunizations, Growth, RiskManagement, QualityMeasures
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Telemedicine, Users
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
+
+## Quality Measures Module
+The `QualityMeasuresModule` (`backend/src/modules/quality-measures/`) provides formal clinical quality measure tracking with deterministic calculation, AI-powered gap closure recommendations, and persistent results:
+
+### Entities
+- **QualityMeasureResult** (`quality_measure_results` table) — one row per patient × measure × reporting period, stores status (met/not_met/overdue/not_applicable), last value, target, explanation, recommendation, data elements, cross-program mappings
+
+### Measure Registry
+- `measure-registry.ts` — 12 seeded eCQM/MIPS/HEDIS measure definitions covering diabetes care (HbA1c, eye exam, nephropathy), hypertension control, statin therapy, cancer screening (colorectal, breast, cervical), immunizations (influenza, pneumococcal), depression screening, and tobacco screening
+- Each measure has: qualifying ICD-10 codes, required lab LOINC codes, frequency, target value, cross-program mappings, priority, and closeable-in-visit flag
+- `getApplicableMeasures()` filters measures by patient age, sex, and active diagnoses
+
+### Calculation Engine
+- `QualityMeasuresService.calculateMeasure()` — deterministic logic per measure that evaluates labs, vitals, medications, immunizations, encounter SOAP notes, and social history
+- Extracts data elements driving each result for explainability (source, field, value, date)
+- Generates human-readable explanations for each measure status
+- Checks reporting period compliance (annual, 27-month mammography, 3/5-year cervical, flu season)
+
+### AI Integration
+- `generateAiRecommendations()` — sends open gaps to AI for prioritized action recommendations and visit-readiness assessment
+- `generateAiInsights()` — practice-level AI summary of quality performance and improvement opportunities
+
+### API Endpoints (all under `/api/v1/quality-measures`)
+- `GET /patients/:patientId` — Full quality profile with all applicable measures, summary, and AI recommendations
+- `GET /dashboard` — Practice-level dashboard with per-measure compliance rates, top gaps, and AI insights
+- `GET /registry` — All measure definitions in the registry
+
+### Frontend
+- `qualityMeasuresService.ts` — API service with TypeScript types
+- `QualityMeasuresTab.tsx` — Patient-level tab with compliance summary, AI recommendations, and expandable measures table
+- `QualityMeasuresDashboardPage.tsx` — Practice-level dashboard page at `/quality-measures`
+- Sidebar navigation: "Quality Measures" under Reports
+- Patient detail page: "Quality Measures" tab (next to Risk Management)
+
+### Migration
+- `CreateQualityMeasureResults1789300000000` — creates `quality_measure_results` table with indexes and FK to patients
+
+## NSA (No Surprises Act) Module
+The `NsaModule` (`backend/src/modules/nsa/`) provides full No Surprises Act compliance with AI-powered features across GFE generation, delivery tracking, variance detection, and IDR dispute resolution:
+
+### Entities
+- **GoodFaithEstimate** (`good_faith_estimates` table) — persisted GFE with version history, delivery tracking, acknowledgment, variance status, AI accuracy scores, patient-friendly explanation, diagnosis predictions, and reconciliation data
+- **NsaVarianceRecord** (`nsa_variance_records` table) — tracks variance between GFE estimate and final billed amount; flags $400+ threshold for dispute
+- **NsaIdrCase** (`nsa_idr_cases` table) — Independent Dispute Resolution case with jurisdiction routing, eligibility scoring, open negotiation offers, win probability, patient acuity letter, and support documents
+- **NsaIdrDeadline** (`nsa_idr_deadlines` table) — tracks IDR deadlines (30-business-day open negotiation, 4-business-day IDR initiation, 10-business-day submission)
+
+### GFE Types
+- `insured_oon` — Out-of-network insured patient (NSA balance billing protections)
+- `self_pay` — Self-pay patient (full charge as patient estimate)
+- `uninsured` — Uninsured patient (full charge as patient estimate)
+
+### GFE Status Workflow
+`draft` → `delivered` → `acknowledged` | `disputed` | `expired` | `superseded`
+
+### Delivery Tracking
+- **Methods**: portal, email, mail, in_person, verbal_witness
+- **3-business-day deadline**: auto-calculated excluding weekends and all 11 US federal holidays
+- **On-time compliance**: automatically checked when GFE is marked delivered
+- **Version history**: superseded GFEs are preserved; new versions increment version number
+
+### $400 Variance Detection
+- Compares final billed amount to GFE total charge
+- Flags variance ≥ $400 (NSA threshold) for dispute
+- Per-item variance tracking by CPT code
+- Auto-updates GFE status to `disputed` when threshold exceeded
+
+### AI Features (P1 — Differentiators)
+- **Estimate Accuracy Predictor** (`POST /nsa/gfe/:id/predict-accuracy`) — predicts how accurate the GFE is likely to be vs final bill; flags high-risk estimates before delivery; uses historical reconciliation data
+- **GFE-to-Claim Reconciliation Loop** (`POST /nsa/gfe/:id/reconcile`) — compares GFE to actual ERA/claim amounts; generates per-item variance, insights, and rate corrections for future estimates
+- **Patient-Friendly GFE Explainer** (`POST /nsa/gfe/:id/patient-explanation`) — generates plain-language (6th-grade reading level) explanation of GFE for patient portal; explains $400 dispute right
+- **Diagnosis-Code Completion** (`POST /nsa/gfe/:id/predict-diagnosis`) — predicts likely ICD-10 codes from patient history + chief complaint for pre-encounter GFEs
+
+### AI Features (P2 — IDR Dispute Resolution)
+- **IDR Eligibility Engine** (`POST /nsa/idr/:id/assess-eligibility`) — scores claim eligibility for IDR; determines federal vs state jurisdiction; estimates expected recovery
+- **Open Negotiation Offer Generator** (`POST /nsa/idr/:id/generate-offer`) — generates data-backed offer using QPA, median in-network rates, and case complexity
+- **State/Federal Jurisdiction Router** (`POST /nsa/idr/:id/route-jurisdiction`) — routes to federal NSA or state-specific law (CA AB 72, NY, TX SB 1264, NJ OON Act) based on patient state, payer type, and service
+- **Patient Acuity Letter** (`POST /nsa/idr/:id/acuity-letter`) — auto-generates clinical justification letter from encounter notes for IDR submission
+
+### AI Features (P3 — Win Probability)
+- **IDR Win-Probability Model** (`POST /nsa/idr/:id/win-probability`) — predicts win probability using historical outcomes, payer behavior, case strength; recommends optimal final offer
+- **Deadline Tracking** (`GET /nsa/deadlines`) — auto-updates deadline statuses (upcoming → due_soon → overdue); supports marking deadlines as met
+
+### API Endpoints (all under `/api/v1/nsa`)
+- `POST /gfe` — Create GFE manually
+- `POST /gfe/generate-from-superbill` — Generate GFE from superbill via AI and persist
+- `GET /gfe` — List GFEs (filter by patientId or status)
+- `GET /gfe/:id` — Get single GFE
+- `PATCH /gfe/:id` — Update GFE
+- `POST /gfe/:id/new-version` — Create new version (supersedes original)
+- `POST /gfe/:id/deliver` — Mark delivered (checks on-time compliance)
+- `POST /gfe/:id/acknowledge` — Record patient acknowledgment
+- `POST /gfe/:id/variance` — Detect $400 variance
+- `GET /variance` — List variance records
+- `POST /variance/:id/resolve` — Resolve variance record
+- `GET /dashboard` — NSA compliance dashboard metrics
+- `POST /gfe/:id/predict-accuracy` — AI accuracy prediction
+- `POST /gfe/:id/reconcile` — AI GFE-to-claim reconciliation
+- `POST /gfe/:id/patient-explanation` — AI patient-friendly explanation
+- `POST /gfe/:id/predict-diagnosis` — AI diagnosis code prediction
+- `POST /idr` — Create IDR case
+- `GET /idr` — List IDR cases
+- `GET /idr/:id` — Get IDR case
+- `PATCH /idr/:id` — Update IDR case
+- `POST /idr/:id/assess-eligibility` — AI eligibility assessment
+- `POST /idr/:id/generate-offer` — AI open negotiation offer
+- `POST /idr/:id/route-jurisdiction` — AI jurisdiction routing
+- `POST /idr/:id/acuity-letter` — AI patient acuity letter
+- `POST /idr/:id/win-probability` — AI win probability
+- `GET /idr/:id/deadlines` — List deadlines for IDR case
+- `GET /deadlines` — List all deadlines (auto-updates statuses)
+- `POST /deadlines/:id/met` — Mark deadline as met
+
+### Patient Portal Endpoints (under `/patients/portal`)
+- `GET /gfe-estimates` — Patient views their GFEs
+- `GET /gfe-estimates/:id` — Patient views specific GFE
+- `POST /gfe-estimates/:id/acknowledge` — Patient acknowledges GFE receipt
+
+### Frontend
+- `nsaService.ts` — API service with full TypeScript types
+- `GfePanel.tsx` — Upgraded GFE panel with persistence, delivery tracking, AI accuracy prediction, patient explanation, variance detection
+- `NsaDashboardPage.tsx` — NSA compliance dashboard at `/nsa` with metrics, IDR case management, deadline tracking
+- `PortalGfePage.tsx` — Patient portal GFE page at `/portal/gfe-estimates` with view + acknowledge
+
+### Business Day Calculator
+`BusinessDayCalculator` service handles all NSA deadline calculations:
+- US federal holidays (fixed + floating: MLK Day, Presidents Day, Memorial Day, Labor Day, Columbus Day, Thanksgiving)
+- 3-business-day GFE delivery deadline (before service date)
+- 30-business-day open negotiation period
+- 4-business-day IDR initiation deadline
+- 10-business-day IDR submission deadline
+
+### Migration
+- `CreateNsaModule1790000000000` — creates `good_faith_estimates`, `nsa_variance_records`, `nsa_idr_cases`, `nsa_idr_deadlines` tables with all indexes (all `IF NOT EXISTS` guarded)
+
+## Patient Medications Module
+The `PatientMedications` feature lives inside the `MedicationsModule` and provides a longitudinal medication list distinct from e-prescriptions:
+- **Entity**: `PatientMedication` (`patient_medications` table) — tracks what the patient is *actually taking*, not just what was prescribed
+- **Sources**: `prescription` | `patient_reported` | `pbm_history` | `encounter` — supports OTC, supplements, herbal, outside-provider meds
+- **Taking status**: `taking` | `taking_differently` | `not_taking` | `unknown` | `completed` — matches Epic's medication reconciliation model
+- **Medication reconciliation**: `isReviewed`, `reviewedAt`, `reviewedBy` fields for tracking reconciliation
+- **API**: `/api/v1/patient-medications` — CRUD, `findByPatient`, `updateTakingStatus`, `markReviewed`
+- **Frontend**: `patientMedicationService.ts` + `Medications` tab on `PatientDetailPage` (separate from `E-Prescriptions` tab)
+
+## Care Plans Module
+The `CarePlansModule` provides longitudinal care management with goals, monitoring tasks, and care team coordination:
+- **Entities**: `CarePlan` (`care_plans`), `CarePlanGoal` (`care_plan_goals`), `CarePlanTask` (`care_plan_tasks`)
+- **CarePlan**: persistent, cross-encounter plan with health concerns, care team, patient education, AI-generated flag, provider approval workflow
+- **CarePlanGoal**: measurable goals with target values, current values, direction (decrease/increase/maintain), auto-achievement detection
+- **CarePlanTask**: monitoring/patient/care-team tasks with frequency, due dates, patient-reported values, goal linkage
+- **Task types**: monitoring, lab_order, imaging_order, medication_adherence, patient_education, questionnaire, appointment, care_team_action, lifestyle, follow_up, referral, custom
+- **API**: `/api/v1/care-plans` — full CRUD for plans, goals, tasks; `completeTask`, `reportTaskValue`, `approve`
+- **Patient portal**: `/portal/care-plan` — patients view approved plans, complete tasks, report vital readings
+- **AI endpoints** (`/api/v1/ai`): `generate-care-plan`, `suggest-monitoring-tasks`, `risk-stratification`, `care-gap-detection`
+- **Migration**: `CreatePatientMedicationsAndCarePlans1788000000000`
+
+### Encounter Medication Sync → Patient Medications
+`EncounterOrderSyncService` now also synchronizes encounter `treatmentPlan.medications` into the `patient_medications` table (in addition to `prescriptions`):
+- Each encounter medication creates a `PatientMedication` with `source: 'encounter'`, `takingStatus: 'taking'`, `status: 'active'`
+- Dedup key: `encounterId` + medication name (case-insensitive)
+- Removed encounter medications are marked `not_taking` (only if still active)
+- This ensures the patient's medication list stays current with what was documented during encounters
+
+### Medication Reconciliation at Encounter Start
+The encounter detail page (`EncounterDetailPage.tsx`) now includes a **Medication Reconciliation** section (Section 4b) that appears before the Prescribed Medications section:
+- Fetches the patient's active medications from `patient_medications` on encounter load
+- Shows each medication with source tag, taking-status selector (Taking / Taking Differently / Not Taking / Unknown), and review status
+- "Mark All Reviewed" button marks all meds as reviewed for reconciliation
+- "Add to Rx" button copies an existing patient medication into the encounter's prescribed medications list
+- Taking-status changes are saved immediately to the `patient_medications` table
+
+### AI Care Plan Generation
+The Care Plans tab on the patient detail page includes a **"Generate AI Care Plan"** button:
+- Sends the patient's active problems (from the problem list), current medications, allergies, age, and sex to `POST /ai/generate-care-plan`
+- AI returns a complete plan with title, description, goals (measurable with targets), tasks (monitoring, education, lifestyle), patient education content, and care team roles
+- Provider reviews the AI plan in a preview modal, then saves it
+- Saved plans are marked `isAiGenerated: true` and `isApproved: false` — provider must approve before the patient sees it
+- On approval, the plan becomes visible in the patient portal at `/portal/care-plan`
+
+### Encounter Order Sync
+Lab orders, imaging orders, and medications added in the encounter editor are stored in the encounter's JSONB columns (`encounter.orders` and `encounter.treatmentPlan.medications`). The `EncounterOrderSyncService` (`backend/src/modules/clinical/encounter-order-sync.service.ts`) propagates these into the real `lab_orders`, `imaging_orders`, and `prescriptions` tables on encounter `create`, `update`, and `sign`. This makes them visible in the Laboratory module, Prescriptions module, patient portal, and enables the full order lifecycle (collect → result → complete).
+- **Dedup key**: Lab orders by `encounterId` + test name; imaging orders by `encounterId` + study name; medications by `encounterId` + medication name (all case-insensitive).
+- **Status updates**: Only orders still in `draft`/`ordered` (labs), `ordered`/`scheduled` (imaging), or `draft` (prescriptions) are updated by the sync. Orders that have progressed are left alone — the lab/radiology/pharmacy team owns the lifecycle from that point.
+- **Medications**: Encounter medications are created as `active` prescriptions in the `prescriptions` table, so they immediately appear in the patient portal's Prescriptions page and the patient detail page's Medications tab.
+- **Removal**: If a lab/imaging order or medication is removed from the encounter, the corresponding table row is cancelled (only if still in an editable state).
+- **Name resolution**: Patient and provider display names are resolved via `PatientsService` and `ProvidersService`, falling back to the ID if the record isn't found.
+
+## Immunizations Module
+The `ImmunizationsModule` provides patient immunization tracking with full vaccine administration details:
+- **Entity**: `PatientImmunization` (`patient_immunizations` table) — tracks vaccine name, CVX code, CPT code, NDC code, manufacturer, lot number, expiration date, administered date, dose number/amount/unit, route, site, status, source, provider, facility, VIS date, VFC eligibility, funding source, reaction notes, and general notes
+- **Sources**: `administered` | `historical` | `registry` | `patient_reported` — supports vaccines given in-clinic, historical records from other providers, registry imports, and patient-reported immunizations
+- **Status**: `completed` | `entered-in-error` | `not-done`
+- **API**: `/api/v1/immunizations` — CRUD + `findByPatient`; staff roles (admin, doctor, nurse, receptionist) can read; admin/doctor/nurse can create/update/delete
+- **Patient portal**: `GET /patients/portal/immunizations` — patients view their own immunization history
+- **Frontend staff UI**: `Immunizations` tab on `PatientDetailPage` with table view + "Add Immunization" drawer (vaccine name, CVX/CPT codes, date, dose, route, site, lot/manufacturer, source, provider, notes)
+- **Frontend portal UI**: `/portal/immunizations` page with printable immunization history table
+- **AI care gap integration**: `RiskManagementService` now fetches real immunization data and passes it to the AI care gap detection prompt, so immunization gap recommendations are based on actual vaccination history instead of age-based guessing
+- **Migration**: `CreatePatientImmunizations1789000000000`
+- **Vaccine CPT codes**: 11 vaccine-related CPT codes are pre-seeded (90471, 90472, 90480, 90686, 90633, 90714, 90715, 90670, 90732, 90716, 90736) for billing when immunizations are administered
+- **AI endpoints** (`/api/v1/ai`):
+  - `immunization-forecast` — ACIP-based vaccine forecasting: analyzes immunization history and returns due now, overdue (with catch-up recommendations), upcoming, and completed series
+  - `immunization-contraindication` — checks vaccine safety against patient conditions, allergies, medications, prior reactions; distinguishes absolute contraindications from precautions; suggests alternative vaccines
+  - `vaccine-education` — generates parent-friendly vaccine education material (what it protects against, why important, how given, common/rare side effects, when to call doctor, myths & facts, parent tips) at 6th grade reading level
+- **Frontend AI UI**: Immunizations tab has "AI Forecast" button that shows due/overdue/upcoming/completed vaccines, and each due vaccine has an "Education" button that generates patient-friendly vaccine education
+
+### Immunization Phase 3: Advanced Features
+- **FHIR Immunization resource**: `GET /fhir/Immunization/:id` returns a FHIR R4 Immunization resource mapped from `PatientImmunization` entity (CVX codes, lot number, manufacturer, dose, route, site, performer, reaction notes). `GET /fhir/Immunization?patient=:id` returns a Bundle of all immunizations for a patient
+- **Vaccine inventory**: `VaccineInventory` entity (`vaccine_inventory` table) tracks vaccine lots with quantity on hand, quantity administered, expiration dates, funding source (VFC/private/state/section317), storage location and temperature, status (available/depleted/expired/recalled/quarantined)
+  - API: `GET /immunizations/inventory`, `POST /immunizations/inventory`, `PATCH /immunizations/inventory/:id`, `POST /immunizations/inventory/:id/adjust` (adjust quantity), `DELETE /immunizations/inventory/:id`
+  - Alerts: `GET /immunizations/inventory/expiring?days=60` and `GET /immunizations/inventory/low-stock?threshold=10`
+  - Migration: `CreateVaccineInventory1789200000000`
+- **Travel vaccine AI**: `POST /ai/travel-vaccines` — CDC Yellow Book-based recommendations for travel-specific vaccines (yellow fever, typhoid, Hep A/B, Japanese encephalitis, rabies, meningococcal, cholera, polio), antimalarial prophylaxis, destination-specific risks, time-sensitive actions, and general precautions. Frontend has a "Travel Vaccines" button with a modal for destinations, dates, and pregnancy status
+
+## Growth Management Module
+The `GrowthModule` provides pediatric growth chart functionality with CDC/WHO percentile calculations:
+- **Percentile engine**: `GrowthPercentileService` uses the LMS (Lambda-Mu-Sigma) method to calculate z-scores and percentiles from CDC and WHO reference data
+  - WHO charts (0-24 months): weight-for-age, length-for-age, head circumference-for-age
+  - WHO charts (24-60 months): weight-for-age, height-for-age, head circumference-for-age
+  - CDC charts (24-240 months / 2-20 years): weight-for-age, height-for-age, BMI-for-age
+  - Auto-switches from WHO to CDC at age 2 (standard clinical practice)
+  - Linear interpolation between LMS data points for intermediate ages
+  - Standard normal CDF for z-score → percentile conversion
+- **Preemie adjusted age**: For infants born < 37 weeks gestation, chronological age is adjusted by subtracting the weeks of prematurity (only for first 24 months, per standard practice)
+- **Mid-parental height**: Calculates target adult height from parental heights (boys: mid-parent + 6.5cm; girls: mid-parent - 6.5cm; ±8.5cm range = ~90% prediction interval)
+- **Growth chart service**: `GrowthChartService` aggregates all encounter vitals (weight, height, head circumference, BMI) into a time series with percentile calculations for each measurement
+- **API**: `GET /api/v1/growth/chart/:patientId` — returns complete growth chart data (patient info, measurement data points with percentiles, percentile curve data for charting, mid-parental height)
+- **Patient portal**: `GET /patients/portal/growth-chart` — patients/parents view their growth charts
+- **Pediatric patient fields**: `birthWeightGrams`, `gestationalAgeWeeks`, `fatherHeightCm`, `motherHeightCm` added to Patient entity
+- **Frontend staff UI**: `Growth Charts` tab on `PatientDetailPage` with interactive charts (recharts) showing:
+  - Weight-for-Age (WHO/CDC percentile curves + patient data points)
+  - Height/Length-for-Age (with mid-parental height target lines)
+  - Head Circumference-for-Age (0-5 years)
+  - BMI-for-Age (2-20 years)
+  - Preemie badge when gestational age < 37 weeks
+  - Percentile curves: 3rd, 5th, 10th, 25th, 50th, 75th, 90th, 95th, 97th
+- **Frontend portal UI**: `/portal/growth-chart` page for parents to view their child's growth charts
+- **Quality measures**: 3 pediatric growth measures added to the quality measure registry:
+  - `GROWTH-WELLCHILD-0-2`: Well-child growth monitoring (0-2 years)
+  - `GROWTH-BMI-2-19`: Childhood BMI screening (2-19 years)
+  - `GROWTH-HEADCIRC-0-3`: Head circumference monitoring (0-3 years)
+- **Migration**: `AddPediatricPatientFields1789100000000` (adds 4 nullable columns to patients table)
+- **LMS data**: `backend/src/modules/growth/data/who-lms.data.ts` and `cdc-lms.data.ts` contain the published WHO and CDC LMS reference values
+- **AI endpoints** (`/api/v1/ai`):
+  - `growth-assessment` — AI growth analysis: detects failure to thrive, stunting, wasting, overweight/obesity, microcephaly/macrocephaly, crossing percentiles; calculates growth velocity; generates prioritized recommendations and follow-up plan with referral suggestions
+  - `growth-counseling` — generates parent-friendly growth explanation at 6th grade reading level: explains what percentiles mean, weight/height/head circumference/BMI status, nutrition tips, activity tips, when to recheck, when to call doctor
+- **Frontend AI UI**: Growth Charts tab has "AI Assessment" button (shows clinical concerns, growth velocity, recommendations, follow-up plan) and "AI Counseling" button (shows parent-friendly explanation with nutrition/activity tips)
+
+### Growth Phase 3: Advanced Features
+- **Specialty growth charts**: Down syndrome (height + weight, 0-36 months), achondroplasia (height, 0-36 months), Turner syndrome (height, 0-20 years) LMS reference data in `specialty-lms.data.ts`. The `GrowthPercentileService` accepts an optional `specialty` parameter that overrides standard WHO/CDC charts. Frontend has a specialty chart selector dropdown that reloads the chart with the selected specialty's percentiles
+  - API: `GET /growth/chart/:patientId?specialty=down-syndrome|achondroplasia|turner-syndrome`
+  - `GET /growth/specialty-charts` lists available specialty charts
+- **Growth velocity**: `GrowthChartService` calculates weight, height, and head circumference velocity (value per year) between the first and last measurements, with assessment (normal/slow/rapid). Displayed in a "Growth Velocity" card on the Growth Charts tab
+- **Bone age**: Encounter vitals JSONB now includes `boneAgeYears` and `boneAgeMethod` fields for recording bone age from radiographic studies (e.g. Greulich-Pyle, Tanner-Whitehouse). No migration needed (JSONB field)
+- **FHIR Observation resources**: `GET /fhir/Observation/growth?patient=:id` returns a FHIR R4 Bundle of Observation resources for all growth measurements (weight LOINC 29463-7, height LOINC 8302-2, head circumference LOINC 9843-4, BMI LOINC 39156-5) with vital signs profile, extracted from encounter vitals
 
 ## Specialty Support
 Neuraline is a **multi-specialty, specialty-agnostic EMR**. The `specialty` column on clinical templates and the `department`/`specialization` columns on providers are free-text `varchar`, so any specialty can be added at runtime without a schema change.
@@ -190,10 +443,26 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - `GET /prescriptions` — Patient's prescriptions
 - `POST /prescriptions/:id/refill` — Request a prescription refill
 - `GET /lab-results` — Patient's lab orders with tests
+- `GET /imaging` — Patient's imaging orders with findings/impression
 - `GET /invoices` — Patient's invoices
 - `POST /invoices/:id/pay` — Make a payment on an invoice
 - `GET /eobs` — Patient's EOBs from remittance module
 - `GET /insurance` — Patient's insurance policies
+- `GET /medical-history` — Patient's problem list (conditions)
+- `POST /medical-history` — Patient self-reports a condition (marked unconfirmed)
+- `DELETE /medical-history/:id` — Patient removes a self-reported condition
+- `GET /allergies` — Patient's allergies
+- `POST /allergies` — Patient self-reports an allergy (marked unconfirmed, source=patient)
+- `DELETE /allergies/:id` — Patient removes a self-reported allergy
+- `GET /family-history` — Patient's family history entries
+- `POST /family-history` — Patient self-reports a family history entry (source=patient)
+- `DELETE /family-history/:id` — Patient removes a self-reported family history entry
+- `GET /surgical-history` — Patient's surgical history entries
+- `POST /surgical-history` — Patient self-reports a surgical history entry (source=patient)
+- `DELETE /surgical-history/:id` — Patient removes a self-reported surgical history entry
+- `GET /social-history` — Patient's social history entries (smoking, alcohol, substance use, occupation, exercise, diet, etc.)
+- `POST /social-history` — Patient self-reports a social history entry (source=patient)
+- `DELETE /social-history/:id` — Patient removes a self-reported social history entry
 
 ### Patient Portal AI (all under `/api/v1/patients/portal/ai`, requires patient JWT)
 - `POST /explain-lab-result` — AI explains a lab result in plain language
@@ -201,6 +470,10 @@ The patient portal provides a dedicated, patient-facing interface separate from 
 - `POST /check-interactions` — AI medication interaction checker
 - `POST /health-education` — AI generates personalized health education articles
 - `POST /visit-questions` — AI generates questions to ask your doctor
+- `POST /extract-history` — AI extracts structured medical/family history from free-text patient input
+- `POST /family-history-risk` — AI assesses hereditary risk from family history (NCCN/ACMG criteria)
+- `POST /health-summary` — AI generates a plain-language health summary organized by body system
+- `POST /suggest-screenings` — AI suggests health screenings based on history, age, and gender (USPSTF guidelines)
 
 ### Secure Messaging Module (`/api/v1/messaging`)
 - **Entities**: `Conversation` (patient-provider thread), `Message` (individual messages)
@@ -225,11 +498,13 @@ The patient portal provides a dedicated, patient-facing interface separate from 
   - `/portal/appointments` — View appointments + request new ones with slot picker
   - `/portal/prescriptions` — View prescriptions + request refills
   - `/portal/lab-results` — View lab results with collapsible test details
+  - `/portal/imaging` — View imaging orders with findings, impression, and report links
   - `/portal/billing` — View invoices + make payments
   - `/portal/eobs` — View insurance EOBs with adjustment details
   - `/portal/insurance` — View insurance policies
   - `/portal/messages` — Secure messaging with care team
   - `/portal/ai-assistant` — AI Health Assistant (5 tabs: lab explainer, symptom checker, drug interactions, health education, visit prep)
+  - `/portal/health-history` — Patient health history with conditions, allergies, family history, surgical history, social history tabs + AI features (history intake, hereditary risk, health summary, screening recommendations)
   - `/portal/profile` — View profile information
 
 ### Billing Module

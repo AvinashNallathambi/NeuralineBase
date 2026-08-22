@@ -28,6 +28,7 @@ import { Badge, BadgeText } from '@/components/ui/badge';
 import { Button, ButtonText } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Divider } from '@/components/ui/divider';
+import { CustomSpinner } from '../../components/CustomSpinner';
 import { Avatar, AvatarFallbackText } from '@/components/ui/avatar';
 import { Pressable } from '@/components/ui/pressable';
 
@@ -136,7 +137,7 @@ export const AppointmentDetailScreen: React.FC = () => {
   if (isLoading || !appointment) {
     return (
       <Box className="flex-1 justify-center items-center bg-background">
-        <Spinner size="large" color="$primary" />
+        <CustomSpinner size={48} />
       </Box>
     );
   }

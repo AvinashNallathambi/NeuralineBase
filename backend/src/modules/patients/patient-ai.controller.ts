@@ -67,6 +67,51 @@ class GenerateQuestionsDto {
   @IsOptional() @IsString() upcomingAppointmentReason?: string;
 }
 
+class ExtractHistoryDto {
+  @IsString()
+  @IsNotEmpty()
+  freeText!: string;
+
+  @IsOptional() @IsNumber() patientAge?: number;
+  @IsOptional() @IsString() patientGender?: string;
+}
+
+class FamilyHistoryRiskDto {
+  @IsArray()
+  familyHistory!: { relationship: string; condition: string; ageOfOnset?: number; isDeceased?: boolean; ageAtDeath?: number }[];
+
+  @IsOptional() @IsNumber() patientAge?: number;
+  @IsOptional() @IsString() patientGender?: string;
+  @IsOptional() @IsArray() patientConditions?: string[];
+}
+
+class HealthSummaryDto {
+  @IsArray()
+  conditions!: { description: string; clinicalStatus?: string; onsetDate?: string; isChronic?: boolean }[];
+
+  @IsArray()
+  allergies!: { allergen: string; reaction?: string; severity?: string }[];
+
+  @IsArray()
+  familyHistory!: { relationship: string; condition: string }[];
+
+  @IsOptional() @IsArray() medications?: { name: string; dosage?: string }[];
+  @IsOptional() @IsNumber() patientAge?: number;
+  @IsOptional() @IsString() patientGender?: string;
+}
+
+class SuggestScreeningsDto {
+  @IsArray()
+  conditions!: { description: string; isChronic?: boolean }[];
+
+  @IsArray()
+  familyHistory!: { relationship: string; condition: string; ageOfOnset?: number }[];
+
+  @IsNumber() patientAge!: number;
+  @IsString() patientGender!: string;
+  @IsOptional() @IsArray() medications?: string[];
+}
+
 interface AuthenticatedPatientRequest {
   user: { id: string; email: string; tenantId: string; role: string };
 }
@@ -116,5 +161,39 @@ export class PatientAiController {
   @ApiResponse({ status: 200, description: 'Questions for upcoming doctor visit' })
   async generateVisitQuestions(@Body() dto: GenerateQuestionsDto) {
     return this.patientAiService.generateVisitQuestions(dto);
+  }
+
+  // ─── Medical & Family History AI Features ────────────────────────
+
+  @Post('extract-history')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'AI extracts structured medical/family history from free-text patient input' })
+  @ApiResponse({ status: 200, description: 'Structured history extracted from free text' })
+  async extractHistoryFromText(@Body() dto: ExtractHistoryDto) {
+    return this.patientAiService.extractHistoryFromText(dto);
+  }
+
+  @Post('family-history-risk')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'AI assesses hereditary risk from family history' })
+  @ApiResponse({ status: 200, description: 'Hereditary risk assessment with recommendations' })
+  async assessFamilyHistoryRisk(@Body() dto: FamilyHistoryRiskDto) {
+    return this.patientAiService.assessFamilyHistoryRisk(dto);
+  }
+
+  @Post('health-summary')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'AI generates a plain-language health summary' })
+  @ApiResponse({ status: 200, description: 'Patient-friendly health summary organized by body system' })
+  async generateHealthSummary(@Body() dto: HealthSummaryDto) {
+    return this.patientAiService.generateHealthSummary(dto);
+  }
+
+  @Post('suggest-screenings')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'AI suggests health screenings based on history and demographics' })
+  @ApiResponse({ status: 200, description: 'Recommended and overdue health screenings' })
+  async suggestScreenings(@Body() dto: SuggestScreeningsDto) {
+    return this.patientAiService.suggestScreenings(dto);
   }
 }

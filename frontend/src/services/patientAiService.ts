@@ -96,6 +96,92 @@ class PatientAiService {
     const response = await api.post(`${this.baseUrl}/visit-questions`, data);
     return response.data;
   }
+
+  // ── Medical & Family History AI Features ──
+
+  async extractHistoryFromText(data: {
+    freeText: string;
+    patientAge?: number;
+    patientGender?: string;
+  }): Promise<{
+    conditions: { description: string; code?: string; onsetDate?: string; notes?: string }[];
+    allergies: { allergen: string; reaction?: string; severity?: string; onsetDate?: string }[];
+    familyHistory: { relationship: string; condition: string; ageOfOnset?: number; isDeceased?: boolean; ageAtDeath?: number }[];
+    surgeries: { procedure: string; date?: string; notes?: string }[];
+    medications: { name: string; dosage?: string; frequency?: string }[];
+    summary: string;
+    confidence: string;
+  }> {
+    const response = await api.post(`${this.baseUrl}/extract-history`, data);
+    return response.data;
+  }
+
+  async assessFamilyHistoryRisk(data: {
+    familyHistory: { relationship: string; condition: string; ageOfOnset?: number; isDeceased?: boolean; ageAtDeath?: number }[];
+    patientAge?: number;
+    patientGender?: string;
+    patientConditions?: string[];
+  }): Promise<{
+    overallRiskLevel: string;
+    riskScore: number;
+    identifiedRisks: {
+      syndrome: string;
+      riskLevel: string;
+      reason: string;
+      affectedRelatives: string[];
+      recommendation: string;
+    }[];
+    recommendedScreenings: { screening: string; reason: string; recommendedAge: string; frequency: string }[];
+    geneticCounselingRecommended: boolean;
+    geneticCounselingReason: string;
+    preventiveMeasures: string[];
+    disclaimer: string;
+  }> {
+    const response = await api.post(`${this.baseUrl}/family-history-risk`, data);
+    return response.data;
+  }
+
+  async generateHealthSummary(data: {
+    conditions: { description: string; clinicalStatus?: string; onsetDate?: string; isChronic?: boolean }[];
+    allergies: { allergen: string; reaction?: string; severity?: string }[];
+    familyHistory: { relationship: string; condition: string }[];
+    medications?: { name: string; dosage?: string }[];
+    patientAge?: number;
+    patientGender?: string;
+  }): Promise<{
+    summary: string;
+    bodySystems: { system: string; conditions: string[]; recommendations: string[] }[];
+    keyTakeaways: string[];
+    riskFactors: string[];
+    recommendedActions: string[];
+    disclaimer: string;
+  }> {
+    const response = await api.post(`${this.baseUrl}/health-summary`, data);
+    return response.data;
+  }
+
+  async suggestScreenings(data: {
+    conditions: { description: string; isChronic?: boolean }[];
+    familyHistory: { relationship: string; condition: string; ageOfOnset?: number }[];
+    patientAge: number;
+    patientGender: string;
+    medications?: string[];
+  }): Promise<{
+    recommendedScreenings: {
+      screening: string;
+      reason: string;
+      urgency: string;
+      recommendedFrequency: string;
+      guidelineSource: string;
+      relatedTo: string;
+    }[];
+    overdueScreenings: { screening: string; reason: string; lastRecommended: string }[];
+    lifestyleRecommendations: string[];
+    disclaimer: string;
+  }> {
+    const response = await api.post(`${this.baseUrl}/suggest-screenings`, data);
+    return response.data;
+  }
 }
 
 export const patientAiService = new PatientAiService();

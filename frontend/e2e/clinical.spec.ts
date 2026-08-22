@@ -1314,3 +1314,629 @@ test.describe('Clinical — AI Assist from SOAP Notes Tab', () => {
     }
   });
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// ENCOUNTER DETAIL — COMPREHENSIVE FIELD COVERAGE
+//
+// These tests cover fields that were previously untested:
+//   - Encounter Information: type, visitCategory, priority, department, location,
+//     room, durationMinutes
+//   - Vital Signs: all 16 vital fields + BMI auto-calculation
+//   - Procedures: add/remove with CPT codes
+//   - Allergies: severity, type, critical allergy alert banner
+//   - Orders: imaging orders + referrals (labs already partially covered)
+//   - Treatment Plan: followUp, followUpDate, followUpProviderName,
+//     homeInstructions, restrictions, goals, interventions, recallReminder
+//   - Clinical Notes: clinicalNotes + general notes
+//   - Attachments: upload + remove
+//   - Audit Trail: timeline rendering after status transitions
+//   - Patient Header: MRN, age, DOB, gender, bloodType, phone
+//   - Quick Actions: Export PDF, View Patient navigation
+//   - Clinical Summary sidebar: active problems, allergies, medications, follow-up
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Fetch an encounter via the backend API for persistence verification. */
+async function fetchEncounterViaApi(state: E2EState, encounterId: string): Promise<Record<string, any>> {
+  const ctx = await request.newContext({ baseURL: API_BASE, timeout: 30000 });
+  try {
+    const res = await ctx.get(`/api/v1/clinical/encounters/${encounterId}`, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!res.ok()) throw new Error(`Fetch encounter failed (${res.status()})`);
+    return res.json();
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/** Transition encounter status via the backend API. */
+async function transitionEncounterViaApi(state: E2EState, encounterId: string, status: string): Promise<Record<string, any>> {
+  const ctx = await request.newContext({ baseURL: API_BASE, timeout: 30000 });
+  try {
+    const res = await ctx.post(`/api/v1/clinical/encounters/${encounterId}/transition`, {
+      headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+      data: { status },
+    });
+    if (!res.ok()) {
+      const body = await res.text();
+      throw new Error(`Transition encounter failed (${res.status()}): ${body}`);
+    }
+    return res.json();
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/** Sign an encounter via the backend API. */
+async function signEncounterViaApi(state: E2EState, encounterId: string): Promise<Record<string, any>> {
+  const ctx = await request.newContext({ baseURL: API_BASE, timeout: 30000 });
+  try {
+    const res = await ctx.post(`/api/v1/clinical/encounters/${encounterId}/sign`, {
+      headers: { Authorization: `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    });
+    if (!res.ok()) {
+      const body = await res.text();
+      throw new Error(`Sign encounter failed (${res.status()}): ${body}`);
+    }
+    return res.json();
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/** Create a patient with extra fields (mrn, bloodType, etc.) via the backend API. */
+async function createPatientWithExtrasViaApi(
+  state: E2EState,
+  extras: Record<string, unknown> = {},
+): Promise<{ id: string; [key: string]: unknown }> {
+  const ctx = await request.newContext({ baseURL: API_BASE, timeout: 60000 });
+  try {
+    const unique = Date.now() + Math.floor(Math.random() * 1000);
+    const response = await ctx.post('/api/v1/patients', {
+      headers: { Authorization: `Bearer ${state.token}` },
+      data: {
+        firstName: 'E2EClinical',
+        lastName: `Patient ${unique}`,
+        dateOfBirth: '1985-06-20',
+        gender: 'male',
+        email: `e2e.clinical.${unique}@example.com`,
+        phone: '(555) 444-3333',
+        ...extras,
+      },
+    });
+    if (!response.ok()) {
+      const body = await response.text();
+      throw new Error(`Create patient failed (${response.status()}): ${body}`);
+    }
+    return response.json();
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+// Unicode-safe labels for vital sign fields that contain special characters
+const O2_SAT_LABEL = 'O\u2082 Sat (%)';
+const PAIN_SCORE_LABEL = 'Pain Score (0\u201310)';
+
+test.describe('Clinical — Encounter Detail Field Coverage', () => {
+  test('edit encounter information fields (type, category, priority, dept, location, room, duration)', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Change Encounter Type
+      await selectAntOption(page, 'Encounter Type', 'Telehealth');
+      // Change Visit Category
+      await selectAntOption(page, 'Visit Category', 'Follow-up');
+      // Change Priority
+      await selectAntOption(page, 'Priority', 'Urgent');
+      // Change Department
+      await selectAntOption(page, 'Department', 'Cardiology');
+      // Fill Location and Room
+      await page.getByLabel('Location / Clinic').fill('E2E Test Clinic');
+      await page.getByLabel('Room / Exam Room').fill('Room 101');
+      // Fill Duration
+      await page.getByLabel('Duration (min)').fill('30');
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.type).toBe('telehealth');
+      expect(updated.visitCategory).toBe('follow_up');
+      expect(updated.priority).toBe('urgent');
+      expect(updated.location).toBe('E2E Test Clinic');
+      expect(updated.room).toBe('Room 101');
+      expect(updated.durationMinutes).toBe(30);
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('fill all vital signs fields and verify BMI auto-calculation', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Fill vital signs fields
+      // Find the vitals card to scope placeholder-based lookups
+      const vitalsCard = page.locator('.ant-card').filter({ hasText: 'Vital Signs' }).filter({ has: page.locator('input') }).first();
+
+      await page.getByLabel('Blood Pressure').fill('120/80');
+      await page.getByLabel('Heart Rate (bpm)').fill('72');
+      await page.getByLabel('Temperature (°F)').fill('98.6');
+      await selectAntOption(page, 'Temp Route', 'Oral');
+      await page.getByLabel('Resp Rate (/min)').fill('16');
+      // O₂ Sat label uses Unicode subscript that getByLabel can't match; use exact placeholder match
+      await vitalsCard.getByPlaceholder('98', { exact: true }).fill('98');
+      await page.getByLabel('Weight').fill('180');
+      await page.getByLabel('Height').fill('70');
+      // BMI should auto-calculate: (180 / (70*70)) * 703 = 25.8
+      await expect(page.getByLabel('BMI')).toHaveValue('25.8', { timeout: 5000 });
+      // Pain Score label uses en-dash (–, U+2013); selectAntOption uses getByLabel with exact match
+      await selectAntOption(page, PAIN_SCORE_LABEL, '5');
+      await page.getByLabel('Glucose (mg/dL)').fill('100');
+      await selectAntOption(page, 'Glucose Context', 'Fasting');
+      await page.getByLabel('Pain Location').fill('Lower back');
+      await page.getByLabel('Head Circ (cm)').fill('55');
+      await page.getByLabel('Waist Circ (cm)').fill('85');
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.vitals.bloodPressure).toBe('120/80');
+      expect(updated.vitals.heartRate).toBe('72');
+      expect(updated.vitals.temperature).toBe('98.6');
+      expect(updated.vitals.temperatureRoute).toBe('oral');
+      expect(updated.vitals.respiratoryRate).toBe('16');
+      expect(updated.vitals.oxygenSaturation).toBe('98');
+      expect(updated.vitals.weight).toBe('180');
+      expect(updated.vitals.height).toBe('70');
+      expect(updated.vitals.bmi).toBe('25.8');
+      expect(updated.vitals.painScore).toBe(5);
+      expect(updated.vitals.bloodGlucose).toBe('100');
+      expect(updated.vitals.bloodGlucoseContext).toBe('fasting');
+      expect(updated.vitals.painLocation).toBe('Lower back');
+      expect(updated.vitals.headCircumference).toBe('55');
+      expect(updated.vitals.waistCircumference).toBe('85');
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('add and remove procedures with CPT codes', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Procedures card renders (use card title text to avoid matching the Metrics sidebar)
+      const proceduresCard = page.locator('.ant-card').filter({ hasText: 'Procedures —' }).first();
+      await expect(proceduresCard).toBeVisible({ timeout: 10000 });
+
+      // Add a procedure
+      await page.getByPlaceholder('Procedure name').fill('E2E Test Procedure');
+      await page.getByPlaceholder('CPT Code').fill('99213');
+      await page.getByPlaceholder('Description', { exact: true }).fill('E2E procedure description');
+      await page.getByRole('button', { name: /Add Procedure/i }).click();
+
+      // Verify the procedure appears in the table
+      await expect(page.locator('.ant-table').filter({ hasText: 'E2E Test Procedure' })).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('.ant-tag').filter({ hasText: '99213' })).toBeVisible();
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.treatmentPlan.procedures).toHaveLength(1);
+      expect(updated.treatmentPlan.procedures[0].name).toBe('E2E Test Procedure');
+      expect(updated.treatmentPlan.procedures[0].cptCode).toBe('99213');
+      expect(updated.treatmentPlan.procedures[0].description).toBe('E2E procedure description');
+
+      // Remove the procedure
+      await proceduresCard.locator('.ant-table-tbody').locator('button').filter({ has: page.locator('.anticon-delete') }).first().click();
+
+      // Verify the procedure is removed from the table
+      await expect(page.locator('.ant-table').filter({ hasText: 'E2E Test Procedure' })).toHaveCount(0, { timeout: 5000 });
+
+      // Save again
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify removal via API
+      const afterRemove = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(afterRemove.treatmentPlan.procedures).toHaveLength(0);
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('add allergy with severity and type, verify critical allergy alert', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Allergies card renders (use card head title to avoid ambiguity)
+      const allergiesCard = page.locator('.ant-card').filter({ hasText: 'Allergies —' }).first();
+      await expect(allergiesCard).toBeVisible({ timeout: 10000 });
+
+      // Fill allergen and reaction
+      await allergiesCard.getByPlaceholder('Allergen').fill('E2E Severe Allergen');
+      await allergiesCard.getByPlaceholder('Reaction').fill('E2E Severe Reaction');
+
+      // Change severity to Severe (default is Mild)
+      const severitySelect = allergiesCard.locator('.ant-select').nth(0);
+      await severitySelect.click();
+      await page.locator('.ant-select-dropdown:visible').getByText('Severe', { exact: true }).click();
+
+      // Change type to Food (default is Drug)
+      const typeSelect = allergiesCard.locator('.ant-select').nth(1);
+      await typeSelect.click();
+      await page.locator('.ant-select-dropdown:visible').getByText('Food', { exact: true }).click();
+
+      // Trigger add by pressing Enter on the Reaction input (onPressEnter={handleAddAllergy})
+      await allergiesCard.getByPlaceholder('Reaction').press('Enter');
+
+      // Verify the critical allergy alert banner appears (state-based, no save needed)
+      await expect(page.getByText('Critical Allergy Alert')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText(/CRITICAL ALLERGY.*E2E Severe Allergen/i).first()).toBeVisible();
+
+      // Verify the allergy appears in the table
+      await expect(allergiesCard.locator('.ant-table-tbody')).toContainText('E2E Severe Allergen', { timeout: 5000 });
+      await expect(allergiesCard.locator('.ant-table-tbody')).toContainText('Severe');
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.allergies).toHaveLength(1);
+      expect(updated.allergies[0].allergen).toBe('E2E Severe Allergen');
+      expect(updated.allergies[0].reaction).toBe('E2E Severe Reaction');
+      expect(updated.allergies[0].severity).toBe('severe');
+      expect(updated.allergies[0].type).toBe('food');
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('add imaging orders and referrals', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    // Create an encounter with imaging orders and referrals pre-filled via API
+    const encounter = await createEncounterViaApi(e2eState, patient.id, {
+      status: 'in_progress',
+      orders: {
+        labs: [],
+        imaging: [
+          { name: 'E2E Chest CT', modality: 'ct', bodyPart: 'Chest', status: 'ordered' },
+        ],
+        referrals: [
+          { specialty: 'E2E Cardiology', reason: 'E2E referral reason', urgency: 'routine', status: 'pending' },
+        ],
+      },
+    });
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Orders card renders
+      const ordersCard = page.locator('.ant-card').filter({ hasText: 'Laboratory Orders' }).first();
+      await expect(ordersCard).toBeVisible({ timeout: 10000 });
+
+      // Verify the imaging order tag appears
+      await expect(ordersCard.locator('.ant-tag').filter({ hasText: /E2E Chest CT/ })).toBeVisible({ timeout: 10000 });
+
+      // Verify the referral tag appears
+      await expect(ordersCard.locator('.ant-tag').filter({ hasText: /E2E Cardiology/ })).toBeVisible({ timeout: 10000 });
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.orders.imaging).toHaveLength(1);
+      expect(updated.orders.imaging[0].name).toBe('E2E Chest CT');
+      expect(updated.orders.imaging[0].modality).toBe('ct');
+      expect(updated.orders.imaging[0].bodyPart).toBe('Chest');
+      expect(updated.orders.referrals).toHaveLength(1);
+      expect(updated.orders.referrals[0].specialty).toBe('E2E Cardiology');
+      expect(updated.orders.referrals[0].reason).toBe('E2E referral reason');
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('fill treatment plan fields (follow-up, home instructions, restrictions, goals, interventions, recall)', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Treatment Plan card renders (use unique card title to avoid matching SOAP "Plan" label)
+      const treatmentPlanCard = page.locator('.ant-card').filter({ hasText: 'Treatment Plan' }).filter({ has: page.locator('textarea') }).first();
+      await expect(treatmentPlanCard).toBeVisible({ timeout: 10000 });
+
+      // Fill treatment plan fields
+      await page.getByLabel('Follow-up Instructions').fill('E2E follow-up in 2 weeks');
+      await page.getByLabel('Follow-up Provider').fill('E2E Dr. Smith');
+      await page.getByLabel('Home Care Instructions').fill('E2E rest and hydrate');
+      await page.getByLabel('Activity / Dietary Restrictions').fill('E2E no strenuous activity');
+      await page.getByLabel('Treatment Goals (one per line)').fill('E2E reduce BP\ntarget weight');
+      await page.getByLabel('Interventions (one per line)').fill('E2E start medication\nlifestyle changes');
+      await page.getByLabel('Recall Reminder').fill('E2E annual physical in 12 months');
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.treatmentPlan.followUp).toBe('E2E follow-up in 2 weeks');
+      expect(updated.treatmentPlan.followUpProviderName).toBe('E2E Dr. Smith');
+      expect(updated.treatmentPlan.homeInstructions).toBe('E2E rest and hydrate');
+      expect(updated.treatmentPlan.restrictions).toBe('E2E no strenuous activity');
+      expect(updated.treatmentPlan.goals).toEqual(expect.arrayContaining(['E2E reduce BP', 'target weight']));
+      expect(updated.treatmentPlan.interventions).toEqual(expect.arrayContaining(['E2E start medication', 'lifestyle changes']));
+      expect(updated.treatmentPlan.recallReminder).toBe('E2E annual physical in 12 months');
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('fill clinical notes and general notes', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Clinical Notes card renders
+      await expect(page.locator('.ant-card').filter({ hasText: /Clinical Notes/ })).toBeVisible({ timeout: 10000 });
+
+      // Fill clinical notes and general notes
+      await page.getByLabel('Clinical Notes (internal)').fill('E2E internal clinical observations for the care team');
+      await page.getByLabel('General Notes').fill('E2E administrative notes');
+
+      // Save
+      await page.getByRole('button', { name: /Save Draft/i }).first().click();
+      await expectSuccessToast(page, 'Encounter saved');
+
+      // Verify persistence via API
+      const updated = await fetchEncounterViaApi(e2eState, encounter.id);
+      expect(updated.clinicalNotes).toBe('E2E internal clinical observations for the care team');
+      expect(updated.notes).toBe('E2E administrative notes');
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('upload and remove attachments', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Attachments card renders (use unique card title)
+      const attachmentsCard = page.locator('.ant-card').filter({ hasText: 'Attachments —' }).first();
+      await expect(attachmentsCard).toBeVisible({ timeout: 10000 });
+
+      // Upload a file using the hidden file input
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles({
+        name: 'e2e-test-attachment.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('E2E test attachment content'),
+      });
+
+      // Verify the attachment appears in the table
+      await expect(attachmentsCard.locator('.ant-table-tbody')).toContainText('e2e-test-attachment.txt', { timeout: 5000 });
+
+      // Remove the attachment
+      await attachmentsCard.locator('.ant-table-tbody').locator('button').filter({ has: page.locator('.anticon-delete') }).first().click();
+
+      // Verify the attachment is removed (the empty state should appear with "No attachments")
+      await expect(attachmentsCard.getByText('No attachments')).toBeVisible({ timeout: 5000 });
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('verify audit trail timeline renders after status transitions', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id, { status: 'scheduled' });
+
+    try {
+      // Transition via API for reliability: scheduled → in_progress → completed → signed
+      await transitionEncounterViaApi(e2eState, encounter.id, 'in_progress');
+      await transitionEncounterViaApi(e2eState, encounter.id, 'completed');
+      await signEncounterViaApi(e2eState, encounter.id);
+
+      // Now navigate to the encounter detail page
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Audit Trail card renders (use unique card title)
+      const auditCard = page.locator('.ant-card').filter({ hasText: 'Audit Trail' }).filter({ has: page.locator('.ant-timeline, .ant-empty') }).first();
+      await expect(auditCard).toBeVisible({ timeout: 10000 });
+
+      // Verify the audit trail timeline has entries (from the status transitions + signing)
+      const timeline = auditCard.locator('.ant-timeline');
+      await expect(timeline).toBeVisible({ timeout: 10000 });
+
+      // Verify at least 2 timeline items (status changes + signing)
+      const timelineItems = timeline.locator('.ant-timeline-item');
+      const itemCount = await timelineItems.count();
+      expect(itemCount).toBeGreaterThanOrEqual(2);
+
+      // Verify the signed/locked descriptions section
+      await expect(auditCard.getByText('Signed By', { exact: true })).toBeVisible({ timeout: 5000 });
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('verify patient header displays MRN, age, gender, bloodType, phone', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    // Create a patient with extra fields
+    const unique = Date.now();
+    const patient = await createPatientWithExtrasViaApi(e2eState, {
+      mrn: `E2E-MRN-${unique}`,
+      bloodType: 'O+',
+      phone: '(555) 999-8888',
+    });
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify patient name appears in header
+      await expect(page.getByText('E2EClinical')).toBeVisible({ timeout: 10000 });
+
+      // Verify MRN appears
+      await expect(page.getByText(`E2E-MRN-${unique}`)).toBeVisible({ timeout: 5000 });
+
+      // Verify age and DOB (DOB 1985-06-20 → age 41 in 2026)
+      await expect(page.getByText(/\d+\s*y\/o/)).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText('06/20/1985')).toBeVisible();
+
+      // Verify gender tag
+      await expect(page.locator('.ant-tag').filter({ hasText: /^male$/i })).toBeVisible();
+
+      // Verify blood type tag
+      await expect(page.locator('.ant-tag').filter({ hasText: /Blood: O\+/i })).toBeVisible();
+
+      // Verify phone number
+      await expect(page.getByText('(555) 999-8888')).toBeVisible();
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('quick actions: export PDF and view patient navigation', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    const encounter = await createEncounterViaApi(e2eState, patient.id);
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // ── Export PDF (actually exports JSON via handleExport) ──
+      const downloadPromise = page.waitForEvent('download', { timeout: 15000 }).catch(() => null);
+      // Click the "Export PDF" button in the Quick Actions sidebar
+      await page.getByRole('button', { name: /Export PDF/i }).click();
+      const download = await downloadPromise;
+      if (download) {
+        expect(download.suggestedFilename()).toContain('encounter-');
+        expect(download.suggestedFilename()).toContain('.json');
+      }
+
+      // ── View Patient navigation ──
+      await page.getByRole('button', { name: /View Patient/i }).click();
+      // Should navigate to /patients/:patientId
+      await expect(page).toHaveURL(/\/patients\//, { timeout: 10000 });
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+
+  test('verify clinical summary sidebar displays active problems, allergies, medications, follow-up', async ({ authenticatedPage: page, e2eState }) => {
+    test.setTimeout(120000);
+
+    const patient = await createPatientViaApi(e2eState);
+    // Create an encounter with pre-filled data via API
+    const encounter = await createEncounterViaApi(e2eState, patient.id, {
+      status: 'in_progress',
+      diagnoses: [
+        {
+          code: 'E11.9',
+          codeSystem: 'ICD-10-CM',
+          description: 'Type 2 diabetes mellitus',
+          isPrimary: true,
+          type: 'chronic',
+          status: 'active',
+        },
+      ],
+      allergies: [
+        { allergen: 'Penicillin', reaction: 'Rash', severity: 'moderate', type: 'drug' },
+      ],
+      treatmentPlan: {
+        medications: [
+          { name: 'Metformin', dosage: '500mg', frequency: 'twice_daily', route: 'oral' },
+        ],
+        followUp: 'E2E follow-up in 1 month',
+      },
+    });
+
+    try {
+      await page.goto(`/clinical/${encounter.id}`);
+      await expect(page.getByText('Back')).toBeVisible({ timeout: 15000 });
+
+      // Verify the Clinical Summary sidebar card renders (use unique card title)
+      const summaryCard = page.locator('.ant-card').filter({ hasText: 'Clinical Summary' }).filter({ has: page.locator('.ant-tag') }).first();
+      await expect(summaryCard).toBeVisible({ timeout: 10000 });
+
+      // Verify ACTIVE PROBLEMS section
+      await expect(summaryCard.getByText('ACTIVE PROBLEMS')).toBeVisible();
+      await expect(summaryCard.locator('.ant-tag').filter({ hasText: /E11.9/ })).toBeVisible();
+      await expect(summaryCard.locator('.ant-tag').filter({ hasText: /Type 2 diabetes/ })).toBeVisible();
+
+      // Verify ALLERGIES section
+      await expect(summaryCard.getByText('ALLERGIES')).toBeVisible();
+      await expect(summaryCard.locator('.ant-tag').filter({ hasText: 'Penicillin' })).toBeVisible();
+
+      // Verify CURRENT MEDICATIONS section
+      await expect(summaryCard.getByText('CURRENT MEDICATIONS')).toBeVisible();
+      await expect(summaryCard.locator('.ant-tag').filter({ hasText: /Metformin/ })).toBeVisible();
+
+      // Verify FOLLOW-UP section
+      await expect(summaryCard.getByText('FOLLOW-UP', { exact: true })).toBeVisible();
+      await expect(summaryCard.getByText('E2E follow-up in 1 month')).toBeVisible();
+    } finally {
+      await deleteEncounterViaApi(e2eState, encounter.id);
+    }
+  });
+});

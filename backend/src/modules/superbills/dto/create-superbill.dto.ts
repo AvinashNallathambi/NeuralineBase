@@ -271,4 +271,84 @@ export class CreateSuperbillDto {
   @IsBoolean()
   @IsOptional()
   isOtherAccident?: boolean;
+
+  // ── CMS-1500 additional fields ──────────────────────────────────────────
+  @IsString()
+  @IsOptional()
+  patientSex?: string; // M | F
+
+  @IsString()
+  @IsOptional()
+  insuranceProgram?: string;
+
+  @IsString()
+  @IsOptional()
+  insuredSex?: string;
+
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  insuredDOB?: Date;
+
+  @IsObject()
+  @IsOptional()
+  insuredAddress?: { street: string; city: string; state: string; zipCode: string };
+
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  dateOfIllness?: Date;
+
+  @IsString()
+  @IsOptional()
+  referringProviderName?: string;
+
+  @IsString()
+  @IsOptional()
+  referringProviderNPI?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  outsideLab?: boolean;
+
+  @IsNumber()
+  @IsOptional()
+  outsideLabCharges?: number;
+
+  @IsString()
+  @IsOptional()
+  resubmissionCode?: string;
+
+  @IsString()
+  @IsOptional()
+  originalRefNo?: string;
+
+  @IsString()
+  @IsOptional()
+  priorAuthNumber?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  acceptAssignment?: boolean;
+
+  @IsString()
+  @IsOptional()
+  patientAccountNo?: string;
+
+  @IsString()
+  @IsOptional()
+  renderingProviderId?: string;
+
+  @IsString()
+  @IsOptional()
+  physicianSignature?: string;
+
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  physicianSignatureDate?: Date;
+
+  @IsNumber()
+  @IsOptional()
+  amountPaid?: number;
 }

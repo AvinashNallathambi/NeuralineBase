@@ -325,6 +325,37 @@ export const INTEGRATION_CONFIG_SCHEMAS: Record<string, IntegrationConfigSchema>
       { key: 'baseUrl', label: 'Base URL', type: 'url', required: false, defaultValue: 'https://rxnav.nlm.nih.gov/REST' },
     ],
   },
+  openfda: {
+    key: 'openfda',
+    category: 'clinical',
+    requiresOAuth: false,
+    testable: true,
+    helpText: 'Free FDA drug database — search NDC directory (all FDA-approved drugs including gene therapies), drug labels, adverse events (FAERS), and recalls. Optional API key increases rate limits.',
+    fields: [
+      { key: 'baseUrl', label: 'Base URL', type: 'url', required: false, defaultValue: 'https://api.fda.gov' },
+      { key: 'apiKey', label: 'API Key (optional — increases rate limits)', type: 'password', required: false, isCredential: true, placeholder: 'Get a free key at https://open.fda.gov/apis/' },
+    ],
+  },
+  dailymed: {
+    key: 'dailymed',
+    category: 'clinical',
+    requiresOAuth: false,
+    testable: true,
+    helpText: 'Free FDA prescribing information (SPL labels) from DailyMed. Full drug labels including indications, warnings, dosage, and contraindications. No API key required.',
+    fields: [
+      { key: 'baseUrl', label: 'Base URL', type: 'url', required: false, defaultValue: 'https://dailymed.nlm.nih.gov/dailymed/services/v2' },
+    ],
+  },
+  nppes_pharmacy: {
+    key: 'nppes_pharmacy',
+    category: 'pharmacy',
+    requiresOAuth: false,
+    testable: true,
+    helpText: 'Free CMS NPPES NPI Registry — search all US pharmacies (60,000+) by name, city, state, or zip. No API key required.',
+    fields: [
+      { key: 'baseUrl', label: 'Base URL', type: 'url', required: false, defaultValue: 'https://npiregistry.cms.hhs.gov/api/' },
+    ],
+  },
   ai_prescribing: {
     key: 'ai_prescribing',
     category: 'ai',
