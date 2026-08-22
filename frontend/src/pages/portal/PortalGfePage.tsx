@@ -20,7 +20,7 @@ import {
   FileTextOutlined,
   CheckCircleOutlined,
   InfoCircleOutlined,
-  ShieldOutlined,
+  SafetyOutlined,
   DollarOutlined,
 } from '@ant-design/icons';
 import type { GoodFaithEstimate } from '../types';
@@ -232,7 +232,7 @@ const PortalGfePage: React.FC = () => {
               message="Important Disclaimers"
               description={<ul style={{ margin: 0, paddingLeft: 16 }}>{selectedGfe.disclaimers.map((d, i) => <li key={i}>{d}</li>)}</ul>}
               showIcon
-              icon={<ShieldOutlined />}
+              icon={<SafetyOutlined />}
             />
           </>
         )}

@@ -73,6 +73,7 @@ import EditPatientModal from '../../components/patients/EditPatientModal';
 import { PatientInsuranceManager } from '../../components/patients/PatientInsuranceManager';
 import RiskManagementTab from '../../components/patients/RiskManagementTab';
 import QualityMeasuresTab from '../../components/patients/QualityMeasuresTab';
+import PriorAuthTab from '../../components/patients/PriorAuthTab';
 import { patientService } from '../../services/patientService';
 import type { PortalStatus, EnablePortalResult, PatientDocumentRecord } from '../../services/patientService';
 import type { EncounterVitals } from '../../services/encounterService';
@@ -5013,6 +5014,7 @@ const PatientDetailPage: React.FC = () => {
     { key: 'billing', label: 'Billing', children: <BillingTab /> },
     { key: 'risk-management', label: <span><SafetyOutlined /> Risk Management</span>, children: <RiskManagementTab patientId={id} /> },
     { key: 'quality-measures', label: <span><SafetyCertificateOutlined /> Quality Measures</span>, children: <QualityMeasuresTab patientId={id} /> },
+    { key: 'prior-auth', label: <span><FileTextOutlined /> Prior Authorization</span>, children: <PriorAuthTab patientId={id} /> },
     { key: 'portal', label: <span><SafetyOutlined /> Portal</span>, children: <PortalTab /> },
   ];
 

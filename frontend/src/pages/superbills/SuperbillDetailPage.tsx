@@ -21,6 +21,7 @@ import {
   DownloadOutlined,
   SendOutlined,
   CheckCircleOutlined,
+  FileTextOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSuperbillStore } from "../../store/dataStore";
@@ -225,6 +226,12 @@ const SuperbillDetailPage: React.FC = () => {
             <Space>
               <Button icon={<PrinterOutlined />} onClick={handlePrint}>
                 Print
+              </Button>
+              <Button
+                icon={<FileTextOutlined />}
+                onClick={() => navigate(`/superbills/${superbill.id}/cms1500`)}
+              >
+                View CMS-1500 Form
               </Button>
               <Button icon={<DownloadOutlined />} onClick={handleDownload} loading={loading}>
                 Download CMS-1500

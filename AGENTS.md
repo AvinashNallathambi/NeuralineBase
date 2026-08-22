@@ -58,7 +58,7 @@ npx typeorm migration:revert -d src/config/database.config.ts
 - Never commit `.env` with `DB_SYNCHRONIZE=true`
 
 ## Backend Modules
-- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, CarePlans, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications (drug DB + PatientMedications), Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions, Immunizations, Growth, RiskManagement, QualityMeasures
+- **Implemented**: Auth, Patients, FHIR, Superbill, ProviderAvailability, AI, Workflow, Prescriptions, CarePlans, Laboratory, Billing, Eligibility, Providers, ICD, Integrations, Medications (drug DB + PatientMedications), Pharmacies, Remittance, Denials, Appeals, Underpayments, Automation, Messaging, Subscriptions, Immunizations, Growth, RiskManagement, QualityMeasures, NSA, PriorAuth
 - **Stubs (empty)**: Appointments, Clinical, Notifications, Telemedicine, Users
 - AuthService looks up users via UsersService, falls back to in-memory dev user, and decrypts RSA-OAEP-encrypted passwords from the login form
 
@@ -194,6 +194,99 @@ The `NsaModule` (`backend/src/modules/nsa/`) provides full No Surprises Act comp
 
 ### Migration
 - `CreateNsaModule1790000000000` — creates `good_faith_estimates`, `nsa_variance_records`, `nsa_idr_cases`, `nsa_idr_deadlines` tables with all indexes (all `IF NOT EXISTS` guarded)
+
+## Prior Authorization Module
+The `PriorAuthModule` (`backend/src/modules/prior-auth/`) provides full prior authorization lifecycle management with AI-powered requirement prediction, auto-triggering at order entry, approval probability scoring, and expiration prediction:
+
+### Entities
+- **PriorAuthRequest** (`prior_auth_requests` table) — one row per PA request with full lifecycle tracking, payer info, procedure/diagnosis codes, clinical evidence, submission tracking, payer response, validity/expiration, P2P review, worklist management, version tracking, and AI prediction fields
+- **PriorAuthRequirement** (`prior_auth_requirements` table) — payer × CPT requirement rules with conditions, required clinical criteria, typical turnaround/validity, and AI-learned flag
+- **PriorAuthAttachment** (`prior_auth_attachments` table) — clinical evidence documents attached to PA requests (lab results, imaging reports, clinical notes, conservative treatment documentation)
+
+### PA Status Workflow
+`draft` → `submitted` → `pending` → `approved` | `denied` → `p2p_scheduled` → `appealed` | `expired` | `cancelled` | `superseded`
+
+### Benefit Types
+- `medical` — Medical benefit PA (procedures, imaging, DME)
+- `pharmacy` — Pharmacy benefit PA (specialty drugs)
+
+### Submission Methods
+`electronic` (X12 278 / FHIR PAS) | `portal` | `fax` | `phone` | `mail`
+
+### Urgency Levels
+- `standard` — 7 calendar day payer response deadline
+- `expedited` — 72-hour payer response deadline
+
+### Requirement Registry
+`prior-auth-requirement-registry.ts` — seeded payer × CPT rules covering:
+- High-cost imaging (MRI lumbar/brain/upper/lower extremity)
+- Specialty drugs (Eteplirsen, Cefepime)
+- High-cost procedures (lumbar fusion, total knee arthroplasty, heart transplant)
+- Sleep studies (polysomnography)
+- DME (BiPAP, pressure-reducing mattresses)
+- Payer-specific overrides (Aetna, UHC, Cigna, BCBS)
+- `lookupRequirement()` — deterministic lookup (payer-specific > generic)
+- `seedRequirements()` — seeds the database with default rules
+
+### AI Features (P1 — Differentiators)
+- **PA Requirement Predictor** (`POST /prior-auth/:id/ai/requirement-prediction`) — A1: Predicts PA requirement probability (0-100) using deterministic registry + AI for ambiguous/missing rules; uses denial history to adjust
+- **Auto-PA at Order Entry** (`POST /prior-auth/auto-trigger`) — A2: When provider orders a procedure, checks requirements and auto-drafts the PA request + letter inline before the encounter ends
+- **PA Approval Probability Score** (`POST /prior-auth/:id/ai/approval-prediction`) — A4: Predicts approval probability (0-100) before submission; recommends actions to push above 80%; identifies missing documentation
+- **PA Expiration Predictor** (`POST /prior-auth/:id/ai/expiration-prediction`) — A6: Predicts when PA will expire based on payer patterns; warns 7/3/1 days out; recommends reschedule or re-auth
+
+### AI Features (P2 — Deeper Workflow)
+- **Clinical Evidence Auto-Assembler** (`POST /prior-auth/:id/ai/assemble-evidence`) — A3: Pulls exact clinical evidence the payer's policy requires from the patient's chart; maps evidence to payer criteria; flags coverage gaps
+- **P2P Review Prep Coach** (`POST /prior-auth/:id/ai/p2p-prep`) — A5: When PA is denied, generates payer's likely denial rationale, evidence counter-arguments, similar approved cases, and talking points for the peer-to-peer call
+- **PA-to-Denial Closed-Loop Learning** (`POST /prior-auth/:id/ai/learn-from-denial`) — A7: Learns from denied PAs; extracts insights; auto-updates the requirement registry with new criteria to prevent future denials
+
+### PA Letter Generation
+- `PriorAuthAiService.generateAuthLetter()` — generates a formal PA request letter with patient demographics, ICD-10 diagnoses, CPT procedures, clinical justification, and medical necessity statement
+
+### Box 23 Auto-Attach
+When a PA is approved with an auth number, the system automatically attaches the auth number to the linked superbill's `priorAuthNumber` field (CMS-1500 Box 23) — no manual entry required.
+
+### Expiration Management
+- `checkExpirations()` — cron-callable endpoint that marks expired PAs and counts expiring-soon (within 7 days)
+- AI expiration predictor calculates risk level (low/medium/high) based on days remaining and scheduled service date
+
+### Version Tracking (Re-authorization)
+- `createNewVersion()` — supersedes the original PA and creates a new draft with incremented version number
+- Original is marked `superseded` and linked to the new version via `supersededById`
+
+### API Endpoints (all under `/api/v1/prior-auth`)
+- `POST /` — Create PA request
+- `GET /` — List PAs (filter by patientId, status, payerName, assignedTo)
+- `GET /worklist` — PA worklist (filter by status, assignee, payer, priority)
+- `GET /dashboard` — PA dashboard with metrics, approval rates, expiring PAs, top denial reasons
+- `GET /:id` — Get single PA with attachments
+- `PATCH /:id` — Update PA (draft only)
+- `DELETE /:id` — Cancel PA
+- `POST /:id/submit` — Submit to payer (draft → submitted → pending)
+- `POST /:id/payer-response` — Record payer response (approved/denied/p2p_scheduled); auto-attaches auth number to superbill
+- `POST /:id/new-version` — Create re-authorization (supersedes original)
+- `POST /:id/assign` — Assign to staff member
+- `PATCH /:id/priority` — Set priority (1=highest, 5=lowest)
+- `POST /:id/attachments` — Add clinical evidence attachment
+- `GET /:id/attachments` — List attachments
+- `DELETE /attachments/:attachmentId` — Delete attachment
+- `POST /check-requirement` — Check if PA required (registry + AI)
+- `GET /requirements` — List requirement rules
+- `POST /requirements/seed` — Seed requirement registry
+- `POST /auto-trigger` — A2: Auto-trigger PA at order entry
+- `POST /:id/ai/requirement-prediction` — A1: Predict PA requirement
+- `POST /:id/ai/approval-prediction` — A4: Predict approval probability
+- `POST /:id/ai/expiration-prediction` — A6: Predict expiration
+- `POST /:id/ai/assemble-evidence` — A3: Auto-assemble clinical evidence
+- `POST /:id/ai/p2p-prep` — A5: P2P review coaching
+- `POST /:id/ai/learn-from-denial` — A7: Learn from denial + update registry
+- `POST /check-expirations` — Check for expired/expiring PAs (cron-callable)
+
+### Frontend
+- `priorAuthService.ts` — API service with full TypeScript types
+- Types in `types/index.ts`: `PriorAuthRequest`, `PriorAuthAttachment`, `PriorAuthRequirement`, `PriorAuthDashboard`, `RequirementCheckResult`, `AutoTriggerPaResult`, `AiRequirementPrediction`, `AiApprovalPrediction`, `AiExpirationPrediction`
+
+### Migration
+- `CreatePriorAuthModule1791000000000` — creates `prior_auth_requests`, `prior_auth_requirements`, `prior_auth_attachments` tables with all indexes (all `IF NOT EXISTS` guarded)
 
 ## Patient Medications Module
 The `PatientMedications` feature lives inside the `MedicationsModule` and provides a longitudinal medication list distinct from e-prescriptions:
@@ -893,4 +986,146 @@ All core report endpoints accept:
   - Anomaly alerts banner
   - Export dropdown (CSV, Excel, PDF)
   - AI Analytics tab: natural-language report builder, revenue leakage analyzer, no-show risk table, denial risk table
+
+## Episode Management Module
+The `EpisodesModule` (`backend/src/modules/episodes/`) provides FHIR-aligned Episode of Care management — grouping multiple encounters, labs, imaging, medications, and care plans under a single clinical episode for a specific condition or event:
+
+### Entity
+- **Episode** (`episodes` table) — tracks an episode of care with: patient, title, type, status, conditions (ICD-10), care team, managing provider, start/end dates, linked encounter IDs, linked care plan IDs, cost summary, outcome assessment, AI insights, timeline, tags, and FHIR EpisodeOfCare ID
+
+### Episode Types
+- `acute` — short-term condition (days–weeks)
+- `chronic` — long-term condition (months–lifetime)
+- `episodic` — recurring condition (migraine, chemo cycle)
+- `perinatal` — pregnancy/delivery/postpartum
+- `surgical` — pre-op to post-op surgical pathway
+- `behavioral` — mental health / substance abuse treatment
+- `preventive` — preventive care episode
+
+### Episode Status (FHIR-aligned)
+`planned` → `active` → `onhold` → `finished` | `cancelled` | `entered_in_error`
+
+### Key Features
+- **Encounter linking**: Link/unlink encounters to an episode
+- **Care plan linking**: Link/unlink care plans to an episode
+- **Timeline aggregation**: Auto-built timeline from linked encounters
+- **Cost tracking**: Cost summary with encounter/lab/imaging/medication breakdown + AI-predicted cost variance
+- **Outcome assessment**: Clinical outcome (improved/stable/deteriorated/resolved/unknown), patient satisfaction, quality measure compliance
+- **Dashboard**: Total/active/finished episodes, by-type breakdown, average duration, average cost, high-risk count
+
+### AI Features
+- **Auto-Detect Episode** (`POST /episodes/auto-detect`) — scans encounter patterns and suggests creating an episode when 2+ encounters share the same condition within 6 months
+- **Cost Prediction** (`POST /episodes/:id/predict-cost`) — predicts total episode cost based on condition, patient risk, and historical episodes
+- **Pathway Deviation Detection** (`POST /episodes/:id/detect-deviations`) — flags missing recommended services, care gaps, escalation patterns, and lab monitoring gaps with risk score
+- **Episode Summary Generation** (`POST /episodes/:id/summary`) — generates narrative episode summary for referrals or transitions of care with key events, outcomes, and recommendations
+
+### API Endpoints (all under `/api/v1/episodes`)
+- `POST /` — Create episode
+- `GET /` — List episodes (filter by patientId, status, includeInactive)
+- `GET /dashboard` — Episode management dashboard metrics
+- `GET /:id` — Get single episode
+- `PATCH /:id` — Update episode
+- `POST /:id/close` — Close episode with outcome assessment
+- `DELETE /:id` — Cancel and soft-delete episode
+- `POST /:id/encounters` — Link encounter to episode
+- `DELETE /:id/encounters/:encounterId` — Unlink encounter
+- `POST /:id/care-plans` — Link care plan to episode
+- `DELETE /:id/care-plans/:carePlanId` — Unlink care plan
+- `POST /:id/calculate-costs` — Recalculate cost summary
+- `POST /auto-detect` — AI auto-detect episode from encounter patterns
+- `POST /:id/predict-cost` — AI cost prediction
+- `POST /:id/detect-deviations` — AI pathway deviation detection
+- `POST /:id/summary` — AI episode summary generation
+
+### Frontend
+- `episodeService.ts` — API service with full TypeScript types
+- `EpisodesDashboardPage.tsx` — Episode management dashboard at `/episodes` with metrics, episode table, create modal, detail drawer, AI action buttons
+- Sidebar navigation: "Episodes" (medicine icon) after NSA Compliance
+
+### Migration
+- `CreateEpisodes1791000000000` — creates `episodes` table with indexes (all `IF NOT EXISTS` guarded)
+
+## Screening & Outcome Templates Module
+The `ScreeningModule` (`backend/src/modules/screening/`) provides standardized screening instrument administration, auto-scoring, alert generation, score trending, and AI-assisted interpretation. Uses a hybrid model: predefined validated instruments (locked) + custom questionnaire builder.
+
+### Entities
+- **ScreeningInstrument** (`screening_instruments` table) — instrument template with questions, scoring rules, administration rules, LOINC codes. Predefined instruments are `isLocked=true` (cannot edit questions/scoring). Custom instruments are `isLocked=false`.
+- **ScreeningResult** (`screening_results` table) — administered screening with answers, auto-calculated score, alerts, administration metadata, and FHIR observation ID
+
+### Predefined Instruments (17 validated tools)
+**Tier 1 — Must Have:**
+- PHQ-9 (Depression, LOINC 44249-1) — 9 items, sum scoring 0-27, MIPS CMS2 required
+- GAD-7 (Anxiety, LOINC 70274-6) — 7 items, sum scoring 0-21, USPSTF Grade B
+- AUDIT-C (Alcohol, LOINC 72109-2) — 3 items, sum scoring 0-12, USPSTF Grade B
+- C-SSRS (Suicide Risk, LOINC 89702-8) — 6 items, categorical scoring, critical safety alerts
+
+**Tier 2 — High Value:**
+- DAST-10 (Drug Use, LOINC 82109-3) — 10 items, sum scoring 0-10
+- PHQ-2 (Depression pre-screener, LOINC 55758-7) — 2 items, sum scoring 0-6
+- GAD-2 (Anxiety pre-screener) — 2 items, sum scoring 0-6
+- PRAPARE (SDOH, LOINC 93023-0) — 7+ items, categorical scoring, MIPS 487 required
+- MDQ (Bipolar, LOINC 82015-9) — 15 items, custom scoring (7+ yes + co-occurrence + problem ≥ moderate)
+
+**Tier 3 — Pediatric:**
+- PHQ-A (Adolescent Depression, LOINC 89204-2) — 9 items, ages 11-17
+- SCARED (Child Anxiety, LOINC 62727-9) — 41 items, ages 8-18
+- PSC-17 (Pediatric Psychosocial) — 17 items, ages 4-16
+
+**Tier 4 — Specialty:**
+- EPDS (Postpartum Depression) — 10 items, females 15+
+- ASRS-v1.1 (Adult ADHD) — 6 items
+- DAS-21 (Depression+Anxiety+Stress) — 21 items
+- TAPS-2 (Substance Use, 4 domains) — 4 items
+- ISI (Insomnia Severity Index) — 7 items
+- PEG (Chronic Pain) — 3 items
+
+### Scoring Engine
+- **Sum scoring**: sums option scores, maps to severity ranges (minimal/mild/moderate/moderately_severe/severe)
+- **Categorical scoring**: evaluates conditions to determine category (e.g., C-SSRS: passive ideation vs active ideation vs intent vs behavior)
+- **Custom scoring**: instrument-specific logic (e.g., MDQ: 7+ yes + co-occurrence + problem ≥ moderate = positive)
+- All scoring auto-generates: total score, severity, interpretation, recommendation, color
+
+### Alert System
+- Each instrument has `alertThresholds` that are evaluated after scoring
+- Three severity levels: `info`, `warning`, `critical`
+- Critical alerts (e.g., C-SSRS Q4/Q5 = Yes, PHQ-9 Q9 ≥ 1) trigger immediate safety messages
+- Alerts are persisted with the screening result
+
+### Custom Questionnaire Builder
+- Staff with admin/doctor roles can create custom instruments
+- Supports question types: choice, multi_select, text, number, likert, display
+- Custom scoring rules (sum or categorical)
+- Custom administration rules (frequency, age range, sex, triggers)
+- Custom instruments are `isPredefined=false`, `isLocked=false`
+
+### AI Features (P3)
+- **Instrument Recommendation** (`POST /screening/ai/recommend`) — AI recommends which instruments to administer based on patient age, sex, chief complaint, active diagnoses, and recent screening history
+- **Score Interpretation** (`POST /screening/results/:id/interpret`) — AI generates plain-language interpretation of screening score with clinical implications, recommended next steps, and patient education points
+- **Risk Stratification** (`POST /screening/ai/risk-stratification`) — AI stratifies patient behavioral health risk based on screening history trends, identifying risk factors, protective factors, and follow-up urgency
+
+### API Endpoints (all under `/api/v1/screening`)
+- `GET /instruments` — List all instruments (predefined + custom)
+- `GET /instruments/:id` — Get instrument with all questions
+- `POST /instruments` — Create custom instrument
+- `PATCH /instruments/:id` — Update instrument (locked: only admin rules)
+- `POST /instruments/seed` — Seed all 17 predefined instruments
+- `POST /start` — Start screening session
+- `POST /:id/save-progress` — Save in-progress answers (auto-save)
+- `POST /:id/submit` — Submit completed screening (auto-scores + alerts)
+- `POST /:id/discontinue` — Discontinue in-progress screening
+- `GET /results` — Get results (filter by patientId, instrumentCode)
+- `GET /results/:id` — Get single result with answers and score
+- `GET /trend` — Get score trend for patient + instrument
+- `GET /dashboard` — Screening dashboard metrics
+- `POST /ai/recommend` — AI instrument recommendation
+- `POST /results/:id/interpret` — AI score interpretation
+- `POST /ai/risk-stratification` — AI behavioral health risk stratification
+
+### Frontend
+- `screeningService.ts` — API service with all endpoints
+- `ScreeningDashboardPage.tsx` — Screening dashboard at `/screening` with metrics, instrument cards, results table, detail drawer, AI interpretation modal
+- Sidebar navigation: "Screening" (experiment icon) after Episodes
+
+### Migration
+- `CreateScreeningModule1792000000000` — creates `screening_instruments` and `screening_results` tables with all indexes (all `IF NOT EXISTS` guarded)
 - **reportsService.ts** (`frontend/src/services/reportsService.ts`): Frontend service with typed interfaces for all report endpoints

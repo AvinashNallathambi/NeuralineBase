@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMS-1500 Health Insurance Claim Form (02/12)</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   CMS-1500 (02/12) — Pixel-Perfect Web Replica
+   Reference: https://www.nucc.org/images/stories/PDF/1500_claim_form_2012_02.pdf
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@page {
+    size: letter;
+    margin: 0;
+}
+
+:root {
+    --ocr-red: #e53935;
+    --ocr-red-light: #ef9a9a;
+    --form-black: #000000;
+    --label-font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --input-font: 'Courier New', Courier, monospace;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #f0f0f0;
+    font-family: var(--label-font);
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* ── Main container: exact 8.5" × 11" ─────────────────────────────────────── */
+.cms1500 {
+    width: 8.5in;
+    height: 11in;
+    background: #fff;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    color: var(--form-black);
+}
+
+/* ── Print styles ─────────────────────────────────────────────────────────── */
+@media print {
+    body {
+        background: #fff;
+        padding: 0;
+    }
+    .cms1500 {
+        box-shadow: none;
+        page-break-after: avoid;
+        page-break-inside: avoid;
+    }
+    .no-print { display: none !important; }
+}
+
+/* ── OCR Red color for all structural elements ────────────────────────────── */
+.cms1500 {
+    --red: var(--ocr-red);
+}
+
+/* ── Typography ───────────────────────────────────────────────────────────── */
+.cms1500 .label {
+    font-family: var(--label-font);
+    color: var(--ocr-red);
+    font-size: 6pt;
+    line-height: 1.15;
+    font-weight: 400;
+}
+
+.cms1500 .label-bold {
+    font-weight: 700;
+}
+
+.cms1500 .label-upper {
+    text-transform: uppercase;
+}
+
+.cms1500 input[type="text"],
+.cms1500 textarea {
+    font-family: var(--input-font);
+    font-size: 9pt;
+    color: var(--form-black);
+    border: none;
+    outline: none;
+    background: transparent;
+    width: 100%;
+    padding: 0;
+}
+
+.cms1500 input[type="text"]:focus,
+.cms1500 textarea:focus {
+    background: #fffde7;
+}
+
+.cms1500 input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 9px;
+    height: 9px;
+    border: 1px solid var(--ocr-red);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.cms1500 input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    top: -3px;
+    left: 0px;
+    font-size: 10px;
+    color: var(--form-black);
+    font-weight: bold;
+}
+
+/* ── PICA markers (top and bottom ruler lines) ────────────────────────────── */
+.pica-top, .pica-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 0.25in;
+}
+
+.pica-top { top: 0; }
+.pica-bottom { bottom: 0; align-items: flex-start; }
+
+.pica-mark {
+    width: 1px;
+    height: 6px;
+    background: var(--ocr-red);
+}
+
+.pica-mark.tall {
+    height: 10px;
+}
+
+/* ── Form grid: the main 2-column layout ──────────────────────────────────── */
+.form-grid {
+    position: absolute;
+    top: 0.5in;
+    left: 0.25in;
+    right: 0.25in;
+    bottom: 0.3in;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1.5px solid var(--ocr-red);
+}
+
+/* ── Header area ──────────────────────────────────────────────────────────── */
+.form-header {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1.2in 1fr 1.5in;
+    border-bottom: 1px solid var(--ocr-red);
+    height: 0.45in;
+}
+
+.header-left {
+    border-right: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.header-left .barcode {
+    font-family: var(--label-font);
+    font-size: 5pt;
+    color: var(--ocr-red);
+    line-height: 1;
+}
+
+.header-center {
+    padding: 2px 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.header-center .title {
+    font-family: var(--label-font);
+    font-size: 11pt;
+    font-weight: 700;
+    color: var(--ocr-red);
+    letter-spacing: 0.5px;
+}
+
+.header-center .subtitle {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    margin-top: 1px;
+}
+
+.header-center .print-type {
+    font-size: 6pt;
+    color: var(--ocr-red);
+    margin-top: 2px;
+    font-style: italic;
+}
+
+.header-right {
+    border-left: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.header-right .omb {
+    font-size: 6pt;
+    color: var(--ocr-red);
+    text-align: right;
+}
+
+.header-right .carrier-box {
+    flex: 1;
+    border: 1px solid var(--ocr-red);
+    margin-top: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 1: Patient & Insured Information (Boxes 1–13)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.patient-insured {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* ── Box 1: Insurance Program (full width) ────────────────────────────────── */
+.box-1 {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 3px 4px 4px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto;
+    gap: 0;
+}
+
+.box-1 .prog-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 4px;
+}
+
+.box-1 .prog-item label {
+    font-size: 6.5pt;
+    color: var(--ocr-red);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.box-1 .prog-item .sub {
+    font-size: 5pt;
+    color: var(--ocr-red);
+    opacity: 0.8;
+    display: block;
+    line-height: 1;
+    margin-top: 0;
+}
+
+/* ── Box 1a: Insured's ID Number (full width) ─────────────────────────────── */
+.box-1a {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 0.22in;
+}
+
+.box-1a .field-label {
+    font-size: 6pt;
+    color: var(--ocr-red);
+    white-space: nowrap;
+}
+
+.box-1a input {
+    flex: 1;
+    font-size: 9pt;
+}
+
+/* ── Left column (Patient) ────────────────────────────────────────────────── */
+.patient-col {
+    border-right: 1px solid var(--ocr-red);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Right column (Insured) ───────────────────────────────────────────────── */
+.insured-col {
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Generic field box ────────────────────────────────────────────────────── */
+.field-box {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.2in;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.field-box .field-label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    line-height: 1.1;
+}
+
+.field-box .field-input {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 14px;
+}
+
+.field-box .field-input input {
+    flex: 1;
+}
+
+/* ── Date + Sex boxes (3, 11a) ────────────────────────────────────────────── */
+.date-sex-box {
+    display: grid;
+    grid-template-columns: 1fr 0.5in;
+    border-bottom: 1px solid var(--ocr-red);
+    min-height: 0.2in;
+}
+
+.date-sex-box .date-part {
+    padding: 2px 4px;
+    border-right: 1px solid var(--ocr-red);
+    display: flex;
+    flex-direction: column;
+}
+
+.date-sex-box .sex-part {
+    padding: 2px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.sex-checkboxes {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+}
+
+.sex-checkboxes .sex-opt {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.sex-checkboxes .sex-opt label {
+    font-size: 7pt;
+    color: var(--ocr-red);
+    font-weight: 600;
+}
+
+/* ── City/State/Zip sub-row ───────────────────────────────────────────────── */
+.csz-row {
+    border-bottom: 1px solid var(--ocr-red);
+    display: grid;
+    grid-template-columns: 1fr 0.5in 0.7in 1fr;
+    min-height: 0.2in;
+}
+
+.csz-row > div {
+    padding: 2px 4px;
+    border-right: 1px solid var(--ocr-red);
+    display: flex;
+    flex-direction: column;
+}
+
+.csz-row > div:last-child {
+    border-right: none;
+}
+
+.csz-row .field-label {
+    font-size: 5pt;
+    color: var(--ocr-red);
+}
+
+/* ── Relationship checkboxes (Box 6) ──────────────────────────────────────── */
+.relationship-box {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.2in;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.relationship-box .field-label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    margin-right: 4px;
+}
+
+.relationship-box .rel-opt {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.relationship-box .rel-opt label {
+    font-size: 7pt;
+    color: var(--ocr-red);
+}
+
+/* ── Box 10: Condition Related To ─────────────────────────────────────────── */
+.box-10 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.55in;
+}
+
+.box-10 .field-label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    margin-bottom: 2px;
+}
+
+.box-10 .cond-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.box-10 .cond-row .cond-label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    white-space: nowrap;
+}
+
+.box-10 .cond-row .yn {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.box-10 .cond-row .yn label {
+    font-size: 6pt;
+    color: var(--ocr-red);
+}
+
+.box-10 .cond-row .state-input {
+    width: 0.4in;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* ── Box 10d: Claim Codes ─────────────────────────────────────────────────── */
+.box-10d {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.2in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 11d: Another Health Benefit Plan ─────────────────────────────────── */
+.box-11d {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.2in;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Box 12 & 13: Signatures ──────────────────────────────────────────────── */
+.box-12-13 {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 0.55in;
+}
+
+.box-12 {
+    border-right: 1px solid var(--ocr-red);
+    padding: 3px 4px;
+    display: flex;
+    flex-direction: column;
+}
+
+.box-13 {
+    padding: 3px 4px;
+    display: flex;
+    flex-direction: column;
+}
+
+.box-12 .sig-text, .box-13 .sig-text {
+    font-size: 5pt;
+    color: var(--ocr-red);
+    line-height: 1.2;
+    margin-bottom: 4px;
+}
+
+.sig-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.sig-row .signed-label {
+    font-size: 7pt;
+    color: var(--ocr-red);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.sig-row .sig-line {
+    flex: 1;
+    border-bottom: 1px solid var(--ocr-red);
+    min-height: 14px;
+}
+
+.sig-row .date-label {
+    font-size: 6pt;
+    color: var(--ocr-red);
+    white-space: nowrap;
+}
+
+.sig-row .date-line {
+    width: 0.8in;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 2: Dates, Referral, Diagnosis (Boxes 14–23)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dates-section {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* ── Box 14: Date of Current Illness ──────────────────────────────────────── */
+.box-14 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 15: Other Date ───────────────────────────────────────────────────── */
+.box-15 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 16: Dates Unable to Work ─────────────────────────────────────────── */
+.box-16 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 17: Referring Provider ───────────────────────────────────────────── */
+.box-17 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 17a/17b: Other ID / NPI ──────────────────────────────────────────── */
+.box-17a-17b {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Box 18: Hospitalization Dates ────────────────────────────────────────── */
+.box-18 {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 19: Additional Claim Information ─────────────────────────────────── */
+.box-19 {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 20: Outside Lab ──────────────────────────────────────────────────── */
+.box-20 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 21: Diagnosis A-L ────────────────────────────────────────────────── */
+.box-21 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.65in;
+}
+
+.box-21 .field-label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+    margin-bottom: 2px;
+}
+
+.dx-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 1px;
+}
+
+.dx-cell {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 2px;
+}
+
+.dx-cell .dx-letter {
+    font-size: 7pt;
+    color: var(--ocr-red);
+    font-weight: 600;
+    width: 10px;
+    flex-shrink: 0;
+}
+
+.dx-cell input {
+    font-size: 8pt;
+}
+
+.dx-indicator {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+    border-top: 1px solid var(--ocr-red);
+    padding-top: 2px;
+}
+
+.dx-indicator .label {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+}
+
+/* ── Box 22: Resubmission Code ────────────────────────────────────────────── */
+.box-22 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 23: Prior Authorization ──────────────────────────────────────────── */
+.box-23 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 3: Service Lines (Box 24, A through J)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.box-24 {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* Column headers row */
+.box-24 .col-headers {
+    display: grid;
+    grid-template-columns: 0.8in 0.35in 0.25in 1.1in 0.35in 0.55in 0.3in 0.35in 0.45in 0.6in;
+    border-bottom: 1px solid var(--ocr-red);
+    min-height: 0.35in;
+}
+
+.box-24 .col-header {
+    border-right: 1px solid var(--ocr-red);
+    padding: 2px 2px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.box-24 .col-header:last-child {
+    border-right: none;
+}
+
+.box-24 .col-header .h-label {
+    font-size: 5pt;
+    color: var(--ocr-red);
+    line-height: 1.1;
+    font-weight: 600;
+}
+
+.box-24 .col-header .h-sub {
+    font-size: 4.5pt;
+    color: var(--ocr-red);
+    line-height: 1;
+}
+
+/* Service line rows */
+.box-24 .service-row {
+    display: grid;
+    grid-template-columns: 0.8in 0.35in 0.25in 1.1in 0.35in 0.55in 0.3in 0.35in 0.45in 0.6in;
+    border-bottom: 1px solid var(--ocr-red);
+    min-height: 0.22in;
+}
+
+.box-24 .service-row:last-child {
+    border-bottom: none;
+}
+
+.box-24 .service-row:nth-child(odd) {
+    background: rgba(229, 57, 53, 0.04);
+}
+
+.box-24 .svc-cell {
+    border-right: 1px solid var(--ocr-red);
+    padding: 1px 2px;
+    display: flex;
+    align-items: center;
+}
+
+.box-24 .svc-cell:last-child {
+    border-right: none;
+}
+
+.box-24 .svc-cell input {
+    font-size: 7.5pt;
+}
+
+/* 24A: Date(s) of Service — From/To sub-cells */
+.box-24 .svc-cell.date-cell {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.box-24 .svc-cell.date-cell > div {
+    border-right: 1px solid var(--ocr-red);
+    padding: 0 1px;
+}
+
+.box-24 .svc-cell.date-cell > div:last-child {
+    border-right: none;
+}
+
+/* 24D: CPT + Modifier sub-cells */
+.box-24 .svc-cell.cpt-cell {
+    display: grid;
+    grid-template-columns: 1fr 0.35in;
+}
+
+.box-24 .svc-cell.cpt-cell > div {
+    border-right: 1px solid var(--ocr-red);
+    padding: 0 1px;
+}
+
+.box-24 .svc-cell.cpt-cell > div:last-child {
+    border-right: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SECTION 4: Footer (Boxes 25–33)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.footer-section {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+/* ── Box 25: Federal Tax ID ───────────────────────────────────────────────── */
+.box-25 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.box-25 .tax-id-input {
+    width: 1in;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+/* ── Box 26: Patient's Account No ─────────────────────────────────────────── */
+.box-26 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* ── Box 27: Accept Assignment ────────────────────────────────────────────── */
+.box-27 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.22in;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ── Box 28-30: Total Charge, Amount Paid, Reserved ───────────────────────── */
+.box-28-30 {
+    border-bottom: 1px solid var(--ocr-red);
+    display: grid;
+    grid-template-columns: 1fr 1fr 0.8in;
+    min-height: 0.22in;
+}
+
+.box-28, .box-29, .box-30 {
+    border-right: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.box-30 {
+    border-right: none;
+}
+
+/* ── Box 31: Signature of Physician ───────────────────────────────────────── */
+.box-31 {
+    border-right: 1px solid var(--ocr-red);
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.3in;
+    display: flex;
+    flex-direction: column;
+}
+
+.box-31 .sig-bottom {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: auto;
+}
+
+/* ── Box 32: Service Facility Location ────────────────────────────────────── */
+.box-32 {
+    border-bottom: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    min-height: 0.3in;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Box 33: Billing Provider Info ────────────────────────────────────────── */
+.box-33 {
+    grid-column: 1 / -1;
+    padding: 2px 4px;
+    min-height: 0.4in;
+    display: flex;
+    flex-direction: column;
+}
+
+.box-33 .billing-grid {
+    display: grid;
+    grid-template-columns: 1fr 0.6in 0.6in;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+/* ── NUCC footer ──────────────────────────────────────────────────────────── */
+.nucc-footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--ocr-red);
+    padding: 2px 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 0.18in;
+}
+
+.nucc-footer .nucc-link {
+    font-size: 5.5pt;
+    color: var(--ocr-red);
+}
+
+.nucc-footer .print-instruction {
+    font-size: 6pt;
+    color: var(--ocr-red);
+    font-style: italic;
+}
+
+/* ── Utility classes ──────────────────────────────────────────────────────── */
+.yn-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.yn-group .yn-opt {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+}
+
+.yn-group .yn-opt label {
+    font-size: 6pt;
+    color: var(--ocr-red);
+}
+
+.qual-input {
+    width: 0.3in;
+    border-bottom: 1px solid var(--ocr-red);
+    text-align: center;
+}
+
+.date-input {
+    width: 0.7in;
+    border-bottom: 1px solid var(--ocr-red);
+}
+
+.flex-fill { flex: 1; }
+.noborder { border: none !important; }
+
+/* ── Toolbar (non-print) ──────────────────────────────────────────────────── */
+.toolbar {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+}
+
+.toolbar button {
+    padding: 6px 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+}
+
+.toolbar button:hover {
+    background: #f5f5f5;
+}
+</style>
+</head>
+<body>
+
+<!-- Toolbar (hidden on print) -->
+<div class="toolbar no-print">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="clearForm()">Clear Form</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     CMS-1500 FORM
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<div class="cms1500" id="cms1500">
+
+    <!-- PICA top markers -->
+    <div class="pica-top">
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+    </div>
+
+    <!-- Main form grid -->
+    <div class="form-grid">
+
+        <!-- ── Header ─────────────────────────────────────────────────────── -->
+        <div class="form-header">
+            <div class="header-left">
+                <div class="barcode">||||||| || |||| ||||| ||| |||| ||| ||||| || ||||| ||| |||| |||</div>
+                <div style="font-size:5pt;color:var(--ocr-red);text-align:center;">PICA</div>
+            </div>
+            <div class="header-center">
+                <div class="title">HEALTH INSURANCE CLAIM FORM</div>
+                <div class="subtitle">APPROVED BY NATIONAL UNIFORM CLAIM COMMITTEE (NUCC) 02/12</div>
+                <div class="print-type">PLEASE PRINT OR TYPE</div>
+            </div>
+            <div class="header-right">
+                <div class="omb">APPROVED OMB-0938-1197 FORM 1500 (02-12)</div>
+                <div class="carrier-box"></div>
+            </div>
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════
+             PATIENT & INSURED INFORMATION
+             ═════════════════════════════════════════════════════════════════ -->
+        <div class="patient-insured">
+
+            <!-- Box 1: Insurance Program -->
+            <div class="box-1">
+                <div style="font-size:6pt;color:var(--ocr-red);font-weight:700;grid-column:1/5;margin-bottom:2px;">
+                    1.&nbsp;&nbsp;<span style="font-weight:400;">Select the appropriate program:</span>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="medicare" name="program" value="medicare">
+                    <div><label for="medicare">MEDICARE</label><span class="sub">(Medicare #)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="medicaid" name="program" value="medicaid">
+                    <div><label for="medicaid">MEDICAID</label><span class="sub">(Medicaid #)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="tricare" name="program" value="tricare">
+                    <div><label for="tricare">TRICARE</label><span class="sub">(Member ID #)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="champva" name="program" value="champva">
+                    <div><label for="champva">CHAMPVA</label><span class="sub">(Member ID #)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="group" name="program" value="group">
+                    <div><label for="group">GROUP HEALTH PLAN</label><span class="sub">(ID#)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="feca" name="program" value="feca">
+                    <div><label for="feca">FECA</label><span class="sub">(ID#)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="blklung" name="program" value="blklung">
+                    <div><label for="blklung">BLK LUNG</label><span class="sub">(ID#)</span></div>
+                </div>
+                <div class="prog-item">
+                    <input type="checkbox" id="other" name="program" value="other">
+                    <div><label for="other">OTHER</label><span class="sub">(ID#)</span></div>
+                </div>
+            </div>
+
+            <!-- Box 1a: Insured's ID Number -->
+            <div class="box-1a">
+                <span class="field-label">1a. INSURED'S I.D. NUMBER (For Program in Item 1)</span>
+                <input type="text" id="f1a" placeholder="">
+            </div>
+
+            <!-- ── Left Column (Patient) ────────────────────────────────────── -->
+            <div class="patient-col">
+
+                <!-- Box 2: Patient's Name -->
+                <div class="field-box">
+                    <div class="field-label">2. PATIENT'S NAME (Last Name, First Name, Middle Initial)</div>
+                    <div class="field-input"><input type="text" id="f2" placeholder=""></div>
+                </div>
+
+                <!-- Box 3: Patient's Birth Date + Sex -->
+                <div class="date-sex-box">
+                    <div class="date-part">
+                        <div class="field-label">3. PATIENT'S BIRTH DATE</div>
+                        <div class="field-input"><input type="text" id="f3" placeholder="MM DD YY" style="font-size:8pt;"></div>
+                    </div>
+                    <div class="sex-part">
+                        <div class="field-label">SEX</div>
+                        <div class="sex-checkboxes">
+                            <div class="sex-opt"><input type="checkbox" id="f3m" name="psex" value="M"><label for="f3m">M</label></div>
+                            <div class="sex-opt"><input type="checkbox" id="f3f" name="psex" value="F"><label for="f3f">F</label></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Box 5: Patient's Address -->
+                <div class="field-box">
+                    <div class="field-label">5. PATIENT'S ADDRESS (No., Street)</div>
+                    <div class="field-input"><input type="text" id="f5" placeholder=""></div>
+                </div>
+
+                <!-- City / State / Zip / Phone -->
+                <div class="csz-row">
+                    <div>
+                        <div class="field-label">CITY</div>
+                        <div class="field-input"><input type="text" id="f5city" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">STATE</div>
+                        <div class="field-input"><input type="text" id="f5state" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">ZIP CODE</div>
+                        <div class="field-input"><input type="text" id="f5zip" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">TELEPHONE (Include Area Code)</div>
+                        <div class="field-input"><input type="text" id="f5phone" style="font-size:8pt;"></div>
+                    </div>
+                </div>
+
+                <!-- Box 6: Patient Relationship to Insured -->
+                <div class="relationship-box">
+                    <span class="field-label">6. PATIENT RELATIONSHIP TO INSURED</span>
+                    <div class="rel-opt"><input type="checkbox" id="f6self" name="rel" value="self"><label for="f6self">Self</label></div>
+                    <div class="rel-opt"><input type="checkbox" id="f6spouse" name="rel" value="spouse"><label for="f6spouse">Spouse</label></div>
+                    <div class="rel-opt"><input type="checkbox" id="f6child" name="rel" value="child"><label for="f6child">Child</label></div>
+                    <div class="rel-opt"><input type="checkbox" id="f6other" name="rel" value="other"><label for="f6other">Other</label></div>
+                </div>
+
+                <!-- Box 7: Insured's Address -->
+                <div class="field-box">
+                    <div class="field-label">7. INSURED'S ADDRESS (No., Street)</div>
+                    <div class="field-input"><input type="text" id="f7" placeholder=""></div>
+                </div>
+
+                <!-- Insured City / State / Zip / Phone -->
+                <div class="csz-row">
+                    <div>
+                        <div class="field-label">CITY</div>
+                        <div class="field-input"><input type="text" id="f7city" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">STATE</div>
+                        <div class="field-input"><input type="text" id="f7state" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">ZIP CODE</div>
+                        <div class="field-input"><input type="text" id="f7zip" style="font-size:8pt;"></div>
+                    </div>
+                    <div>
+                        <div class="field-label">TELEPHONE</div>
+                        <div class="field-input"><input type="text" id="f7phone" style="font-size:8pt;"></div>
+                    </div>
+                </div>
+
+                <!-- Box 9: Other Insured's Name -->
+                <div class="field-box">
+                    <div class="field-label">9. OTHER INSURED'S NAME (Last Name, First Name, Middle Initial)</div>
+                    <div class="field-input"><input type="text" id="f9" placeholder=""></div>
+                </div>
+
+                <!-- Box 9a: Other Insured's Policy/Group Number -->
+                <div class="field-box">
+                    <div class="field-label">9a. OTHER INSURED'S POLICY OR GROUP NUMBER</div>
+                    <div class="field-input"><input type="text" id="f9a" placeholder=""></div>
+                </div>
+
+                <!-- Box 9d: Insurance Plan Name or Program Name -->
+                <div class="field-box" style="border-bottom:none;">
+                    <div class="field-label">9d. INSURANCE PLAN NAME OR PROGRAM NAME</div>
+                    <div class="field-input"><input type="text" id="f9d" placeholder=""></div>
+                </div>
+
+            </div>
+
+            <!-- ── Right Column (Insured) ───────────────────────────────────── -->
+            <div class="insured-col">
+
+                <!-- Box 4: Insured's Name -->
+                <div class="field-box">
+                    <div class="field-label">4. INSURED'S NAME (Last Name, First Name, Middle Initial)</div>
+                    <div class="field-input"><input type="text" id="f4" placeholder=""></div>
+                </div>
+
+                <!-- Box 11: Insured's Policy Group or FECA Number -->
+                <div class="field-box">
+                    <div class="field-label">11. INSURED'S POLICY GROUP OR FECA NUMBER</div>
+                    <div class="field-input"><input type="text" id="f11" placeholder=""></div>
+                </div>
+
+                <!-- Box 11a: Insured's DOB + Sex -->
+                <div class="date-sex-box">
+                    <div class="date-part">
+                        <div class="field-label">a. INSURED'S DATE OF BIRTH</div>
+                        <div class="field-input"><input type="text" id="f11a" placeholder="MM DD YY" style="font-size:8pt;"></div>
+                    </div>
+                    <div class="sex-part">
+                        <div class="field-label">SEX</div>
+                        <div class="sex-checkboxes">
+                            <div class="sex-opt"><input type="checkbox" id="f11am" name="isex" value="M"><label for="f11am">M</label></div>
+                            <div class="sex-opt"><input type="checkbox" id="f11af" name="isex" value="F"><label for="f11af">F</label></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Box 11b: Claim ID -->
+                <div class="field-box">
+                    <div class="field-label">b. OTHER CLAIM ID (Designated by NUCC)</div>
+                    <div class="field-input"><input type="text" id="f11b" placeholder=""></div>
+                </div>
+
+                <!-- Box 11c: Insurance Plan Name -->
+                <div class="field-box">
+                    <div class="field-label">c. INSURANCE PLAN NAME OR PROGRAM NAME</div>
+                    <div class="field-input"><input type="text" id="f11c" placeholder=""></div>
+                </div>
+
+                <!-- Box 11d: Another Health Benefit Plan? -->
+                <div class="box-11d">
+                    <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">d. IS THERE ANOTHER HEALTH BENEFIT PLAN?</span>
+                    <div class="yn-group">
+                        <div class="yn-opt"><input type="checkbox" id="f11dyes" name="anotherplan" value="yes"><label for="f11dyes">YES</label></div>
+                        <div class="yn-opt"><input type="checkbox" id="f11dno" name="anotherplan" value="no"><label for="f11dno">NO</label></div>
+                    </div>
+                    <span style="font-size:5pt;color:var(--ocr-red);">If yes, complete items 9, 9a and 9d</span>
+                </div>
+
+                <!-- Box 10: Condition Related To -->
+                <div class="box-10">
+                    <div class="field-label">10. IS PATIENT'S CONDITION RELATED TO:</div>
+                    <div class="cond-row">
+                        <span class="cond-label">a. EMPLOYMENT? (Current or Previous)</span>
+                        <div class="yn"><input type="checkbox" id="f10ay" name="f10a" value="yes"><label for="f10ay">YES</label></div>
+                        <div class="yn"><input type="checkbox" id="f10an" name="f10a" value="no"><label for="f10an">NO</label></div>
+                    </div>
+                    <div class="cond-row">
+                        <span class="cond-label">b. AUTO ACCIDENT?</span>
+                        <div class="yn"><input type="checkbox" id="f10by" name="f10b" value="yes"><label for="f10by">YES</label></div>
+                        <div class="yn"><input type="checkbox" id="f10bn" name="f10b" value="no"><label for="f10bn">NO</label></div>
+                        <span class="cond-label">PLACE (State)</span>
+                        <input type="text" class="state-input" id="f10bstate" style="font-size:8pt;">
+                    </div>
+                    <div class="cond-row">
+                        <span class="cond-label">c. OTHER ACCIDENT?</span>
+                        <div class="yn"><input type="checkbox" id="f10cy" name="f10c" value="yes"><label for="f10cy">YES</label></div>
+                        <div class="yn"><input type="checkbox" id="f10cn" name="f10c" value="no"><label for="f10cn">NO</label></div>
+                    </div>
+                </div>
+
+                <!-- Box 10d: Claim Codes -->
+                <div class="box-10d">
+                    <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">10d. CLAIM CODES (Designated by NUCC)</span>
+                    <input type="text" id="f10d" style="flex:1;">
+                </div>
+
+            </div>
+
+            <!-- Box 12 & 13: Signatures (full width) -->
+            <div class="box-12-13">
+                <div class="box-12">
+                    <div class="sig-text">
+                        12. PATIENT'S OR AUTHORIZED PERSON'S SIGNATURE. I authorize the release of any medical or other<br>
+                        information necessary to process this claim. I also request payment of government benefits either to myself<br>
+                        or to the party who accepts assignment below.
+                    </div>
+                    <div class="sig-row">
+                        <span class="signed-label">SIGNED</span>
+                        <div class="sig-line"><input type="text" id="f12sig" style="font-size:8pt;"></div>
+                        <span class="date-label">DATE</span>
+                        <div class="date-line"><input type="text" id="f12date" placeholder="MM DD YY" style="font-size:8pt;"></div>
+                    </div>
+                </div>
+                <div class="box-13">
+                    <div class="sig-text">
+                        13. INSURED'S OR AUTHORIZED PERSON'S SIGNATURE I authorize payment of medical benefits to the<br>
+                        undersigned physician or supplier for services described below.
+                    </div>
+                    <div class="sig-row">
+                        <span class="signed-label">SIGNED</span>
+                        <div class="sig-line"><input type="text" id="f13sig" style="font-size:8pt;"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /patient-insured -->
+
+        <!-- ═════════════════════════════════════════════════════════════════
+             DATES, REFERRAL, DIAGNOSIS (14–23)
+             ═════════════════════════════════════════════════════════════════ -->
+        <div class="dates-section">
+
+            <!-- Box 14: Date of Current Illness -->
+            <div class="box-14">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">14. DATE OF CURRENT ILLNESS, INJURY, or PREGNANCY (LMP):</span>
+                <input type="text" class="date-input" id="f14" placeholder="MM DD YY">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">QUAL</span>
+                <input type="text" class="qual-input" id="f14qual">
+            </div>
+
+            <!-- Box 15: Other Date -->
+            <div class="box-15">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">15. OTHER DATE</span>
+                <input type="text" class="date-input" id="f15" placeholder="MM DD YY">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">QUAL</span>
+                <input type="text" class="qual-input" id="f15qual">
+            </div>
+
+            <!-- Box 16: Dates Unable to Work -->
+            <div class="box-16">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">16. DATES PATIENT UNABLE TO WORK IN CURRENT OCCUPATION</span>
+                <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">FROM</span>
+                <input type="text" class="date-input" id="f16from" placeholder="MM DD YY">
+                <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">TO</span>
+                <input type="text" class="date-input" id="f16to" placeholder="MM DD YY">
+            </div>
+
+            <!-- Box 17: Referring Provider Name -->
+            <div class="box-17">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">17. NAME OF REFERRING PROVIDER OR OTHER SOURCE</span>
+                <input type="text" id="f17" style="flex:1;">
+            </div>
+
+            <!-- Box 17a/17b: Other ID / NPI -->
+            <div class="box-17a-17b">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">17a. OTHER ID</span>
+                <input type="text" id="f17a" style="width:0.8in;font-size:8pt;">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">17b. NPI</span>
+                <input type="text" id="f17b" style="flex:1;font-size:8pt;">
+            </div>
+
+            <!-- Box 18: Hospitalization Dates (full width) -->
+            <div class="box-18">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">18. HOSPITALIZATION DATES RELATED TO CURRENT SERVICES</span>
+                <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">FROM</span>
+                <input type="text" class="date-input" id="f18from" placeholder="MM DD YY">
+                <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">TO</span>
+                <input type="text" class="date-input" id="f18to" placeholder="MM DD YY">
+            </div>
+
+            <!-- Box 19: Additional Claim Information -->
+            <div class="box-19">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">19. ADDITIONAL CLAIM INFORMATION (Designated by NUCC)</span>
+                <input type="text" id="f19" style="flex:1;">
+            </div>
+
+            <!-- Box 20: Outside Lab -->
+            <div class="box-20">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">20. OUTSIDE LAB?</span>
+                <div class="yn-group">
+                    <div class="yn-opt"><input type="checkbox" id="f20yes" name="f20" value="yes"><label for="f20yes">YES</label></div>
+                    <div class="yn-opt"><input type="checkbox" id="f20no" name="f20" value="no"><label for="f20no">NO</label></div>
+                </div>
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">$ CHARGES</span>
+                <input type="text" id="f20charges" style="width:0.7in;font-size:8pt;">
+            </div>
+
+            <!-- Box 21: Diagnosis A-L -->
+            <div class="box-21">
+                <div class="field-label">21. DIAGNOSIS OR NATURE OF ILLNESS OR INJURY — Relate A-L to service line below (24E)</div>
+                <div class="dx-grid">
+                    <div class="dx-cell"><span class="dx-letter">A.</span><input type="text" id="dxa"></div>
+                    <div class="dx-cell"><span class="dx-letter">E.</span><input type="text" id="dxe"></div>
+                    <div class="dx-cell"><span class="dx-letter">I.</span><input type="text" id="dxi"></div>
+                    <div style="display:flex;align-items:center;padding:1px 2px;"><span class="dx-letter" style="font-size:5pt;color:var(--ocr-red);">ICD Ind.</span><input type="text" id="icdind" style="width:0.3in;font-size:7pt;"></div>
+                    <div class="dx-cell"><span class="dx-letter">B.</span><input type="text" id="dxb"></div>
+                    <div class="dx-cell"><span class="dx-letter">F.</span><input type="text" id="dxf"></div>
+                    <div class="dx-cell"><span class="dx-letter">J.</span><input type="text" id="dxj"></div>
+                    <div></div>
+                    <div class="dx-cell"><span class="dx-letter">C.</span><input type="text" id="dxc"></div>
+                    <div class="dx-cell"><span class="dx-letter">G.</span><input type="text" id="dxg"></div>
+                    <div class="dx-cell"><span class="dx-letter">K.</span><input type="text" id="dxk"></div>
+                    <div></div>
+                    <div class="dx-cell"><span class="dx-letter">D.</span><input type="text" id="dxd"></div>
+                    <div class="dx-cell"><span class="dx-letter">H.</span><input type="text" id="dxh"></div>
+                    <div class="dx-cell"><span class="dx-letter">L.</span><input type="text" id="dxl"></div>
+                    <div></div>
+                </div>
+            </div>
+
+            <!-- Box 22: Resubmission Code -->
+            <div class="box-22">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">22. RESUBMISSION CODE</span>
+                <input type="text" id="f22code" style="width:0.4in;font-size:8pt;">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">ORIGINAL REF. NO.</span>
+                <input type="text" id="f22ref" style="flex:1;font-size:8pt;">
+            </div>
+
+            <!-- Box 23: Prior Authorization -->
+            <div class="box-23">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">23. PRIOR AUTHORIZATION NUMBER</span>
+                <input type="text" id="f23" style="flex:1;">
+            </div>
+
+        </div><!-- /dates-section -->
+
+        <!-- ═════════════════════════════════════════════════════════════════
+             SERVICE LINES (Box 24)
+             ═════════════════════════════════════════════════════════════════ -->
+        <div class="box-24">
+            <!-- Column Headers -->
+            <div class="col-headers">
+                <div class="col-header">
+                    <span class="h-label">24.a DATE(S) OF SERVICE</span>
+                    <span class="h-sub">From&nbsp;&nbsp;To<br>MM DD YY</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.b</span>
+                    <span class="h-sub">PLACE OF SERVICE</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.c</span>
+                    <span class="h-sub">EMG</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.d PROCEDURES, SERVICES, OR SUPPLIES</span>
+                    <span class="h-sub">(Explain Unusual Circumstances)<br>CPT/HCPCS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MODIFIER</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.e</span>
+                    <span class="h-sub">DIAGNOSIS POINTER</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.f</span>
+                    <span class="h-sub">$ CHARGES</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.g</span>
+                    <span class="h-sub">DAYS OR UNITS</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.h</span>
+                    <span class="h-sub">EPSDT<br>Family<br>Plan</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.i</span>
+                    <span class="h-sub">ID. QUAL.</span>
+                </div>
+                <div class="col-header">
+                    <span class="h-label">24.j</span>
+                    <span class="h-sub">RENDERING PROVIDER ID #</span>
+                </div>
+            </div>
+
+            <!-- 6 Service Line Rows -->
+            <div id="service-lines">
+                <!-- Rows generated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- ═════════════════════════════════════════════════════════════════
+             FOOTER (Boxes 25–33)
+             ═════════════════════════════════════════════════════════════════ -->
+        <div class="footer-section">
+
+            <!-- Box 25: Federal Tax ID -->
+            <div class="box-25">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">25. FEDERAL TAX I.D. NUMBER</span>
+                <input type="text" class="tax-id-input" id="f25">
+                <div class="yn-group">
+                    <div class="yn-opt"><input type="checkbox" id="f25ssn" name="taxid" value="ssn"><label for="f25ssn">SSN</label></div>
+                    <div class="yn-opt"><input type="checkbox" id="f25ein" name="taxid" value="ein"><label for="f25ein">EIN</label></div>
+                </div>
+            </div>
+
+            <!-- Box 26: Patient's Account No -->
+            <div class="box-26">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">26. PATIENT'S ACCOUNT NO.</span>
+                <input type="text" id="f26" style="flex:1;">
+            </div>
+
+            <!-- Box 27: Accept Assignment -->
+            <div class="box-27">
+                <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">27. ACCEPT ASSIGNMENT?</span>
+                <div class="yn-group">
+                    <div class="yn-opt"><input type="checkbox" id="f27yes" name="assign" value="yes"><label for="f27yes">YES</label></div>
+                    <div class="yn-opt"><input type="checkbox" id="f27no" name="assign" value="no"><label for="f27no">NO</label></div>
+                </div>
+                <span style="font-size:4.5pt;color:var(--ocr-red);">(For govt. claims, see back)</span>
+            </div>
+
+            <!-- Box 28-30: Total Charge / Amount Paid / Reserved -->
+            <div class="box-28-30">
+                <div class="box-28">
+                    <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">28. TOTAL CHARGE $</span>
+                    <input type="text" id="f28" style="flex:1;font-size:8pt;">
+                </div>
+                <div class="box-29">
+                    <span class="field-label" style="font-size:5.5pt;color:var(--ocr-red);">29. AMOUNT PAID $</span>
+                    <input type="text" id="f29" style="flex:1;font-size:8pt;">
+                </div>
+                <div class="box-30">
+                    <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">30. Rsvd for NUCC Use</span>
+                </div>
+            </div>
+
+            <!-- Box 31: Signature of Physician -->
+            <div class="box-31">
+                <div class="field-label" style="font-size:5pt;color:var(--ocr-red);">31. SIGNATURE OF PHYSICIAN OR SUPPLIER INCLUDING DEGREES OR CREDENTIALS<br>(I certify that the statements on the reverse apply to this bill and are made a part thereof.)</div>
+                <div class="sig-bottom">
+                    <span class="signed-label">SIGNED</span>
+                    <div class="sig-line"><input type="text" id="f31sig" style="font-size:8pt;"></div>
+                    <span class="date-label">DATE</span>
+                    <div class="date-line"><input type="text" id="f31date" placeholder="MM DD YY" style="font-size:8pt;"></div>
+                </div>
+            </div>
+
+            <!-- Box 32: Service Facility Location -->
+            <div class="box-32">
+                <div class="field-label" style="font-size:5pt;color:var(--ocr-red);">32. SERVICE FACILITY LOCATION INFORMATION</div>
+                <div style="display:flex;align-items:center;gap:4px;margin-top:auto;">
+                    <input type="text" id="f32" style="flex:1;font-size:8pt;" placeholder="Facility name & address">
+                    <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">a. NPI</span>
+                    <input type="text" id="f32npi" style="width:0.8in;font-size:8pt;">
+                </div>
+            </div>
+
+            <!-- Box 33: Billing Provider (full width) -->
+            <div class="box-33">
+                <div class="field-label" style="font-size:5pt;color:var(--ocr-red);">33. BILLING PROVIDER INFO & PH #</div>
+                <div class="billing-grid">
+                    <div style="display:flex;flex-direction:column;">
+                        <input type="text" id="f33name" style="font-size:8pt;" placeholder="Billing provider name & address">
+                        <input type="text" id="f33addr" style="font-size:7pt;margin-top:2px;" placeholder="Street, City, State, ZIP">
+                    </div>
+                    <div style="display:flex;flex-direction:column;">
+                        <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">a. NPI</span>
+                        <input type="text" id="f33npi" style="font-size:8pt;">
+                    </div>
+                    <div style="display:flex;flex-direction:column;">
+                        <span class="field-label" style="font-size:5pt;color:var(--ocr-red);">b. Other ID</span>
+                        <input type="text" id="f33other" style="font-size:8pt;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- NUCC Footer -->
+            <div class="nucc-footer">
+                <span class="nucc-link">NUCC Instruction Manual available at: www.nucc.org</span>
+                <span class="print-instruction">PLEASE PRINT OR TYPE</span>
+            </div>
+
+        </div><!-- /footer-section -->
+
+    </div><!-- /form-grid -->
+
+    <!-- PICA bottom markers -->
+    <div class="pica-bottom">
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+        <div class="pica-mark"></div><div class="pica-mark"></div>
+        <div class="pica-mark tall"></div>
+    </div>
+
+</div><!-- /cms1500 -->
+
+<script>
+// ── Generate 6 service line rows ─────────────────────────────────────────────
+(function generateServiceLines() {
+    const container = document.getElementById('service-lines');
+    for (let i = 0; i < 6; i++) {
+        const row = document.createElement('div');
+        row.className = 'service-row';
+        row.innerHTML = `
+            <div class="svc-cell date-cell">
+                <div><input type="text" id="r${i}from" placeholder="MM DD YY"></div>
+                <div><input type="text" id="r${i}to" placeholder="MM DD YY"></div>
+            </div>
+            <div class="svc-cell"><input type="text" id="r${i}pos" style="font-size:7pt;text-align:center;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}emg" style="font-size:7pt;text-align:center;"></div>
+            <div class="svc-cell cpt-cell">
+                <div><input type="text" id="r${i}cpt" style="font-size:7.5pt;"></div>
+                <div><input type="text" id="r${i}mod" style="font-size:7pt;"></div>
+            </div>
+            <div class="svc-cell"><input type="text" id="r${i}dxp" style="font-size:7.5pt;text-align:center;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}chg" style="font-size:7.5pt;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}units" style="font-size:7.5pt;text-align:center;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}epsdt" style="font-size:7pt;text-align:center;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}idqual" style="font-size:7pt;text-align:center;"></div>
+            <div class="svc-cell"><input type="text" id="r${i}render" style="font-size:7pt;"></div>
+        `;
+        container.appendChild(row);
+    }
+})();
+
+// ── Fill sample data ─────────────────────────────────────────────────────────
+function fillSample() {
+    document.getElementById('group').checked = true;
+    document.getElementById('f1a').value = 'XYZ123456789';
+    document.getElementById('f2').value = 'DOE, JOHN, Q';
+    document.getElementById('f3').value = '01 15 75';
+    document.getElementById('f3m').checked = true;
+    document.getElementById('f4').value = 'DOE, JANE, M';
+    document.getElementById('f5').value = '123 MAIN STREET';
+    document.getElementById('f5city').value = 'ANYTOWN';
+    document.getElementById('f5state').value = 'CA';
+    document.getElementById('f5zip').value = '90210';
+    document.getElementById('f5phone').value = '(555) 123-4567';
+    document.getElementById('f6self').checked = true;
+    document.getElementById('f7').value = '123 MAIN STREET';
+    document.getElementById('f7city').value = 'ANYTOWN';
+    document.getElementById('f7state').value = 'CA';
+    document.getElementById('f7zip').value = '90210';
+    document.getElementById('f11').value = 'GRP123456';
+    document.getElementById('f11a').value = '03 20 72';
+    document.getElementById('f11af').checked = true;
+    document.getElementById('f11c').value = 'BLUE CROSS BLUE SHIELD';
+    document.getElementById('f11dno').checked = true;
+    document.getElementById('f10an').checked = true;
+    document.getElementById('f10bn').checked = true;
+    document.getElementById('f10cn').checked = true;
+    document.getElementById('f12sig').value = 'John Doe';
+    document.getElementById('f12date').value = '08 22 26';
+    document.getElementById('f14').value = '08 15 26';
+    document.getElementById('f17').value = 'Dr. Jane Smith';
+    document.getElementById('f17b').value = '1234567890';
+    document.getElementById('dxa').value = 'E11.9';
+    document.getElementById('dxb').value = 'I10';
+    document.getElementById('icdind').value = '0';
+    document.getElementById('f23').value = 'PA-2026-001';
+    // Service line 1
+    document.getElementById('r0from').value = '08 20 26';
+    document.getElementById('r0pos').value = '11';
+    document.getElementById('r0cpt').value = '99213';
+    document.getElementById('r0dxp').value = 'AB';
+    document.getElementById('r0chg').value = '220.00';
+    document.getElementById('r0units').value = '1';
+    document.getElementById('r0render').value = '1234567890';
+    // Service line 2
+    document.getElementById('r1from').value = '08 20 26';
+    document.getElementById('r1pos').value = '11';
+    document.getElementById('r1cpt').value = '90686';
+    document.getElementById('r1dxp').value = 'A';
+    document.getElementById('r1chg').value = '65.00';
+    document.getElementById('r1units').value = '1';
+    document.getElementById('r1render').value = '1234567890';
+    // Footer
+    document.getElementById('f25').value = '12-3456789';
+    document.getElementById('f25ein').checked = true;
+    document.getElementById('f26').value = 'PT-001234';
+    document.getElementById('f27yes').checked = true;
+    document.getElementById('f28').value = '285.00';
+    document.getElementById('f29').value = '0.00';
+    document.getElementById('f31sig').value = 'Dr. James Wilson, MD';
+    document.getElementById('f31date').value = '08 22 26';
+    document.getElementById('f32').value = 'Neuraline Medical Center, 456 Health Ave, Anytown, CA 90210';
+    document.getElementById('f32npi').value = '1234567890';
+    document.getElementById('f33name').value = 'Neuraline Medical Group';
+    document.getElementById('f33addr').value = '456 Health Ave, Anytown, CA 90210';
+    document.getElementById('f33npi').value = '1234567890';
+}
+
+// ── Clear form ───────────────────────────────────────────────────────────────
+function clearForm() {
+    document.querySelectorAll('.cms1500 input[type="text"]').forEach(i => i.value = '');
+    document.querySelectorAll('.cms1500 input[type="checkbox"]').forEach(i => i.checked = false);
+    document.querySelectorAll('.cms1500 textarea').forEach(i => i.value = '');
+}
+
+// ── Checkbox group behavior (single-select groups) ───────────────────────────
+document.querySelectorAll('.cms1500 input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', function() {
+        if (this.checked && this.name) {
+            document.querySelectorAll(`.cms1500 input[name="${this.name}"]`).forEach(other => {
+                if (other !== this) other.checked = false;
+            });
+        }
+    });
+});
+</script>
+
+</body>
+</html>
