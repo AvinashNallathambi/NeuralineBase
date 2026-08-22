@@ -157,6 +157,24 @@ const AppointmentPage: React.FC = () => {
   // Real patients from API
   const [patients, setPatients] = useState<Patient[]>([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
+  const patientSearchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced server-side patient search
+  const searchPatients = useCallback((query: string) => {
+    if (patientSearchTimer.current) clearTimeout(patientSearchTimer.current);
+    if (!query || query.trim().length < 2) return;
+    patientSearchTimer.current = setTimeout(async () => {
+      setPatientsLoading(true);
+      try {
+        const response = await patientService.findAll({ page: 1, limit: 50, search: query.trim() });
+        setPatients(response.data);
+      } catch {
+        // keep existing list
+      } finally {
+        setPatientsLoading(false);
+      }
+    }, 300);
+  }, []);
 
   // Group appointment state
   const [isGroupAppointment, setIsGroupAppointment] = useState(false);
@@ -1584,10 +1602,12 @@ const AppointmentPage: React.FC = () => {
             <Form.Item name="patientId" label="Patient" rules={[{ required: true, message: 'Select a patient' }]}>
               <Select
                 showSearch
-                placeholder="Search patient..."
-                optionFilterProp="label"
+                placeholder="Search patient by name or MRN…"
+                filterOption={false}
+                onSearch={searchPatients}
                 loading={patientsLoading}
-                options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+                options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} · MRN: ${p.mrn || 'N/A'} · DOB: ${p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString() : 'N/A'}`, value: p.id }))}
+                notFoundContent={patientsLoading ? 'Searching…' : 'Type to search'}
                 data-testid="appointment-patient-select"
               />
             </Form.Item>
@@ -1613,13 +1633,15 @@ const AppointmentPage: React.FC = () => {
                 <Select
                   mode="multiple"
                   showSearch
-                  placeholder="Search and select patients..."
-                  optionFilterProp="label"
+                  placeholder="Search patients by name or MRN…"
+                  filterOption={false}
+                  onSearch={searchPatients}
                   loading={patientsLoading}
                   value={selectedPatients}
                   onChange={setSelectedPatients}
-                  options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} (${p.mrn || 'No MRN'})`, value: p.id }))}
+                  options={patients.map((p) => ({ label: `${p.firstName} ${p.lastName} · MRN: ${p.mrn || 'N/A'} · DOB: ${p.dateOfBirth ? new Date(p.dateOfBirth).toLocaleDateString() : 'N/A'}`, value: p.id }))}
                   maxTagCount={3}
+                  notFoundContent={patientsLoading ? 'Searching…' : 'Type to search'}
                 />
                 <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
                   {selectedPatients.length} patient(s) selected (min: 2, max: {maxParticipants})

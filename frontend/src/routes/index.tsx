@@ -96,6 +96,7 @@ const SuperbillListPage = lazyWithRetry(() => import('../pages/superbills/Superb
 const SuperbillDetailPage = lazyWithRetry(() => import('../pages/superbills/SuperbillDetailPage'));
 const CreateSuperbillPage = lazyWithRetry(() => import('../pages/superbills/CreateSuperbillPage'));
 const EditSuperbillPage = lazyWithRetry(() => import('../pages/superbills/EditSuperbillPage'));
+const Cms1500FormPage = lazyWithRetry(() => import('../components/superbills/Cms1500Form'));
 const WorkflowListPage = lazyWithRetry(() => import('../pages/workflow/WorkflowListPage'));
 const WorkflowBuilderPage = lazyWithRetry(() => import('../pages/workflow/WorkflowBuilderPage'));
 const ProviderAvailabilityPage = lazyWithRetry(() => import('../pages/provider-availability/ProviderAvailabilityPage'));
@@ -148,6 +149,10 @@ const PortalVideoVisitPage = lazyWithRetry(() => import("../pages/portal/PortalV
 const PortalHealthHistoryPage = lazyWithRetry(() => import("../pages/portal/PortalHealthHistoryPage"));
 const PortalGfePage = lazyWithRetry(() => import("../pages/portal/PortalGfePage"));
 const NsaDashboardPage = lazyWithRetry(() => import("../pages/nsa/NsaDashboardPage"));
+const PriorAuthWorklistPage = lazyWithRetry(() => import("../pages/prior-auth/PriorAuthWorklistPage"));
+const PriorAuthDashboardPage = lazyWithRetry(() => import("../pages/prior-auth/PriorAuthDashboardPage"));
+const EpisodesDashboardPage = lazyWithRetry(() => import("../pages/episodes/EpisodesDashboardPage"));
+const ScreeningDashboardPage = lazyWithRetry(() => import("../pages/screening/ScreeningDashboardPage"));
 
 // Suspense fallback spinner
 const PageLoader: React.FC = () => (
@@ -486,6 +491,22 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: '/superbills/:id/cms1500',
+        element: (
+          <LazyPage>
+            <Cms1500FormPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: '/cms1500',
+        element: (
+          <LazyPage>
+            <Cms1500FormPage />
+          </LazyPage>
+        ),
+      },
+      {
         path: '/provider-availability',
         element: (
           <LazyPage>
@@ -538,6 +559,38 @@ const router = createBrowserRouter([
         element: (
           <LazyPage>
             <NsaDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/prior-auth",
+        element: (
+          <LazyPage>
+            <PriorAuthWorklistPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/prior-auth/dashboard",
+        element: (
+          <LazyPage>
+            <PriorAuthDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/episodes",
+        element: (
+          <LazyPage>
+            <EpisodesDashboardPage />
+          </LazyPage>
+        ),
+      },
+      {
+        path: "/screening",
+        element: (
+          <LazyPage>
+            <ScreeningDashboardPage />
           </LazyPage>
         ),
       },

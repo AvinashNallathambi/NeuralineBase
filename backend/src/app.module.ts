@@ -49,6 +49,9 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { RiskManagementModule } from './modules/risk-management/risk-management.module';
 import { QualityMeasuresModule } from './modules/quality-measures/quality-measures.module';
 import { NsaModule } from './modules/nsa/nsa.module';
+import { PriorAuthModule } from './modules/prior-auth/prior-auth.module';
+import { EpisodesModule } from './modules/episodes/episodes.module';
+import { ScreeningModule } from './modules/screening/screening.module';
 import { CommonModule } from './common/common.module';
 import { RedisModule, REDIS_CLIENT } from './common/redis/redis.module';
 import { EncryptionService } from './common/services/encryption.service';
@@ -291,6 +294,9 @@ import { HipaaAuditLog } from './common/entities/hipaa-audit-log.entity';
     RiskManagementModule,
     QualityMeasuresModule,
     NsaModule,
+    PriorAuthModule,
+    EpisodesModule,
+    ScreeningModule,
   ],
   providers: [
     // HIPAA: Global services available to all modules

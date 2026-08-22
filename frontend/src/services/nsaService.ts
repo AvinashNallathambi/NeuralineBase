@@ -10,7 +10,7 @@ import type {
   DeliveryMethod,
 } from '../types';
 
-const BASE = '/api/v1/nsa';
+const BASE = '/nsa';
 
 export const nsaService = {
   // ── GFE CRUD ──────────────────────────────────────────────────────

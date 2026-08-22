@@ -34,7 +34,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ToolOutlined,
-  GavelOutlined,
+  AuditOutlined,
+  MedicineOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore, useAuthStore } from '../store';
@@ -89,11 +90,15 @@ const menuItems = [
       { key: 'automation', icon: <RobotOutlined />, label: 'RCM Automation (AI)' },
       { key: 'eligibility', icon: <SafetyOutlined />, label: 'Eligibility' },
       { key: 'superbills', icon: <FileDoneOutlined />, label: 'Superbills' },
+      { key: 'prior-auth', icon: <FileTextOutlined />, label: 'Prior Auth Worklist' },
+      { key: 'prior-auth/dashboard', icon: <BarChartOutlined />, label: 'Prior Auth Dashboard' },
     ],
   },
   { key: 'reports', icon: <BarChartOutlined />, label: 'Reports' },
   { key: 'quality-measures', icon: <SafetyCertificateOutlined />, label: 'Quality Measures' },
-  { key: 'nsa', icon: <GavelOutlined />, label: 'NSA Compliance' },
+  { key: 'nsa', icon: <AuditOutlined />, label: 'NSA Compliance' },
+  { key: 'episodes', icon: <MedicineBoxOutlined />, label: 'Episodes' },
+  { key: 'screening', icon: <ExperimentOutlined />, label: 'Screening' },
   { key: 'workflow', icon: <ApartmentOutlined />, label: 'Workflows' },
   { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
   {

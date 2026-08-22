@@ -29,7 +29,7 @@ import {
   ThunderboltOutlined,
   DollarOutlined,
   InfoCircleOutlined,
-  ShieldOutlined,
+  SafetyOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   WarningOutlined,
@@ -430,7 +430,7 @@ const GfePanel: React.FC<GfePanelProps> = ({ superbillId, patientId }) => {
             message="Compliance Notes"
             description={<ul style={{ margin: 0, paddingLeft: 16 }}>{gfe.complianceNotes.map((item, i) => <li key={i}>{item}</li>)}</ul>}
             showIcon
-            icon={<ShieldOutlined />}
+            icon={<SafetyOutlined />}
           />
 
           <Divider />

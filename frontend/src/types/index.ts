@@ -642,6 +642,286 @@ export interface NsaComplianceDashboard {
   idrCasesOpen: number;
 }
 
+// ── Prior Authorization ─────────────────────────────────────────────
+
+export type PriorAuthStatus =
+  | 'draft'
+  | 'submitted'
+  | 'pending'
+  | 'approved'
+  | 'denied'
+  | 'p2p_scheduled'
+  | 'appealed'
+  | 'expired'
+  | 'cancelled'
+  | 'superseded';
+
+export type PriorAuthBenefitType = 'medical' | 'pharmacy';
+export type PriorAuthSubmissionMethod = 'electronic' | 'portal' | 'fax' | 'phone' | 'mail';
+export type PriorAuthUrgency = 'standard' | 'expedited';
+
+export interface PriorAuthCode {
+  code: string;
+  description: string;
+  quantity?: number;
+}
+
+export interface PriorAuthDiagnosis {
+  code: string;
+  description: string;
+  isPrimary: boolean;
+}
+
+export interface PriorAuthClinicalEvidence {
+  summary: string;
+  items: Array<{
+    type: 'lab' | 'imaging' | 'medication' | 'procedure' | 'encounter' | 'vital' | 'history';
+    description: string;
+    date: string;
+    value?: string;
+    source?: string;
+  }>;
+}
+
+export interface AiRequirementPrediction {
+  probability: number;
+  isRequired: boolean;
+  confidence: number;
+  factors: Array<{ factor: string; weight: number; detail: string }>;
+  rationale: string;
+}
+
+export interface AiApprovalPrediction {
+  approvalProbability: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  factors: Array<{ factor: string; impact: 'positive' | 'negative' | 'neutral'; detail: string }>;
+  recommendations: Array<{ action: string; priority: 'urgent' | 'high' | 'medium' | 'low'; detail: string }>;
+  missingDocumentation: string[];
+}
+
+export interface AiExpirationPrediction {
+  predictedExpiration: string;
+  daysUntilExpiration: number;
+  expirationRisk: 'low' | 'medium' | 'high';
+  recommendation: string;
+}
+
+export interface PriorAuthRequest {
+  id?: string;
+  tenantId?: string;
+  patientId: string;
+  patientName?: string | null;
+  encounterId?: string | null;
+  superbillId?: string | null;
+  providerId?: string | null;
+  providerName?: string | null;
+  benefitType?: PriorAuthBenefitType;
+  status?: PriorAuthStatus;
+  urgency?: PriorAuthUrgency;
+  payerName?: string | null;
+  payerId?: string | null;
+  planName?: string | null;
+  policyNumber?: string | null;
+  groupNumber?: string | null;
+  eligibilityVerificationId?: string | null;
+  procedureCodes: PriorAuthCode[];
+  diagnosisCodes?: PriorAuthDiagnosis[];
+  clinicalEvidence?: PriorAuthClinicalEvidence | null;
+  clinicalNotes?: string | null;
+  authLetter?: string | null;
+  submissionMethod?: PriorAuthSubmissionMethod | null;
+  submittedAt?: string | null;
+  submittedBy?: string | null;
+  authNumber?: string | null;
+  payerResponseAt?: string | null;
+  payerDecisionNotes?: string | null;
+  denialReason?: string | null;
+  denialCode?: string | null;
+  serviceDate?: string | null;
+  approvedStartDate?: string | null;
+  approvedEndDate?: string | null;
+  expirationDate?: string | null;
+  visitCountApproved?: number | null;
+  visitsUsed?: number;
+  p2pScheduledAt?: string | null;
+  p2pNotes?: string | null;
+  assignedTo?: string | null;
+  priority?: number;
+  dueDate?: string | null;
+  estimatedCost?: number | null;
+  version?: number;
+  supersededById?: string | null;
+  aiRequirementPrediction?: AiRequirementPrediction | null;
+  aiApprovalPrediction?: AiApprovalPrediction | null;
+  aiExpirationPrediction?: AiExpirationPrediction | null;
+  autoTriggered?: boolean;
+  autoTriggerSource?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PriorAuthAttachment {
+  id: string;
+  priorAuthRequestId: string;
+  patientId: string;
+  attachmentType: string;
+  title: string;
+  description?: string | null;
+  content?: string | null;
+  fileUrl?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  evidenceDate?: string | null;
+  isAiGenerated: boolean;
+  aiRelevanceScore?: number | null;
+  satisfiesCriterion?: string | null;
+  createdAt: string;
+}
+
+export interface PriorAuthRequirement {
+  id: string;
+  payerName?: string | null;
+  procedureCode: string;
+  procedureDescription?: string | null;
+  requirementType: 'always' | 'conditional' | 'never';
+  conditions: Array<{ field: string; operator: string; value: string; description: string }>;
+  requiredCriteria: Array<{ criterion: string; description: string; documentationRequired: boolean }>;
+  typicalTurnaroundHours?: number | null;
+  typicalValidityDays?: number | null;
+  submissionMethods: string[];
+  isAiGenerated: boolean;
+  isActive: boolean;
+  source?: string | null;
+}
+
+export interface PriorAuthDashboard {
+  total: number;
+  byStatus: Record<string, number>;
+  byPayer: Array<{ payer: string; count: number; approvalRate: number }>;
+  pendingCount: number;
+  approvedCount: number;
+  deniedCount: number;
+  expiringSoon: number;
+  expired: number;
+  avgTurnaroundHours: number;
+  autoTriggeredCount: number;
+  topDeniedReasons: Array<{ reason: string; count: number }>;
+}
+
+export interface RequirementCheckResult {
+  procedureCode: string;
+  requirementType: 'always' | 'conditional' | 'never' | 'unknown';
+  isRequired: boolean;
+  rule: PriorAuthRequirement | null;
+  aiPrediction: AiRequirementPrediction | null;
+}
+
+export interface AutoTriggerPaResult {
+  triggered: boolean;
+  reason: string;
+  requirements: RequirementCheckResult[];
+  draftRequest: Partial<PriorAuthRequest> | null;
+  authLetter: string | null;
+  createdRequestId?: string;
+}
+
+// ── Episode Management ──────────────────────────────────────────────
+
+export type EpisodeStatus = 'active' | 'onhold' | 'cancelled' | 'entered_in_error' | 'finished' | 'planned' | 'waitlist';
+export type EpisodeType = 'acute' | 'chronic' | 'episodic' | 'perinatal' | 'surgical' | 'behavioral' | 'preventive';
+
+export interface EpisodeCondition {
+  code: string;
+  codeSystem: string;
+  description: string;
+  isPrimary: boolean;
+}
+
+export interface EpisodeCareTeamMember {
+  providerId: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  joinedAt: string;
+}
+
+export interface EpisodeCostSummary {
+  totalEncounterCost: number;
+  totalLabCost: number;
+  totalImagingCost: number;
+  totalMedicationCost: number;
+  totalCost: number;
+  estimatedCost: number | null;
+  costVariance: number | null;
+  lastCalculatedAt: string;
+}
+
+export interface EpisodeOutcome {
+  clinicalOutcome: 'improved' | 'stable' | 'deteriorated' | 'resolved' | 'unknown';
+  patientSatisfaction: number | null;
+  qualityMeasureCompliance: number | null;
+  notes: string;
+  assessedAt: string;
+  assessedBy: string;
+}
+
+export interface EpisodeAiInsight {
+  autoDetected: boolean;
+  detectionConfidence: number;
+  predictedTotalCost: number | null;
+  pathwayDeviations: string[];
+  recommendedActions: string[];
+  riskScore: number | null;
+  generatedAt: string;
+}
+
+export interface EpisodeTimelineEvent {
+  date: string;
+  type: 'encounter' | 'lab' | 'imaging' | 'medication' | 'care_plan' | 'referral' | 'note';
+  title: string;
+  description: string;
+  encounterId?: string;
+}
+
+export interface Episode {
+  id: string;
+  tenantId?: string;
+  patientId: string;
+  patientName: string;
+  title: string;
+  description?: string | null;
+  episodeType: EpisodeType;
+  status: EpisodeStatus;
+  conditions: EpisodeCondition[];
+  careTeam: EpisodeCareTeamMember[];
+  managingProviderId?: string | null;
+  managingProviderName?: string | null;
+  startDate: string;
+  endDate?: string | null;
+  encounterIds: string[];
+  carePlanIds: string[];
+  costSummary?: EpisodeCostSummary | null;
+  outcome?: EpisodeOutcome | null;
+  aiInsights?: EpisodeAiInsight | null;
+  timeline: EpisodeTimelineEvent[];
+  tags: string[];
+  notes?: string | null;
+  fhirEpisodeId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EpisodeDashboard {
+  totalEpisodes: number;
+  activeEpisodes: number;
+  finishedEpisodes: number;
+  byType: Record<string, number>;
+  averageDurationDays: number;
+  averageCost: number;
+  highRiskEpisodes: number;
+}
+
 export interface SmartCodeSuggestion {
   code: string;
   description: string;
@@ -1012,5 +1292,140 @@ export interface EligibilityQuery {
   search?: string;
   sortBy?: string;
   sortOrder?: 'ASC' | 'DESC';
+}
+
+// ── Screening / Outcome Templates ───────────────────────────────────
+
+export type InstrumentCategory = 'depression' | 'anxiety' | 'substance_use' | 'suicide_risk' | 'sdoh' | 'bipolar' | 'adhd' | 'cognitive' | 'trauma' | 'sleep' | 'pain' | 'pediatric' | 'perinatal' | 'custom';
+export type QuestionType = 'choice' | 'multi_select' | 'text' | 'number' | 'likert' | 'display';
+
+export interface InstrumentQuestionOption {
+  value: string;
+  label: string;
+  score: number;
+  loincAnswerCode?: string;
+}
+
+export interface InstrumentQuestion {
+  id: string;
+  text: string;
+  type: QuestionType;
+  loincCode?: string;
+  helpText?: string;
+  options?: InstrumentQuestionOption[];
+  required: boolean;
+}
+
+export interface ScoringRange {
+  min: number;
+  max: number;
+  label: string;
+  severity: 'minimal' | 'mild' | 'moderate' | 'moderately_severe' | 'severe';
+  color: string;
+  recommendation?: string;
+}
+
+export interface ScoringCategory {
+  label: string;
+  condition: string;
+  severity: 'low' | 'moderate' | 'high';
+  recommendation: string;
+}
+
+export interface ScoringRule {
+  type: 'sum' | 'categorical' | 'custom';
+  ranges?: ScoringRange[];
+  categories?: ScoringCategory[];
+}
+
+export interface AdministrationRule {
+  mode: 'patient_self' | 'staff_administered' | 'either';
+  frequency: 'annual' | 'per_visit' | 'every_n_days' | 'on_trigger' | 'one_time';
+  minAge?: number;
+  maxAge?: number;
+  sex?: 'M' | 'F' | 'any';
+  triggers?: string[];
+  alertThresholds?: Array<{ condition: string; severity: 'info' | 'warning' | 'critical'; message: string }>;
+}
+
+export interface ScreeningInstrument {
+  id: string;
+  tenantId?: string;
+  code: string;
+  title: string;
+  description?: string | null;
+  category: InstrumentCategory;
+  isPredefined: boolean;
+  isLocked: boolean;
+  loincCode?: string | null;
+  version: string;
+  questions: InstrumentQuestion[];
+  scoringRules?: ScoringRule | null;
+  administrationRules?: AdministrationRule | null;
+  estimatedMinutes: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ScreeningResultStatus = 'in_progress' | 'completed' | 'discontinued';
+
+export interface QuestionAnswer {
+  questionId: string;
+  questionText: string;
+  answerValue: string;
+  answerLabel?: string;
+  score?: number;
+  loincCode?: string;
+  loincAnswerCode?: string;
+}
+
+export interface ScoreResult {
+  totalScore: number | null;
+  category?: string;
+  severity?: 'minimal' | 'mild' | 'moderate' | 'moderately_severe' | 'severe' | 'low' | 'moderate' | 'high';
+  interpretation?: string;
+  recommendation?: string;
+  color?: string;
+}
+
+export interface ScreeningAlert {
+  severity: 'info' | 'warning' | 'critical';
+  message: string;
+  triggeredAt: string;
+}
+
+export interface ScreeningResult {
+  id: string;
+  tenantId?: string;
+  instrumentId: string;
+  instrumentCode: string;
+  instrumentTitle: string;
+  patientId: string;
+  patientName: string;
+  encounterId?: string | null;
+  status: ScreeningResultStatus;
+  answers: QuestionAnswer[];
+  score?: ScoreResult | null;
+  alerts: ScreeningAlert[];
+  administeredBy: 'patient_self' | 'staff_administered';
+  administeredByUserId?: string | null;
+  administeredByName?: string | null;
+  administrationContext?: string | null;
+  startedAt: string;
+  completedAt?: string | null;
+  durationSeconds?: number | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScreeningDashboard {
+  totalScreenings: number;
+  completedScreenings: number;
+  inProgressScreenings: number;
+  byInstrument: Array<{ code: string; title: string; count: number; positiveRate: number }>;
+  criticalAlerts: number;
+  recentResults: ScreeningResult[];
 }
 
